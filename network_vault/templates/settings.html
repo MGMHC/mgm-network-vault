@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="topbar"><div><h1>Settings</h1><div class="sub">Backups stored in <code>{{ backup_dir }}</code> · {{ usage|size }} on disk</div></div></div>
+<form class="card" method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <h2>Backup retention</h2>
+  <div class="form-grid">
+    <div class="field"><label>Keep at most N backups per device</label><input type="number" name="retention_count" min="0" value="{{ s.retention_count }}"><div class="help">0 = unlimited. Pinned backups and the newest backup are never deleted.</div></div>
+    <div class="field"><label>Delete backups older than (days)</label><input type="number" name="retention_days" min="0" value="{{ s.retention_days }}"><div class="help">0 = never</div></div>
+  </div>
+  <label class="check"><input type="checkbox" name="skip_unchanged" {{ 'checked' if s.skip_unchanged == '1' }}> Don't store a new file when the configuration is unchanged (only log it)</label>
+
+  <h2 style="margin-top:18px">Reachability monitor</h2>
+  <div class="form-grid">
+    <div class="field"><label>Poll every (minutes)</label><input type="number" name="ping_interval_min" min="0" value="{{ s.ping_interval_min }}"><div class="help">ICMP ping + TCP/22 check of all enabled devices. 0 = off.</div></div>
+  </div>
+
+  <h2 style="margin-top:18px">SSH</h2>
+  <div class="form-grid">
+    <div class="field"><label>Parallel SSH sessions</label><input type="number" name="max_workers" min="1" max="32" value="{{ s.max_workers }}"></div>
+    <div class="field"><label>Connect timeout (s)</label><input type="number" name="ssh_timeout" min="5" value="{{ s.ssh_timeout }}"></div>
+    <div class="field"><label>Command read timeout (s)</label><input type="number" name="read_timeout" min="10" value="{{ s.read_timeout }}"><div class="help">Raise for large VC stacks.</div></div>
+  </div>
+
+  <h2 style="margin-top:18px">Logs</h2>
+  <div class="form-grid">
+    <div class="field"><label>Keep log entries for (days)</label><input type="number" name="log_retention_days" min="0" value="{{ s.log_retention_days }}"><div class="help">Cleaned daily at 03:30. 0 = forever.</div></div>
+  </div>
+  <button class="btn primary">Save settings</button>
+</form>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Export & migrate{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>Export &amp; migrate</h1>
+    <div class="sub">Move this installation to another server, or keep an off-site copy of everything.</div></div>
+</div>
+
+{% if pending %}
+<div class="card" style="border-left:4px solid var(--mgm-chrome)">
+  <h2>Restore ready — restart to apply</h2>
+  <p>The export from <b>{{ pending.source_host }}</b> ({{ pending.created }}) has been checked and unpacked:
+    {{ pending.counts.device }} devices, {{ pending.counts.backup }} backups, {{ pending.counts.user }} users.
+    When the app restarts, it will switch to this data. The current data is kept in a <code>pre-restore-…</code> folder.</p>
+  <div class="actions">
+    <form method="post" action="{{ url_for('web.migrate_restart') }}" class="inline" data-confirm="Restart MGM Network Vault now and switch to the restored data?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn primary">Restart now</button></form>
+    <form method="post" action="{{ url_for('web.migrate_cancel') }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn">Cancel restore</button></form>
+  </div>
+  <p class="muted small">Restart now works when the app runs as the installed service or from <code>start.bat</code>. If you started it some other way, start it again yourself.</p>
+</div>
+{% endif %}
+
+<div class="grid g2">
+  <form class="card" method="post" action="{{ url_for('web.migrate_export') }}" autocomplete="off">
+    <h2>1. Export everything</h2>
+    <p class="muted">One encrypted file (<code>.nvault</code>) containing switches, credential profiles, every stored backup,
+      schedules, logs, users, settings and GitHub settings. It's safe to run while backups are running.</p>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-grid">
+      <div class="field"><label>Passphrase (min 10 characters)</label><input type="password" name="passphrase" required minlength="10" autocomplete="new-password"></div>
+      <div class="field"><label>Repeat passphrase</label><input type="password" name="confirm" required minlength="10" autocomplete="new-password"></div>
+    </div>
+    <p class="small" style="color:var(--warn)">The export includes the key that unlocks the stored switch and GitHub credentials. Keep the passphrase somewhere safe, separately from the file. Without it, the export cannot be opened.</p>
+    <button class="btn primary">{{ icon('download') }}Download export</button>
+  </form>
+
+  <form class="card" method="post" action="{{ url_for('web.migrate_import') }}" enctype="multipart/form-data" autocomplete="off"
+        data-confirm="Stage a restore? After the restart, ALL data on this server is replaced by the export (current data is kept in a pre-restore folder).">
+    <h2>2. Import on the new server</h2>
+    <p class="muted">Upload an export made on another server, then restart. <b>This replaces everything on this server.</b>
+      The current data is kept in a <code>pre-restore-…</code> folder until you delete it.</p>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="field"><label>Export file (.nvault)</label><input type="file" name="file" accept=".nvault" required></div>
+    <div class="field"><label>Passphrase</label><input type="password" name="passphrase" required autocomplete="off"></div>
+    <button class="btn">Verify &amp; stage restore</button>
+  </form>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>Application package</h2>
+    <p class="muted">The app code plus installers for a Windows server (installs a service) and for Linux/Docker. It contains no data, settings or keys, so it's safe to share with the server team.</p>
+    <a class="btn" href="{{ url_for('web.migrate_package') }}">{{ icon('download') }}Download app package (.zip)</a>
+    <h3 style="margin-top:16px">Moving to a new server</h3>
+    <ol class="small" style="padding-left:18px;margin:0">
+      <li>Download the <b>app package</b> and an <b>export</b> from this page.</li>
+      <li>On the new server, unzip the package and run <code>deploy\install-windows.ps1</code> as Administrator. On Linux, use <code>docker compose up -d</code>.</li>
+      <li>Open the new server's address, sign in as <code>admin</code>/<code>admin</code>, then come to <i>Export &amp; migrate</i>, import the file and restart.</li>
+      <li>Check the dashboard. Then stop the service on the old PC so the switches aren't backed up twice.</li>
+    </ol>
+    <p class="muted small">Command line equivalents: <code>python manage.py export|import|package</code>.</p>
+  </div>
+  <div class="card">
+    <h2>This server</h2>
+    <dl class="kv">
+      {% for k, v in info.items() %}<dt>{{ k }}</dt><dd class="{{ 'mono small' if k in ('Config file', 'Data folder') }}">{{ v }}</dd>{% endfor %}
+      {% for k, v in counts.items() %}<dt>{{ k }}</dt><dd>{{ v }}</dd>{% endfor %}
+    </dl>
+    {% if exported_config %}<p class="small">The server settings from the old machine are in <a href="{{ url_for('web.migrate_exported_config') }}">config.toml.from-export</a>. They aren't applied automatically; copy any values you need into <code>config.toml</code>.</p>{% endif %}
+    {% if previous %}<p class="muted small">Data kept from earlier restores: {% for p in previous %}<code>{{ p }}</code>{{ ', ' if not loop.last }}{% endfor %}. Delete these folders from the data folder once you're satisfied.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

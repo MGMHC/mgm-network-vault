@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}GitHub sync{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>GitHub sync</h1>
+    <div class="sub">Mirror every backup into a private GitHub repository with full version history.</div></div>
+  <div class="actions">
+    {% if web_url %}<a class="btn" href="{{ web_url }}" target="_blank" rel="noopener">Open repository ↗</a>{% endif %}
+  </div>
+</div>
+
+{% if progress.busy or progress.message %}
+<div class="card" id="progress-card">
+  <h2>{{ 'Sync in progress' if progress.busy else 'Last sync' }}</h2>
+  <div id="progress-msg">{{ progress.message }}</div>
+  {% if progress.busy %}<div class="progress" style="background:var(--info-soft);height:8px"><div id="progress-bar" style="width:{{ (100 * progress.done / progress.total) if progress.total else 5 }}%"></div></div>
+  <div class="muted small" id="progress-count">{{ progress.done }} / {{ progress.total }}</div>{% endif %}
+</div>
+{% endif %}
+
+<div class="grid g2">
+  <div class="card">
+    <h2>Status</h2>
+    <dl class="kv">
+      <dt>Sync</dt><dd>{% if s.git_enabled == '1' and s.git_url %}<span class="badge ok">enabled</span>{% else %}<span class="badge">off</span>{% endif %}</dd>
+      <dt>Repository</dt><dd class="mono">{{ s.git_url or '—' }}</dd>
+      <dt>Branch</dt><dd class="mono">{{ s.git_branch }}</dd>
+      <dt>Last push</dt><dd>{{ s.git_last_push or 'never' }}</dd>
+      <dt>Waiting to push</dt><dd>{% if pending %}<span class="badge warn">{{ pending }} commit(s)</span> <span class="muted small">retried every 15 min</span>{% else %}<span class="badge ok">up to date</span>{% endif %}</dd>
+      <dt>Secrets</dt><dd>{{ 'masked in the GitHub copy' if s.git_redact == '1' else 'pushed as-is (not masked)' }}</dd>
+      {% if s.git_last_error %}<dt>Last error</dt><dd class="lvl-ERROR" style="white-space:pre-wrap">{{ s.git_last_error }}</dd>{% endif %}
+      {% if local_error %}<dt>Local repository</dt><dd class="lvl-ERROR">{{ local_error }}</dd>{% endif %}
+    </dl>
+    <div class="actions" style="margin-top:14px">
+      {% for a, label, title in [('test', 'Test connection', 'Check the address and token can reach the repository'),
+                                  ('sync', 'Sync now', 'Commit the latest backup of every switch and push'),
+                                  ('push', 'Push now', 'Push commits that are waiting')] %}
+      <form method="post" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="{{ a }}">
+        <button class="btn{{ ' primary' if a == 'sync' }}" title="{{ title }}" {{ 'disabled' if s.git_enabled != '1' or progress.busy }}>{{ label }}</button></form>
+      {% endfor %}
+      <form method="post" class="inline" data-confirm="Discard the local copy of the repository and download it again from GitHub? Nothing on GitHub is deleted.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="reset">
+        <button class="btn danger" {{ 'disabled' if s.git_enabled != '1' or progress.busy }}>Re-download from GitHub</button></form>
+    </div>
+  </div>
+
+  <form class="card" method="post" autocomplete="off">
+    <h2>Settings</h2>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="save">
+    <label class="check"><input type="checkbox" name="git_enabled" {{ 'checked' if s.git_enabled == '1' }}> Sync backups to GitHub</label>
+    <div class="field"><label>Repository address (HTTPS)</label>
+      <input type="text" name="git_url" value="{{ s.git_url }}" placeholder="https://github.com/your-org/switch-configs.git"></div>
+    <div class="form-grid">
+      <div class="field"><label>Branch</label><input type="text" name="git_branch" value="{{ s.git_branch }}"></div>
+      <div class="field"><label>Access token {{ '(saved - leave blank to keep)' if has_token }}</label>
+        <input type="password" name="git_token" placeholder="{{ '••••••••' if has_token else 'github_pat_…' }}" autocomplete="new-password"></div>
+      <div class="field"><label>Commit author name</label><input type="text" name="git_author_name" value="{{ s.git_author_name }}"></div>
+      <div class="field"><label>Commit author email</label><input type="text" name="git_author_email" value="{{ s.git_author_email }}"></div>
+    </div>
+    <label class="check"><input type="checkbox" name="git_redact" {{ 'checked' if s.git_redact == '1' }}> <span>Mask secrets in the GitHub copy (password hashes, SNMP communities, RADIUS/TACACS keys)</span></label>
+    <label class="check"><input type="checkbox" name="git_tag_runs" {{ 'checked' if s.git_tag_runs == '1' }}> <span>Tag every backup run that changed something (<code>backup/YYYY-MM-DD_HHMMSS</code>)</span></label>
+    <button class="btn primary" {{ 'disabled' if progress.busy }}>Save &amp; sync</button>
+    <details style="margin-top:14px"><summary class="small" style="cursor:pointer"><b>How to create the repository and token</b></summary>
+      <ol class="small muted" style="padding-left:18px">
+        <li>On GitHub, create a new repository (for example <code>switch-configs</code>), set it to <b>Private</b>, and leave it empty — no README.</li>
+        <li>Go to <i>Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token</i>.
+          Under repository access, pick <b>only that repository</b>. Under permissions, set <b>Contents: Read and write</b>. Set an expiry date and note it down.</li>
+        <li>Paste the repository's HTTPS address and the token here, tick <i>Sync backups to GitHub</i>, and save.
+          The first sync copies your existing backups to GitHub, oldest to newest, so the repository starts with their full history.</li>
+      </ol>
+    </details>
+  </form>
+</div>
+
+<div class="grid g2">
+  <div class="card flush">
+    <div class="card-head"><h2>Recent commits</h2></div>
+    <table><tbody>
+      {% for c in commits %}
+      <tr><td class="mono small">{% if c.url %}<a href="{{ c.url }}" target="_blank" rel="noopener">{{ c.short }}</a>{% else %}{{ c.short }}{% endif %}</td>
+        <td class="small muted">{{ c.date }}</td><td class="wrap">{{ c.subject }}</td></tr>
+      {% else %}<tr><td class="empty">No commits yet.</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+  <div class="card flush">
+    <div class="card-head"><h2>Backup run tags</h2></div>
+    <table><tbody>
+      {% for t in tags %}
+      <tr><td class="mono small">{% if t.url %}<a href="{{ t.url }}" target="_blank" rel="noopener">{{ t.name }}</a>{% else %}{{ t.name }}{% endif %}</td>
+        <td class="small muted wrap">{{ t.subject }}</td></tr>
+      {% else %}<tr><td class="empty">No tags yet.</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{% if progress.busy %}
+<script>
+  (async function poll() {
+    const p = await fetch('/api/github/progress').then(r => r.json()).catch(() => null);
+    if (!p) return setTimeout(poll, 2000);
+    document.getElementById('progress-msg').textContent = p.message;
+    const bar = document.getElementById('progress-bar'), cnt = document.getElementById('progress-count');
+    if (bar) bar.style.width = (p.total ? 100 * p.done / p.total : 5) + '%';
+    if (cnt) cnt.textContent = `${p.done} / ${p.total}`;
+    if (p.busy) setTimeout(poll, 1500); else setTimeout(() => location.reload(), 800);
+  })();
+</script>
+{% endif %}
+{% endblock %}

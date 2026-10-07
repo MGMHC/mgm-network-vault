@@ -1,0 +1,11 @@
+# MGM Network Vault - server configuration
+# Copy to config.toml (start.bat / the installers do this on first run). Restart the service after changes.
+# Environment variables NETWORK_VAULT_<KEY> (e.g. NETWORK_VAULT_PORT=9000) override these values.
+
+[server]
+host = "0.0.0.0"         # listen on all network cards
+port = 8080
+data_dir = "data"        # database, keys and backups; absolute path allowed, e.g. "D:/NetworkVault/data"
+threads = 12
+behind_proxy = false     # true if published through IIS / nginx / a load balancer (trusts X-Forwarded-* headers)
+secure_cookies = false   # true if users reach the app over HTTPS

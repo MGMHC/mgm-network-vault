@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Logs{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>Logs</h1><div class="sub">{{ p.total }} matching entr{{ 'y' if p.total == 1 else 'ies' }}</div></div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('web.logs_export', **request.args.to_dict()) }}">{{ icon('download') }}Export CSV</a>
+    <form method="post" action="{{ url_for('web.logs_purge') }}" class="actions" data-confirm="Permanently delete old log entries?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <select name="days" style="width:auto"><option value="30">older than 30 days</option><option value="90">older than 90 days</option><option value="7">older than 7 days</option><option value="0">all entries</option></select>
+      <button class="btn danger">Purge</button>
+    </form>
+  </div>
+</div>
+<div class="card flush">
+  <form class="filters" method="get">
+    <div><label>Search</label><input type="search" name="q" value="{{ f.q }}" placeholder="text"></div>
+    <div><label>Level</label><select name="level"><option value="">All</option>{% for l in ['INFO','WARN','ERROR'] %}<option {{ 'selected' if f.level == l }}>{{ l }}</option>{% endfor %}</select></div>
+    <div><label>Category</label><select name="category"><option value="">All</option>{% for c in categories %}<option {{ 'selected' if f.category == c }}>{{ c }}</option>{% endfor %}</select></div>
+    <div><label>Device</label><select name="device"><option value="">All</option>{% for d in devices %}<option value="{{ d.id }}" {{ 'selected' if f.device == d.id|string }}>{{ d.name }}</option>{% endfor %}</select></div>
+    <div><label>From</label><input type="date" name="since" value="{{ f.since }}"></div>
+    <div><label>To</label><input type="date" name="until" value="{{ f.until }}"></div>
+    <button class="btn">Filter</button> <a class="btn" href="{{ url_for('web.logs') }}">Reset</a>
+  </form>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Time</th><th>Level</th><th>Category</th><th>Device</th><th>User</th><th>Message</th></tr></thead>
+    <tbody>
+    {% for l in p.items %}
+      <tr>
+        <td class="small mono">{{ l.ts|dt }}</td>
+        <td class="small lvl-{{ l.level }}">{{ l.level }}</td>
+        <td class="small">{{ l.category }}</td>
+        <td>{% if l.device_id %}<a href="{{ url_for('web.device_detail', dev_id=l.device_id) }}">{{ l.device_name }}</a>{% else %}{{ l.device_name or '' }}{% endif %}</td>
+        <td class="small muted">{{ l.user or '' }}</td>
+        <td class="wrap">{{ l.message }}
+          {% if l.details %}<details><summary class="small muted" style="cursor:pointer">details</summary><pre class="code" style="max-height:300px;white-space:pre-wrap">{{ l.details }}</pre></details>{% endif %}</td>
+      </tr>
+    {% else %}<tr><td colspan="6" class="empty">No log entries.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  {% if p.pages > 1 %}
+  <div class="pager">
+    {% set args = request.args.to_dict() %}
+    {% if p.has_prev %}{% set _ = args.update(page=p.prev_num) %}<a class="btn sm" href="{{ url_for('web.logs', **args) }}">← Newer</a>{% endif %}
+    <span class="muted small">Page {{ p.page }} / {{ p.pages }}</span>
+    {% if p.has_next %}{% set _ = args.update(page=p.next_num) %}<a class="btn sm" href="{{ url_for('web.logs', **args) }}">Older →</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

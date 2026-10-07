@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}Sign in{% endblock %}
+{% block bare %}
+<div class="login-wrap">
+  <div class="card login">
+    <div class="login-brand">
+      <img src="{{ url_for('static', filename='mgm-logo.png') }}" alt="MGM Healthcare">
+      <h1>Network Vault</h1>
+      <div class="muted">Switch configuration backup</div>
+    </div>
+    {% with msgs = get_flashed_messages(with_categories=true) %}{% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}{% endwith %}
+    <form method="post">
+      <div class="field"><label>Username</label><input type="text" name="username" autofocus required autocomplete="username"></div>
+      <div class="field"><label>Password</label><input type="password" name="password" required autocomplete="current-password"></div>
+      <button class="btn primary" style="width:100%;justify-content:center">Sign in</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

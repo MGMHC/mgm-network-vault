@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Compare{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>Compare configurations</h1>
+    <div class="sub"><span class="badge ok">+{{ added }} added</span> <span class="badge bad">-{{ removed }} removed</span>
+      {% if a.device_id != b.device_id %} <span class="badge warn">different devices</span>{% endif %}</div></div>
+  <div class="actions"><a class="btn" href="{{ url_for('web.compare_download', a=a.id, b=b.id, fmt=fmt) }}">{{ icon('download') }}Download .diff</a></div>
+</div>
+
+<form class="card" method="get">
+  <div class="form-grid">
+    <div class="field"><label>Older (left)</label><select name="a">{% for o in others %}<option value="{{ o.id }}" {{ 'selected' if o.id == a.id }}>{{ o.device.name }} · {{ o.created_at|dt }}{{ ' · changed' if o.changed }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Newer (right)</label><select name="b">{% for o in others %}<option value="{{ o.id }}" {{ 'selected' if o.id == b.id }}>{{ o.device.name }} · {{ o.created_at|dt }}{{ ' · changed' if o.changed }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Format</label><select name="fmt">
+      <option value="conf" {{ 'selected' if fmt == 'conf' }}>Configuration (hierarchical / running)</option>
+      {% if a.set_path and b.set_path %}<option value="set" {{ 'selected' if fmt == 'set' }}>Junos set commands (recommended)</option>{% endif %}</select></div>
+    <div class="field"><label>View</label><select name="mode"><option value="side" {{ 'selected' if mode == 'side' }}>Side by side</option><option value="unified" {{ 'selected' if mode == 'unified' }}>Unified</option></select></div>
+    <div class="field"><label>Context lines</label><select name="ctx">{% for c in ['0','3','5','10','all'] %}<option {{ 'selected' if ctx == c }}>{{ c }}</option>{% endfor %}</select></div>
+  </div>
+  <button class="btn primary">Compare</button>
+</form>
+
+<div class="card flush">
+  <div class="card-head">
+    <div><b>{{ a.device.name }}</b> <span class="muted">{{ a.created_at|dt }}</span>{% if a.last_commit %}<div class="muted small">commit: {{ a.last_commit }}</div>{% endif %}</div>
+    <div style="text-align:right"><b>{{ b.device.name }}</b> <span class="muted">{{ b.created_at|dt }}</span>{% if b.last_commit %}<div class="muted small">commit: {{ b.last_commit }}</div>{% endif %}</div>
+  </div>
+  {% if added == 0 and removed == 0 %}
+    <div class="empty">The two configurations are identical.</div>
+  {% elif mode == 'side' %}
+  <div class="table-wrap">
+  <table class="diff">
+    <colgroup><col style="width:52px"><col><col style="width:52px"><col></colgroup>
+    <tbody>
+    {% for kind, on, ol, nn, nl in rows %}
+      {% if kind == 'skip' %}<tr class="skip"><td colspan="4">{{ ol }}</td></tr>
+      {% else %}<tr class="{{ kind }}"><td class="ln">{{ on or '' }}</td><td class="o">{{ ol }}</td><td class="ln">{{ nn or '' }}</td><td class="n">{{ nl }}</td></tr>{% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div style="padding:12px"><pre class="code udiff" id="udiff">{{ udiff }}</pre></div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const u = document.getElementById('udiff');
+  if (u) u.innerHTML = colorDiff(u.textContent);
+</script>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}{{ b.device.name }} backup{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1><a href="{{ url_for('web.device_detail', dev_id=b.device_id) }}">{{ b.device.name }}</a> · {{ b.created_at|dt }}</h1>
+    <div class="sub">{{ b.trigger }} · {{ b.size|size }} · sha256 <span class="mono">{{ b.sha256[:16] }}…</span>{% if b.last_commit %} · last commit {{ b.last_commit }}{% endif %}</div></div>
+  <div class="actions">
+    {% if prev %}<a class="btn" href="{{ url_for('web.compare', a=prev.id, b=b.id) }}">{{ icon('diff') }}Diff vs previous</a>{% endif %}
+    {% if b.git_commit and b.git_commit|gh_commit %}<a class="btn" href="{{ b.git_commit|gh_commit }}" target="_blank" rel="noopener">View on GitHub ↗</a>{% endif %}
+    <a class="btn primary" href="{{ url_for('web.backup_download', bid=b.id, part=part) }}">{{ icon('download') }}Download</a>
+    <form method="post" class="inline" action="{{ url_for('web.backup_pin', bid=b.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn">{{ 'Unpin' if b.pinned else 'Pin (keep forever)' }}</button></form>
+    <form method="post" class="inline" action="{{ url_for('web.backup_delete', bid=b.id) }}" data-confirm="Delete this backup permanently?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn danger">Delete</button></form>
+  </div>
+</div>
+<div class="card">
+  <div class="tabs">
+    <a href="?part=conf" class="{{ 'active' if part == 'conf' }}">Configuration</a>
+    {% if b.set_path %}<a href="?part=set" class="{{ 'active' if part == 'set' }}">Set commands</a>{% endif %}
+    {% if b.info_path %}<a href="?part=info" class="{{ 'active' if part == 'info' }}">Version / VC / commits</a>{% endif %}
+  </div>
+  <pre class="code">{{ text }}</pre>
+</div>
+{% endblock %}

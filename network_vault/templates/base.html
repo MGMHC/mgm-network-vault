@@ -1,0 +1,53 @@
+{% from '_macros.html' import icon %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf" content="{{ csrf_token }}">
+  <title>{% block title %}MGM Network Vault{% endblock %} · MGM Network Vault</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+</head>
+<body>
+{% if current_user %}
+<div class="layout">
+  <aside class="side">
+    <a class="brand-card" href="{{ url_for('web.dashboard') }}">
+      <img src="{{ url_for('static', filename='mgm-logo.png') }}" alt="MGM Healthcare">
+      <span class="brand-app">Network Vault</span>
+    </a>
+    {% set ep = request.endpoint or '' %}
+    <nav class="nav">
+      <a href="{{ url_for('web.dashboard') }}" class="{{ 'active' if ep == 'web.dashboard' }}">{{ icon('dash') }}Dashboard</a>
+      <a href="{{ url_for('web.devices') }}" class="{{ 'active' if ep.startswith('web.device') }}">{{ icon('switch') }}Devices</a>
+      <a href="{{ url_for('web.backups') }}" class="{{ 'active' if ep.startswith('web.backup') or ep == 'web.compare' }}">{{ icon('archive') }}Backups</a>
+      <a href="{{ url_for('web.schedules') }}" class="{{ 'active' if ep.startswith('web.schedule') }}">{{ icon('clock') }}Schedules</a>
+      <a href="{{ url_for('web.logs') }}" class="{{ 'active' if ep.startswith('web.logs') }}">{{ icon('log') }}Logs</a>
+      <div class="nav-sep">Admin</div>
+      <a href="{{ url_for('web.credentials') }}" class="{{ 'active' if ep.startswith('web.credential') }}">{{ icon('key') }}Credentials</a>
+      <a href="{{ url_for('web.github') }}" class="{{ 'active' if ep == 'web.github' }}">{{ icon('git') }}GitHub sync</a>
+      <a href="{{ url_for('web.migrate') }}" class="{{ 'active' if ep.startswith('web.migrate') }}">{{ icon('archive') }}Export &amp; migrate</a>
+      <a href="{{ url_for('web.settings') }}" class="{{ 'active' if ep == 'web.settings' }}">{{ icon('gear') }}Settings</a>
+      <a href="{{ url_for('web.account') }}" class="{{ 'active' if ep == 'web.account' }}">{{ icon('user') }}Users</a>
+    </nav>
+    <div class="side-foot">Signed in as <b>{{ current_user }}</b> · <a href="{{ url_for('web.logout') }}">Log out</a></div>
+  </aside>
+  <main class="main">
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% else %}
+  {% block bare %}{% endblock %}
+{% endif %}
+<div id="toast"></div>
+<div class="modal-bg" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal"><header><h2 style="margin:0"></h2><button class="btn sm" onclick="closeModal()">Close</button></header><div class="body"></div></div>
+</div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

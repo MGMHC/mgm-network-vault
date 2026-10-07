@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Schedules{% endblock %}
+{% block content %}
+<div class="topbar"><div><h1>Backup schedules</h1><div class="sub">Automatic backups run in the background while the MGM Network Vault service is running.</div></div></div>
+
+<div class="card flush">
+  <div class="table-wrap"><table>
+    <thead><tr><th>Name</th><th>When</th><th>Targets</th><th>Next run</th><th>Last run</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for s, nr, n in items %}
+      <tr>
+        <td><b>{{ s.name }}</b></td>
+        <td>{% if s.frequency == 'hourly' %}Every hour at :{{ s.time.split(':')[1] }}
+            {% elif s.frequency == 'daily' %}Daily at {{ s.time }}
+            {% elif s.frequency == 'weekly' %}Weekly {{ s.day_of_week }} at {{ s.time }}
+            {% elif s.frequency == 'monthly' %}Monthly on day {{ s.day_of_month }} at {{ s.time }}
+            {% else %}cron <code>{{ s.cron }}</code>{% endif %}</td>
+        <td>{{ s.target }}{% if s.target in ('group', 'role', 'platform') %}: <b>{{ s.target_value }}</b>{% endif %} <span class="muted small">({{ n }} device{{ '' if n == 1 else 's' }})</span></td>
+        <td>{% if nr and s.enabled %}{{ nr.strftime('%Y-%m-%d %H:%M') }} <div class="muted small">{{ nr|ago }}</div>{% else %}—{% endif %}</td>
+        <td>{{ s.last_run|dt }}<div class="muted small">{{ s.last_result or '' }}</div></td>
+        <td>{% if s.enabled %}<span class="badge ok">enabled</span>{% else %}<span class="badge">disabled</span>{% endif %}</td>
+        <td class="num">
+          <form method="post" class="inline" action="{{ url_for('web.schedule_action', sid=s.id, action='run') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn sm">{{ icon('play') }}Run now</button></form>
+          <a class="btn sm" href="?edit={{ s.id }}">Edit</a>
+          <form method="post" class="inline" action="{{ url_for('web.schedule_action', sid=s.id, action='toggle') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn sm">{{ 'Disable' if s.enabled else 'Enable' }}</button></form>
+          <form method="post" class="inline" action="{{ url_for('web.schedule_action', sid=s.id, action='delete') }}" data-confirm="Delete schedule {{ s.name }}?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn sm danger">Delete</button></form>
+        </td>
+      </tr>
+    {% else %}<tr><td colspan="7" class="empty">No schedules yet. A common setup: <b>daily 02:00 – all devices</b>, plus <b>hourly – core</b>.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
+{% set s = edit %}
+<form class="card" method="post" action="{{ url_for('web.schedule_save') }}">
+  <h2>{{ 'Edit schedule' if s else 'New schedule' }}</h2>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% if s %}<input type="hidden" name="id" value="{{ s.id }}">{% endif %}
+  <div class="form-grid">
+    <div class="field"><label>Name</label><input type="text" name="name" value="{{ s.name if s else 'Nightly backup' }}" required></div>
+    <div class="field"><label>Frequency</label>
+      <select name="frequency" id="freq">{% for k, v in [('hourly','Hourly'),('daily','Daily'),('weekly','Weekly'),('monthly','Monthly'),('cron','Custom cron')] %}
+        <option value="{{ k }}" {{ 'selected' if (s.frequency if s else 'daily') == k }}>{{ v }}</option>{% endfor %}</select></div>
+    <div class="field" data-show="hourly daily weekly monthly"><label>Time (HH:MM; hourly uses minutes only)</label><input type="time" name="time" value="{{ s.time if s else '02:00' }}"></div>
+    <div class="field" data-show="monthly"><label>Day of month</label><input type="number" name="day_of_month" min="1" max="28" value="{{ s.day_of_month if s else 1 }}"></div>
+    <div class="field" data-show="cron"><label>Cron expression</label><input type="text" name="cron" value="{{ s.cron if s else '0 2 * * *' }}" placeholder="min hour day month dow">
+      <div class="help">e.g. <code>0 */4 * * *</code> = every 4 hours</div></div>
+  </div>
+  <div class="field" data-show="weekly"><label>Days of week</label>
+    <div class="actions">{% set dows = (s.day_of_week if s else 'sun').split(',') %}
+    {% for d in ['mon','tue','wed','thu','fri','sat','sun'] %}<label class="check"><input type="checkbox" name="day_of_week" value="{{ d }}" {{ 'checked' if d in dows }}> {{ d|capitalize }}</label>{% endfor %}</div></div>
+
+  <div class="form-grid">
+    <div class="field"><label>Targets</label>
+      <select name="target" id="target">{% for k, v in [('all','All enabled devices'),('group','Device group'),('role','Role (core / access…)'),('platform','Platform'),('devices','Selected devices')] %}
+        <option value="{{ k }}" {{ 'selected' if (s.target if s else 'all') == k }}>{{ v }}</option>{% endfor %}</select></div>
+    <div class="field" data-target="group"><label>Group</label><select name="target_group">{% for g in groups %}<option {{ 'selected' if s and s.target_value == g }}>{{ g }}</option>{% endfor %}</select></div>
+    <div class="field" data-target="role"><label>Role</label><select name="target_role">{% for r in ROLES %}<option {{ 'selected' if s and s.target_value == r }}>{{ r }}</option>{% endfor %}</select></div>
+    <div class="field" data-target="platform"><label>Platform</label><select name="target_platform">{% for k, v in PLATFORMS.items() %}<option value="{{ k }}" {{ 'selected' if s and s.target_value == k }}>{{ v }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="field" data-target="devices"><label>Devices</label>
+    {% set chosen = (s.target_value if s and s.target == 'devices' else '').split(',') %}
+    <div class="actions">{% for d in devices %}<label class="check"><input type="checkbox" name="target_devices" value="{{ d.id }}" {{ 'checked' if d.id|string in chosen }}> {{ d.name }}</label>{% endfor %}</div></div>
+  <label class="check"><input type="checkbox" name="enabled" {{ 'checked' if not s or s.enabled }}> Enabled</label>
+  <div class="actions"><button class="btn primary">Save schedule</button>{% if s %}<a class="btn" href="{{ url_for('web.schedules') }}">Cancel</a>{% endif %}</div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  function sync() {
+    const f = document.getElementById('freq').value, t = document.getElementById('target').value;
+    document.querySelectorAll('[data-show]').forEach(e => e.style.display = e.dataset.show.split(' ').includes(f) ? '' : 'none');
+    document.querySelectorAll('[data-target]').forEach(e => e.style.display = e.dataset.target === t ? '' : 'none');
+  }
+  document.getElementById('freq').addEventListener('change', sync);
+  document.getElementById('target').addEventListener('change', sync);
+  sync();
+</script>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Backups{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>Backups</h1><div class="sub">{{ total }} backup(s) stored · {{ total_size|size }} of configuration</div></div>
+  <div class="actions">
+    <a class="btn primary" href="{{ url_for('web.backups_zip', latest=1) }}">{{ icon('download') }}Download latest of every device (ZIP)</a>
+  </div>
+</div>
+<div class="card flush">
+  <form class="filters" method="get">
+    <div><label>Device</label><select name="device"><option value="">All devices</option>{% for d in devices %}<option value="{{ d.id }}" {{ 'selected' if f.device == d.id|string }}>{{ d.name }}</option>{% endfor %}</select></div>
+    <div><label>Trigger</label><select name="trigger"><option value="">Any</option><option value="manual" {{ 'selected' if f.trigger == 'manual' }}>Manual</option><option value="schedule" {{ 'selected' if f.trigger == 'schedule' }}>Scheduled</option></select></div>
+    <div><label>From</label><input type="date" name="since" value="{{ f.since }}"></div>
+    <div><label>To</label><input type="date" name="until" value="{{ f.until }}"></div>
+    <label class="check" style="margin:0 0 8px"><input type="checkbox" name="changed" value="1" {{ 'checked' if f.changed == '1' }}> Changes only</label>
+    <button class="btn">Filter</button> <a class="btn" href="{{ url_for('web.backups') }}">Reset</a>
+  </form>
+  <div class="card-head">
+    <div class="actions">
+      <button class="btn sm" onclick="compareSelected()">{{ icon('diff') }}Compare 2 selected</button>
+      <button class="btn sm" onclick="zipSelected()">{{ icon('download') }}ZIP selected</button>
+    </div>
+    <span class="muted small">Tip: select any two backups (even from different switches) to compare them.</span>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th><input type="checkbox" class="sel-all"></th><th>Device</th><th>Taken</th><th>Trigger</th><th>Change</th><th>Last commit</th><th class="num">Size</th><th>Download</th><th></th></tr></thead>
+    <tbody>
+    {% for b in p.items %}
+      <tr>
+        <td><input type="checkbox" class="sel" value="{{ b.id }}"></td>
+        <td><a href="{{ url_for('web.device_detail', dev_id=b.device_id) }}"><b>{{ b.device.name }}</b></a></td>
+        <td><a href="{{ url_for('web.backup_view', bid=b.id) }}">{{ b.created_at|dt }}</a>{% if b.pinned %} <span class="badge blue">pinned</span>{% endif %}</td>
+        <td class="small">{{ b.trigger }}</td>
+        <td>{% if b.changed %}<span class="badge warn">changed</span> <span class="small"><span style="color:var(--ok)">+{{ b.lines_added }}</span> <span style="color:var(--bad)">-{{ b.lines_removed }}</span></span>{% elif b.previous %}<span class="badge">no change</span>{% else %}<span class="badge blue">baseline</span>{% endif %}</td>
+        <td class="small muted">{{ b.last_commit or '' }}</td>
+        <td class="num small">{{ b.size|size }}</td>
+        <td class="small"><a href="{{ url_for('web.backup_download', bid=b.id) }}">conf</a>{% if b.set_path %} · <a href="{{ url_for('web.backup_download', bid=b.id, part='set') }}">set</a>{% endif %}{% if b.info_path %} · <a href="{{ url_for('web.backup_download', bid=b.id, part='info') }}">info</a>{% endif %}{% if b.git_commit and b.git_commit|gh_commit %} · <a href="{{ b.git_commit|gh_commit }}" target="_blank" rel="noopener">GitHub ↗</a>{% endif %}</td>
+        <td class="num">{% set prev = b.previous %}{% if prev %}<a class="btn sm" href="{{ url_for('web.compare', a=prev.id, b=b.id) }}">Diff prev</a>{% endif %}</td>
+      </tr>
+    {% else %}<tr><td colspan="9" class="empty">No backups found.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  {% if p.pages > 1 %}
+  <div class="pager">
+    {% set args = request.args.to_dict() %}
+    {% if p.has_prev %}{% set _ = args.update(page=p.prev_num) %}<a class="btn sm" href="{{ url_for('web.backups', **args) }}">← Newer</a>{% endif %}
+    <span class="muted small">Page {{ p.page }} / {{ p.pages }}</span>
+    {% if p.has_next %}{% set _ = args.update(page=p.next_num) %}<a class="btn sm" href="{{ url_for('web.backups', **args) }}">Older →</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon, status_badge, backup_badge %}
+{% block title %}{{ d.name }}{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>{{ d.name }} {{ status_badge(d.status) }}</h1>
+    <div class="sub mono">{{ d.host }}:{{ d.port }} · {{ PLATFORMS[d.platform] }}{% if not d.enabled %} · <b>disabled</b>{% endif %}</div></div>
+  <div class="actions">
+    <button class="btn" onclick="runCheck([{{ d.id }}], this)">{{ icon('pulse') }}Check</button>
+    <button class="btn" onclick="runTool({{ d.id }}, 'test', this)">Test SSH login</button>
+    <a class="btn" href="{{ url_for('web.device_edit', dev_id=d.id) }}">Edit</a>
+    <button class="btn primary" onclick="runBackup([{{ d.id }}], this)">{{ icon('play') }}Backup now</button>
+  </div>
+</div>
+
+{% if d.last_backup_status == 'failed' %}
+<div class="flash error"><b>Last backup failed ({{ d.last_backup_at|dt }}):</b><pre class="mono" style="white-space:pre-wrap;margin:6px 0 0">{{ d.last_backup_error }}</pre></div>
+{% endif %}
+
+<div class="grid g3">
+  <div class="card">
+    <h2>Device</h2>
+    <dl class="kv">
+      <dt>Model</dt><dd>{{ d.model_label }} <span class="muted">({{ d.model if d.model != 'Auto' else 'not detected yet' }}, {{ d.role }})</span>
+        <button class="btn sm" style="margin-left:6px" onclick="runDetect([{{ d.id }}], this)">Detect</button></dd>
+      <dt>Software</dt><dd>{{ d.sw_version or '—' }}</dd>
+      <dt>Serial / VC ID</dt><dd class="mono">{{ d.serial or '—' }}</dd>
+      <dt>Group / location</dt><dd>{{ d.group or '—' }} · {{ d.location or '—' }}</dd>
+      <dt>Credential</dt><dd>{{ d.credential.name if d.credential else '⚠ none assigned' }}</dd>
+      <dt>Reachability</dt><dd>{{ status_badge(d.status) }} {{ '%.1f ms'|format(d.ping_ms) if d.ping_ms is not none }} <span class="muted small">checked {{ d.last_checked|ago }} · state since {{ d.status_since|dt }}</span></dd>
+      <dt>Last backup</dt><dd>{{ backup_badge(d) }} {{ d.last_backup_at|dt }}</dd>
+      {% if d.notes %}<dt>Notes</dt><dd style="white-space:pre-wrap">{{ d.notes }}</dd>{% endif %}
+    </dl>
+  </div>
+  <div class="card">
+    <h2>Live tools</h2>
+    <p class="muted small">Read-only commands run over SSH right now.</p>
+    <div class="actions" style="flex-direction:column;align-items:stretch">
+      {% if d.is_juniper %}
+        <button class="btn" onclick="runTool({{ d.id }}, 'commits', this)">Commit history (show system commit)</button>
+        <div class="actions">
+          <span class="small">Compare rollback</span>
+          <input type="number" id="rbA" value="1" min="0" max="49" style="width:64px">
+          <span class="small">→</span>
+          <input type="number" id="rbB" value="0" min="0" max="49" style="width:64px">
+          <button class="btn" onclick="runTool({{ d.id }}, 'rollback', this, rbA.value, rbB.value)">{{ icon('diff') }}Compare</button>
+        </div>
+        <div class="muted small">rollback 1 → 0 = what the most recent commit changed</div>
+      {% else %}
+        <button class="btn" onclick="runTool({{ d.id }}, 'unsaved', this)">{{ icon('diff') }}Unsaved changes (startup vs running)</button>
+      {% endif %}
+      <button class="btn" onclick="runTool({{ d.id }}, 'vc', this)">{{ 'Virtual Chassis status' if d.is_juniper else 'Stack status' }}</button>
+    </div>
+  </div>
+</div>
+
+{% if d.is_vc %}
+<div class="card flush">
+  <div class="card-head"><h2>{{ 'Virtual Chassis' if d.is_juniper else 'Stack' }} members</h2>
+    {% if d.vc_degraded %}<span class="badge warn">Degraded — member not present</span>{% elif d.vc_members %}<span class="badge ok">All members present</span>{% endif %}</div>
+  {% if d.vc_members %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Member</th><th>Status</th><th>Serial</th><th>Model</th><th>Priority</th><th>Role</th></tr></thead>
+    <tbody>{% for m in d.vc_members %}
+      <tr><td>{{ m.id }}{% if m.this %} <span class="muted small">(this)</span>{% endif %}</td>
+        <td>{% if m.status|lower == 'prsnt' %}<span class="badge ok">Present</span>{% else %}<span class="badge bad">{{ m.status }}</span>{% endif %}</td>
+        <td class="mono">{{ m.serial }}</td><td>{{ m.model }}</td><td>{{ m.prio }}</td>
+        <td>{% if m.role == 'Master' %}<span class="badge blue">Master</span>{% else %}{{ m.role }}{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="empty">Member details are collected on the next backup (Juniper only).</div>{% endif %}
+</div>
+{% endif %}
+
+<div class="card flush">
+  <div class="card-head"><h2>Backups ({{ backups|length }})</h2>
+    <div class="actions">
+      <button class="btn sm" onclick="compareSelected()">{{ icon('diff') }}Compare selected</button>
+      <button class="btn sm" onclick="zipSelected()">{{ icon('download') }}ZIP selected</button>
+      {% if gh_device_url(d.name) %}<a class="btn sm" href="{{ gh_device_url(d.name) }}" target="_blank" rel="noopener">{{ icon('git') }}History on GitHub</a>{% endif %}
+    </div>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th></th><th>Taken</th><th>Trigger</th><th>Change</th><th>Last commit</th><th class="num">Size</th><th>Files</th><th></th></tr></thead>
+    <tbody>
+    {% for b in backups %}
+      <tr>
+        <td><input type="checkbox" class="sel" value="{{ b.id }}"></td>
+        <td><a href="{{ url_for('web.backup_view', bid=b.id) }}">{{ b.created_at|dt }}</a>{% if b.pinned %} <span class="badge blue" title="kept forever">pinned</span>{% endif %}</td>
+        <td class="small">{{ b.trigger }}</td>
+        <td>{% if b.changed %}<span class="badge warn">changed</span> <span class="small"><span style="color:var(--ok)">+{{ b.lines_added }}</span> <span style="color:var(--bad)">-{{ b.lines_removed }}</span></span>{% elif not loop.last or b.previous %}<span class="badge">no change</span>{% else %}<span class="badge blue">baseline</span>{% endif %}</td>
+        <td class="small muted">{{ b.last_commit or '' }}</td>
+        <td class="num small">{{ b.size|size }}</td>
+        <td class="small">
+          <a href="{{ url_for('web.backup_download', bid=b.id) }}">conf</a>
+          {% if b.set_path %} · <a href="{{ url_for('web.backup_download', bid=b.id, part='set') }}">set</a>{% endif %}
+          {% if b.info_path %} · <a href="{{ url_for('web.backup_download', bid=b.id, part='info') }}">info</a>{% endif %}
+          {% if b.git_commit and b.git_commit|gh_commit %} · <a href="{{ b.git_commit|gh_commit }}" target="_blank" rel="noopener" title="View this version on GitHub">GitHub ↗</a>{% endif %}
+        </td>
+        <td class="num">
+          {% if not loop.last %}<a class="btn sm" href="{{ url_for('web.compare', a=backups[loop.index].id, b=b.id) }}">Diff prev</a>{% endif %}
+        </td>
+      </tr>
+    {% else %}<tr><td colspan="8" class="empty">No backups yet — click <b>Backup now</b>.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon, status_badge, backup_badge %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>Dashboard</h1><div class="sub">Network switch backup &amp; reachability overview</div></div>
+  <div class="actions">
+    <button class="btn" onclick="runCheck('all', this)">{{ icon('pulse') }}Check all reachability</button>
+    <button class="btn primary" onclick="runBackup('all', this)">{{ icon('play') }}Backup all now</button>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="label">Devices</div><div class="value">{{ c.total }}</div><div class="hint">in inventory</div></div>
+  <div class="stat ok"><div class="label">Reachable</div><div class="value">{{ c.up }}</div><div class="hint">ping + SSH OK</div></div>
+  <div class="stat {{ 'bad' if c.down else '' }}"><div class="label">Unreachable</div><div class="value">{{ c.down }}</div><div class="hint">{{ c.sshdown }} ping-only (SSH closed)</div></div>
+  <div class="stat {{ 'warn' if c.vc_degraded else '' }}"><div class="label">VC degraded</div><div class="value">{{ c.vc_degraded }}</div><div class="hint">stack member missing</div></div>
+  <div class="stat {{ 'bad' if c.backup_failed else '' }}"><div class="label">Last backup failed</div><div class="value">{{ c.backup_failed }}</div><div class="hint">{{ c.stale }} not backed up in 7d</div></div>
+  <div class="stat {{ 'warn' if c.changed_24h else '' }}"><div class="label">Config changes 24h</div><div class="value">{{ c.changed_24h }}</div><div class="hint">{{ c.backups_24h }} backups taken</div></div>
+</div>
+
+<div class="card flush">
+  <div class="card-head"><h2>Switches</h2>
+    <div class="actions">
+      <button class="btn sm" onclick="runCheck(selected(), this)">{{ icon('pulse') }}Check selected</button>
+      <button class="btn sm" onclick="runBackup(selected(), this)">{{ icon('play') }}Backup selected</button>
+      <a class="btn sm" href="{{ url_for('web.backups_zip', latest=1) }}">{{ icon('download') }}Latest configs (ZIP)</a>
+    </div>
+  </div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th><input type="checkbox" class="sel-all"></th><th>Name</th><th>IP</th><th>Model</th><th>Role</th><th>Group</th><th>Status</th><th class="num">RTT</th><th>VC</th><th>Last backup</th><th>Result</th><th></th></tr></thead>
+    <tbody>
+    {% for d in devices %}
+      <tr {% if not d.enabled %}style="opacity:.5"{% endif %}>
+        <td><input type="checkbox" class="sel" value="{{ d.id }}"></td>
+        <td><a href="{{ url_for('web.device_detail', dev_id=d.id) }}"><b>{{ d.name }}</b></a></td>
+        <td class="mono">{{ d.host }}</td>
+        <td>{{ d.model_label }}</td>
+        <td>{% if d.role == 'core' %}<span class="badge blue">core</span>{% else %}{{ d.role }}{% endif %}</td>
+        <td>{{ d.group or '—' }}</td>
+        <td title="checked {{ d.last_checked|ago }}, since {{ d.status_since|dt }}">{{ status_badge(d.status) }}</td>
+        <td class="num">{{ '%.1f ms'|format(d.ping_ms) if d.ping_ms is not none else '—' }}</td>
+        <td>{% if d.is_vc %}{% set m = d.vc_members %}{% if d.vc_degraded %}<span class="badge warn">degraded</span>{% elif m %}<span class="badge ok">{{ m|length }} members</span>{% else %}<span class="badge">VC</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td title="{{ d.last_backup_at|dt }}">{{ d.last_backup_at|ago }}</td>
+        <td>{{ backup_badge(d) }}</td>
+        <td><button class="btn sm" onclick="runBackup([{{ d.id }}], this)">Backup</button></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="12" class="empty">No devices yet. <a href="{{ url_for('web.device_edit') }}">Add a switch</a> or import a CSV on the <a href="{{ url_for('web.devices') }}">Devices</a> page. Create a <a href="{{ url_for('web.credentials') }}">credential profile</a> first.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card flush">
+    <div class="card-head"><h2>Recent configuration changes</h2><a href="{{ url_for('web.backups', changed=1) }}" class="small">All changes →</a></div>
+    <table>
+      <tbody>
+      {% for b in recent_changes %}
+        <tr>
+          <td><a href="{{ url_for('web.device_detail', dev_id=b.device_id) }}">{{ b.device.name }}</a></td>
+          <td class="muted small" title="{{ b.created_at|dt }}">{{ b.created_at|ago }}</td>
+          <td><span class="badge ok">+{{ b.lines_added }}</span> <span class="badge bad">-{{ b.lines_removed }}</span></td>
+          <td class="muted small wrap">{{ b.last_commit or '' }}</td>
+          <td class="num">{% set prev = b.previous %}
+            {% if prev %}<a class="btn sm" href="{{ url_for('web.compare', a=prev.id, b=b.id) }}">Diff</a>{% else %}<span class="muted small">first</span>{% endif %}</td>
+        </tr>
+      {% else %}<tr><td class="empty">No changes detected yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card flush">
+    <div class="card-head"><h2>Upcoming schedules</h2><a href="{{ url_for('web.schedules') }}" class="small">Manage →</a></div>
+    <table><tbody>
+      {% for s, nr in schedules %}
+        <tr><td><b>{{ s.name }}</b><div class="muted small">{{ s.frequency }} · {{ s.target }}{{ ' ' ~ s.target_value if s.target not in ('all','devices') }}</div></td>
+            <td class="small">{{ nr.strftime('%a %d %b %H:%M') if nr else '—' }}<div class="muted">{{ nr|ago if nr }}</div></td>
+            <td class="small muted">{{ s.last_result or '' }}</td></tr>
+      {% else %}<tr><td class="empty">No active schedules. <a href="{{ url_for('web.schedules') }}">Create one</a>.</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+</div>
+
+<div class="card flush">
+  <div class="card-head"><h2>Recent activity</h2><a href="{{ url_for('web.logs') }}" class="small">All logs →</a></div>
+  <div class="table-wrap"><table><tbody>
+    {% for l in logs %}
+      <tr><td class="small muted">{{ l.ts|dt }}</td><td class="small lvl-{{ l.level }}">{{ l.level }}</td><td class="small">{{ l.category }}</td>
+          <td>{% if l.device_id %}<a href="{{ url_for('web.device_detail', dev_id=l.device_id) }}">{{ l.device_name }}</a>{% endif %}</td>
+          <td class="wrap">{{ l.message }}</td></tr>
+    {% else %}<tr><td class="empty">No activity yet.</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}

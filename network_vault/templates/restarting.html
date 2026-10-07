@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Restarting{% endblock %}
+{% block content %}
+<div class="card" style="max-width:560px">
+  <h2>Restarting…</h2>
+  <p id="msg">MGM Network Vault is restarting. This page will reload automatically when it's back.</p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  let tries = 0;
+  setTimeout(async function poll() {
+    tries++;
+    try {
+      const r = await fetch('/login', { cache: 'no-store' });
+      if (r.ok) { location.href = '/'; return; }
+    } catch (e) { /* still down */ }
+    if (tries > 40) {
+      document.getElementById('msg').textContent =
+        'The app has not come back after two minutes. If it was not started as a service or with start.bat, start it again manually.';
+      return;
+    }
+    setTimeout(poll, 3000);
+  }, 4000);
+</script>
+{% endblock %}

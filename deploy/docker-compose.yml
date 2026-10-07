@@ -1,0 +1,22 @@
+# MGM Network Vault on a Linux server
+#   cd network-vault
+#   docker compose -f deploy/docker-compose.yml up -d --build
+# Then open http://<server>:8080, sign in as admin/admin and import your export (Export & migrate).
+services:
+  network-vault:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: network-vault
+    restart: unless-stopped          # also brings the app back after "Restart now" (exit code 3)
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: Asia/Kolkata               # schedules run in this time zone
+      NETWORK_VAULT_BEHIND_PROXY: "false"
+      NETWORK_VAULT_SECURE_COOKIES: "false"
+      # HTTPS_PROXY: http://proxy.mgmhealthcare.local:8080   # if GitHub is only reachable via a proxy
+    volumes:
+      - network-vault-data:/data     # database, keys, backups - back this volume up
+volumes:
+  network-vault-data:

@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon, status_badge, backup_badge %}
+{% block title %}Devices{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>Devices</h1><div class="sub">{{ devices|length }} switch(es) shown</div></div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('web.devices_export') }}">{{ icon('download') }}Export CSV</a>
+    <a class="btn primary" href="{{ url_for('web.device_edit') }}">{{ icon('plus') }}Add device</a>
+  </div>
+</div>
+
+<div class="card flush">
+  <form class="filters" method="get">
+    <div><label>Search</label><input type="search" name="q" value="{{ f.q }}" placeholder="name, IP, location"></div>
+    <div><label>Platform</label><select name="platform"><option value="">All</option>{% for k, v in PLATFORMS.items() %}<option value="{{ k }}" {{ 'selected' if f.platform == k }}>{{ v }}</option>{% endfor %}</select></div>
+    <div><label>Role</label><select name="role"><option value="">All</option>{% for r in ROLES %}<option {{ 'selected' if f.role == r }}>{{ r }}</option>{% endfor %}</select></div>
+    <div><label>Group</label><select name="group"><option value="">All</option>{% for g in groups %}<option {{ 'selected' if f.group == g }}>{{ g }}</option>{% endfor %}</select></div>
+    <div><label>Status</label><select name="status"><option value="">All</option>{% for s in ['up','down','ssh-down','unknown'] %}<option {{ 'selected' if f.status == s }}>{{ s }}</option>{% endfor %}</select></div>
+    <button class="btn">Filter</button> <a class="btn" href="{{ url_for('web.devices') }}">Reset</a>
+  </form>
+  <div class="card-head">
+    <div class="actions">
+      <button class="btn sm" onclick="runCheck(selected(), this)">{{ icon('pulse') }}Check selected</button>
+      <button class="btn sm" onclick="runDetect(selected(), this)">Detect model</button>
+      <button class="btn sm primary" onclick="runBackup(selected(), this)">{{ icon('play') }}Backup selected</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th><input type="checkbox" class="sel-all"></th><th>Name</th><th>Host</th><th>Platform</th><th>Model</th><th>Role</th><th>Group / Location</th><th>Credential</th><th>Status</th><th>Last backup</th><th>Backups</th><th></th></tr></thead>
+    <tbody>
+    {% for d in devices %}
+      <tr {% if not d.enabled %}style="opacity:.5" title="disabled"{% endif %}>
+        <td><input type="checkbox" class="sel" value="{{ d.id }}"></td>
+        <td><a href="{{ url_for('web.device_detail', dev_id=d.id) }}"><b>{{ d.name }}</b></a>
+          {% if d.is_vc %}<span class="badge blue">VC</span>{% endif %}{% if d.legacy_ssh %} <span class="badge" title="legacy SSH algorithms">legacy</span>{% endif %}</td>
+        <td class="mono">{{ d.host }}{% if d.port != 22 %}:{{ d.port }}{% endif %}</td>
+        <td>{{ 'Junos' if d.is_juniper else ('C1300' if d.platform == 'cisco_c1300' else 'IOS') }}</td>
+        <td>{{ d.model_label }}</td>
+        <td>{{ d.role }}</td>
+        <td>{{ d.group or '—' }}<div class="muted small">{{ d.location }}</div></td>
+        <td>{{ d.credential.name if d.credential else '⚠ none' }}</td>
+        <td>{{ status_badge(d.status) }}</td>
+        <td>{{ backup_badge(d) }} <span class="muted small">{{ d.last_backup_at|ago }}</span></td>
+        <td class="num">{{ d.backups.count() }}</td>
+        <td><a class="btn sm" href="{{ url_for('web.device_edit', dev_id=d.id) }}">Edit</a></td>
+      </tr>
+    {% else %}<tr><td colspan="12" class="empty">No devices match.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Bulk import (CSV)</h2>
+  <p class="muted">Columns: <code>name, host, port, platform, role, group, location, is_vc, legacy_ssh, enabled, credential, notes</code>.
+    The switch model, software version and serial number are detected automatically after import.
+    Platform is one of <code>juniper_junos</code>, <code>cisco_c1300</code>, <code>cisco_ios</code>. Existing devices (matched by name) are updated.
+    <a href="{{ url_for('web.devices_template') }}">Download template</a>.</p>
+  <form method="post" action="{{ url_for('web.devices_import') }}" enctype="multipart/form-data" class="actions">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="file" name="file" accept=".csv" required>
+    <button class="btn">Import</button>
+  </form>
+</div>
+{% endblock %}

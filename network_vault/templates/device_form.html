@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Edit ' ~ d.name if d.id else 'Add device' }}{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>{{ 'Edit ' ~ d.name if d.id else 'Add device' }}</h1></div>
+  {% if d.id %}
+  <form method="post" action="{{ url_for('web.device_delete', dev_id=d.id) }}" data-confirm="Delete {{ d.name }} and ALL its backups? This cannot be undone.">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn danger">Delete device</button>
+  </form>
+  {% endif %}
+</div>
+<form method="post" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="form-grid">
+    <div class="field"><label>Name *</label><input type="text" name="name" value="{{ d.name or '' }}" required placeholder="e.g. F2-EX2300-VC"></div>
+    <div class="field"><label>IP / hostname *</label><input type="text" name="host" value="{{ d.host or '' }}" required placeholder="10.0.0.10"></div>
+    <div class="field"><label>SSH port</label><input type="number" name="port" value="{{ d.port or 22 }}" min="1" max="65535"></div>
+    <div class="field"><label>Platform</label>
+      <select name="platform" id="platform">{% for k, v in PLATFORMS.items() %}<option value="{{ k }}" {{ 'selected' if d.platform == k }}>{{ v }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Model</label>
+      <select name="model" id="model">{% for m in MODELS %}<option value="{{ m }}" {{ 'selected' if d.model == m }}>{{ 'Auto-detect from switch' if m == 'Auto' else m }}</option>{% endfor %}</select>
+      {% if d.hw_model %}<div class="help">Detected: {{ d.hw_model }}</div>{% endif %}</div>
+    <div class="field"><label>Role</label>
+      <select name="role">{% for r in ROLES %}<option {{ 'selected' if d.role == r }}>{{ r }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Group</label><input type="text" name="group" value="{{ d.group or '' }}" list="groups" placeholder="e.g. Block-A">
+      <datalist id="groups">{% for g in groups %}<option>{{ g }}</option>{% endfor %}</datalist></div>
+    <div class="field"><label>Location</label><input type="text" name="location" value="{{ d.location or '' }}" placeholder="e.g. IDF 2nd floor"></div>
+    <div class="field"><label>Credential profile</label>
+      <select name="credential_id"><option value="">— none —</option>{% for c in creds %}<option value="{{ c.id }}" {{ 'selected' if d.credential_id == c.id }}>{{ c.name }} ({{ c.username }})</option>{% endfor %}</select>
+      <div class="help"><a href="{{ url_for('web.credentials') }}">Manage credential profiles</a></div></div>
+  </div>
+  <label class="check"><input type="checkbox" name="is_vc" {{ 'checked' if d.is_vc }}> Virtual Chassis / stack — collect member status on each backup</label>
+  <label class="check"><input type="checkbox" name="legacy_ssh" {{ 'checked' if d.legacy_ssh }}> Legacy SSH (older Junos on EX2200 / EX3300) — use classic ssh-rsa signatures</label>
+  <label class="check"><input type="checkbox" name="enabled" {{ 'checked' if d.enabled }}> Enabled (included in "backup all", schedules and reachability polling)</label>
+  <div class="field" style="margin-top:12px"><label>Notes</label><textarea name="notes">{{ d.notes or '' }}</textarea></div>
+  <div class="actions"><button class="btn primary">Save</button><a class="btn" href="{{ url_for('web.device_detail', dev_id=d.id) if d.id else url_for('web.devices') }}">Cancel</a></div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  // keep platform and model consistent
+  const plat = document.getElementById('platform'), model = document.getElementById('model');
+  model.addEventListener('change', () => {
+    if (model.value.startsWith('EX')) plat.value = 'juniper_junos';
+    else if (model.value === 'C1300') plat.value = 'cisco_c1300';
+  });
+</script>
+{% endblock %}
