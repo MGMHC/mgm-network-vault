@@ -30,7 +30,7 @@
   <div class="card chart-donut-card">
     <h2>Reachability</h2>
     <div class="donut-wrap">
-      <canvas id="reachChart" height="160"></canvas>
+      <canvas id="reachChart"></canvas>
       <div class="donut-legend">
         <div class="dl-item"><span class="dl-dot" style="background:var(--ok)"></span>Up <b>{{ c.up }}</b></div>
         <div class="dl-item"><span class="dl-dot" style="background:var(--warn)"></span>SSH only <b>{{ c.sshdown }}</b></div>
@@ -170,7 +170,10 @@
 // Reachability donut
 (function(){
   const d = {{ reach_data | tojson }};
-  new Chart(document.getElementById('reachChart'), {
+  const canvas = document.getElementById('reachChart');
+  canvas.style.height = '160px';
+  canvas.style.maxWidth = '160px';
+  new Chart(canvas, {
     type: 'doughnut',
     data: {
       labels: ['Up', 'SSH only', 'Down', 'Unknown'],

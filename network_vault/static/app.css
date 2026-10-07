@@ -215,9 +215,17 @@ pre.code { background: var(--panel-2); border: 1px solid var(--border); border-r
 /* ── Dashboard chart grid ────────────────────────────────────────────────── */
 .dash-charts { margin-bottom: 18px; }
 .dash-charts .g3 { grid-template-columns: 2fr 1fr; }
-.chart-donut-card .donut-wrap { display: flex; align-items: center; gap: 16px; }
-.donut-legend { display: flex; flex-direction: column; gap: 8px; }
-.dl-item { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.chart-donut-card { display: flex; flex-direction: column; }
+.chart-donut-card .donut-wrap {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 14px; flex: 1; justify-content: center;
+}
+.chart-donut-card canvas { max-height: 160px; width: auto !important; }
+.donut-legend {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 6px 16px; width: 100%;
+}
+.dl-item { display: flex; align-items: center; gap: 6px; font-size: 12.5px; white-space: nowrap; }
 .dl-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
 
 /* ── Section label ───────────────────────────────────────────────────────── */
