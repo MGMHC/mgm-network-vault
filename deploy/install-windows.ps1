@@ -70,7 +70,10 @@ try {
 
 # --- firewall ----------------------------------------------------------------
 $rule = "MGM Network Vault (TCP $Port)"
-if (-not (Get-NetFirewallRule -DisplayName $rule -ErrorAction SilentlyContinue)) {
+$localOnly = Select-String -Path (Join-Path $App "config.toml") -Pattern '^\s*host\s*=\s*"127\.0\.0\.1"' -Quiet
+if ($localOnly) {
+    Write-Host "Firewall: app listens on 127.0.0.1 only (published through IIS) - no rule for port $Port needed"
+} elseif (-not (Get-NetFirewallRule -DisplayName $rule -ErrorAction SilentlyContinue)) {
     New-NetFirewallRule -DisplayName $rule -Direction Inbound -Protocol TCP -LocalPort $Port -Action Allow -Profile Domain,Private | Out-Null
     Write-Host "Firewall: allowed inbound TCP $Port (Domain/Private networks)"
 }

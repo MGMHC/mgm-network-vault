@@ -74,6 +74,8 @@ The token is stored encrypted, and Windows' Git credential manager is bypassed s
 ## Hosting on a server
 
 ### Windows Server
+> **Full step-by-step guide:** [docs/WINDOWS-SERVER.md](docs/WINDOWS-SERVER.md). It covers prerequisites, the service, IIS with HTTPS, updates and troubleshooting.
+
 1. Install **Python 3.12+** (tick *Install for all users* and *Add to PATH*) and **Git for Windows**.
 2. Copy the app to the server: use *Export & migrate → Download app package*, or `python manage.py package app.zip`, and unzip it, e.g. to `C:\NetworkVault`.
 3. In PowerShell **as Administrator**:
@@ -103,8 +105,9 @@ Command line: `python manage.py export file.nvault`, then on the new server, wit
 For automated off-site copies, set `NETWORK_VAULT_PASSPHRASE` and schedule `manage.py export`.
 
 ### HTTPS
-The app itself serves plain HTTP. For access across the organisation, publish it through IIS (URL Rewrite/ARR) or nginx with
-your certificate, then set `behind_proxy = true` and `secure_cookies = true` in `config.toml`.
+The app itself serves plain HTTP. For access across the organisation, publish it through IIS: run
+`deploy\iis\setup-iis.ps1 -HostName <name> -CertThumbprint <thumbprint>` (details in [docs/WINDOWS-SERVER.md](docs/WINDOWS-SERVER.md#6-publish-through-iis-with-https)).
+You can also use nginx with `behind_proxy = true` and `secure_cookies = true` in `config.toml`.
 
 ### config.toml
 | Key | Default | Meaning |

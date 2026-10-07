@@ -4,6 +4,16 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [Unreleased]
+
+### Added
+- `docs/WINDOWS-SERVER.md`: step-by-step Windows Server guide covering prerequisites, dependencies, the service
+  (installer, Task Scheduler or NSSM), IIS reverse proxy with HTTPS, updates and troubleshooting.
+- `deploy/iis/web.config` and `deploy/iis/setup-iis.ps1` to publish the app through IIS (URL Rewrite + ARR).
+
+### Changed
+- Re-running `install-windows.ps1` no longer re-opens the app port in the firewall when the app is published through IIS.
+
 ## [1.0.0] - 2026-10-07
 
 First release.
