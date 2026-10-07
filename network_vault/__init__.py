@@ -89,6 +89,9 @@ def create_app():
     def inject():
         if "csrf" not in session:
             session["csrf"] = secrets.token_urlsafe(32)
-        return {"csrf_token": session["csrf"], "current_user": session.get("user"), "app_version": __version__}
+        uname = session.get("user")
+        user_obj = User.query.filter_by(username=uname).first() if uname else None
+        return {"csrf_token": session["csrf"], "current_user": uname,
+                "current_user_obj": user_obj, "app_version": __version__}
 
     return app

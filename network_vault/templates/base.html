@@ -11,30 +11,45 @@
 </head>
 <body>
 {% if current_user %}
-<div class="layout">
-  <aside class="side">
+<div class="layout" id="layout">
+  <aside class="side" id="sidebar">
+    <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="Collapse sidebar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
     <a class="brand-card" href="{{ url_for('web.dashboard') }}">
       <img src="{{ url_for('static', filename='mgm-logo.png') }}" alt="MGM Healthcare">
       <span class="brand-app">Network Vault</span>
     </a>
     {% set ep = request.endpoint or '' %}
     <nav class="nav">
-      <a href="{{ url_for('web.dashboard') }}" class="{{ 'active' if ep == 'web.dashboard' }}">{{ icon('dash') }}Dashboard</a>
-      <a href="{{ url_for('web.devices') }}" class="{{ 'active' if ep.startswith('web.device') }}">{{ icon('switch') }}Devices</a>
-      <a href="{{ url_for('web.backups') }}" class="{{ 'active' if ep.startswith('web.backup') or ep == 'web.compare' }}">{{ icon('archive') }}Backups</a>
-      <a href="{{ url_for('web.schedules') }}" class="{{ 'active' if ep.startswith('web.schedule') }}">{{ icon('clock') }}Schedules</a>
-      <a href="{{ url_for('web.logs') }}" class="{{ 'active' if ep.startswith('web.logs') }}">{{ icon('log') }}Logs</a>
+      <a href="{{ url_for('web.dashboard') }}" class="{{ 'active' if ep == 'web.dashboard' }}">{{ icon('dash') }}<span class="nav-label">Dashboard</span></a>
+      <a href="{{ url_for('web.devices') }}" class="{{ 'active' if ep.startswith('web.device') }}">{{ icon('switch') }}<span class="nav-label">Devices</span></a>
+      <a href="{{ url_for('web.backups') }}" class="{{ 'active' if ep.startswith('web.backup') or ep == 'web.compare' }}">{{ icon('archive') }}<span class="nav-label">Backups</span></a>
+      <a href="{{ url_for('web.schedules') }}" class="{{ 'active' if ep.startswith('web.schedule') }}">{{ icon('clock') }}<span class="nav-label">Schedules</span></a>
+      <a href="{{ url_for('web.logs') }}" class="{{ 'active' if ep.startswith('web.logs') }}">{{ icon('log') }}<span class="nav-label">Logs</span></a>
       <div class="nav-sep">Admin</div>
-      <a href="{{ url_for('web.credentials') }}" class="{{ 'active' if ep.startswith('web.credential') }}">{{ icon('key') }}Credentials</a>
-      <a href="{{ url_for('web.github') }}" class="{{ 'active' if ep == 'web.github' }}">{{ icon('git') }}GitHub sync</a>
-      <a href="{{ url_for('web.migrate') }}" class="{{ 'active' if ep.startswith('web.migrate') }}">{{ icon('archive') }}Export &amp; migrate</a>
-      <a href="{{ url_for('web.settings') }}" class="{{ 'active' if ep == 'web.settings' }}">{{ icon('gear') }}Settings</a>
-      <a href="{{ url_for('web.account') }}" class="{{ 'active' if ep == 'web.account' }}">{{ icon('user') }}Users</a>
+      <a href="{{ url_for('web.credentials') }}" class="{{ 'active' if ep.startswith('web.credential') }}">{{ icon('key') }}<span class="nav-label">Credentials</span></a>
+      <a href="{{ url_for('web.github') }}" class="{{ 'active' if ep == 'web.github' }}">{{ icon('git') }}<span class="nav-label">GitHub sync</span></a>
+      <a href="{{ url_for('web.migrate') }}" class="{{ 'active' if ep.startswith('web.migrate') }}">{{ icon('archive') }}<span class="nav-label">Export &amp; migrate</span></a>
+      <a href="{{ url_for('web.settings') }}" class="{{ 'active' if ep == 'web.settings' }}">{{ icon('gear') }}<span class="nav-label">Settings</span></a>
+      <a href="{{ url_for('web.account') }}" class="{{ 'active' if ep == 'web.account' }}">{{ icon('user') }}<span class="nav-label">Users</span></a>
     </nav>
-    <div class="side-foot">Signed in as <b>{{ current_user }}</b> · <a href="{{ url_for('web.logout') }}">Log out</a>
-      <div style="opacity:.6;margin-top:4px">v{{ app_version }}</div></div>
+    <div class="side-foot">
+      <div class="side-foot-content">
+        Signed in as <b>{{ current_user }}</b>
+        {% if current_user_obj %}<span class="role-badge role-{{ current_user_obj.role }}">{{ current_user_obj.role }}</span>{% endif %}
+        · <a href="{{ url_for('web.logout') }}">Log out</a>
+        <div style="opacity:.6;margin-top:4px">v{{ app_version }}</div>
+      </div>
+    </div>
   </aside>
-  <main class="main">
+  <main class="main" id="main">
+    {% if request.endpoint != 'web.dashboard' %}
+    <button class="back-btn" onclick="history.back()" title="Go back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+      Back
+    </button>
+    {% endif %}
     {% with msgs = get_flashed_messages(with_categories=true) %}
       {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}
     {% endwith %}

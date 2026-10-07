@@ -153,3 +153,18 @@ function zipSelected() {
   if (!ids.length) { toast('Select backups to download', 'bad'); return; }
   location.href = `/backups/zip?ids=${ids.join(',')}`;
 }
+
+// ── Sidebar collapse ──────────────────────────────────────────────────────
+function toggleSidebar() {
+  const layout = document.getElementById('layout');
+  const collapsed = layout.classList.toggle('sidebar-collapsed');
+  localStorage.setItem('sidebar-collapsed', collapsed ? '1' : '0');
+}
+
+// Restore sidebar state on load
+(function() {
+  if (localStorage.getItem('sidebar-collapsed') === '1') {
+    const layout = document.getElementById('layout');
+    if (layout) layout.classList.add('sidebar-collapsed');
+  }
+})();

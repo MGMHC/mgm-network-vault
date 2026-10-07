@@ -12,24 +12,69 @@
     <div class="field"><label>Confirm new password</label><input type="password" name="confirm" required minlength="8" autocomplete="new-password"></div>
     <button class="btn primary">Change password</button>
   </form>
+
   {% if not me.must_change %}
   <div class="card">
     <h2>All users</h2>
-    <table><tbody>
+    <table>
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Role</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
       {% for u in users %}
-      <tr><td><b>{{ u.username }}</b>{% if u.must_change %} <span class="badge warn">must change password</span>{% endif %}</td>
-        <td class="num">{% if u.username != me.username %}<form method="post" class="inline" data-confirm="Delete user {{ u.username }}?">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="deluser"><input type="hidden" name="id" value="{{ u.id }}"><button class="btn sm danger">Delete</button></form>{% endif %}</td></tr>
+      <tr>
+        <td>
+          <b>{{ u.username }}</b>
+          {% if u.must_change %} <span class="badge warn">must change password</span>{% endif %}
+        </td>
+        <td>
+          <span class="role-badge role-{{ u.role }}">{{ u.role }}</span>
+        </td>
+        <td class="num" style="white-space:nowrap">
+          {% if me.is_admin and u.username != me.username %}
+          <form method="post" class="inline" style="display:inline-flex;gap:6px;align-items:center;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="action" value="setrole">
+            <input type="hidden" name="id" value="{{ u.id }}">
+            <select name="role" class="role-select" onchange="this.form.submit()">
+              {% for r in USER_ROLES %}
+              <option value="{{ r }}" {% if u.role == r %}selected{% endif %}>{{ r }}</option>
+              {% endfor %}
+            </select>
+          </form>
+          <form method="post" class="inline" data-confirm="Delete user {{ u.username }}?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="deluser"><input type="hidden" name="id" value="{{ u.id }}"><button class="btn sm danger">Delete</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
       {% endfor %}
-    </tbody></table>
-    <form method="post" style="margin-top:14px" autocomplete="off">
+      </tbody>
+    </table>
+
+    {% if me.is_admin %}
+    <form method="post" style="margin-top:18px" autocomplete="off">
+      <h3>Add new user</h3>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="adduser">
       <div class="form-grid">
-        <div class="field"><label>New username</label><input type="text" name="username" required></div>
+        <div class="field"><label>Username</label><input type="text" name="username" required></div>
         <div class="field"><label>Temporary password</label><input type="password" name="password" required minlength="8" autocomplete="new-password"></div>
+        <div class="field"><label>Role</label>
+          <select name="role">
+            {% for r in USER_ROLES %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+          </select>
+          <div class="help">
+            <b>admin</b>: full access · <b>read-write</b>: can run backups, no user/settings management · <b>read-only</b>: view only
+          </div>
+        </div>
       </div>
-      <button class="btn">Add user</button>
+      <button class="btn primary">Add user</button>
     </form>
+    {% endif %}
   </div>
   {% endif %}
 </div>

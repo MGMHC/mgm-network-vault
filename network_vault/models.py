@@ -22,17 +22,35 @@ MODELS = ["Auto", "EX2200", "EX2300", "EX3300", "C1300", "Other"]  # Auto = dete
 ROLES = ["access", "distribution", "core"]
 
 
+USER_ROLES = ["admin", "read-write", "read-only"]
+
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     must_change = db.Column(db.Boolean, default=False)
+    role = db.Column(db.String(16), default="admin")  # admin | read-write | read-only
 
     def set_password(self, pw):
         self.password_hash = generate_password_hash(pw)
 
     def check_password(self, pw):
         return check_password_hash(self.password_hash, pw)
+
+    @property
+    def is_admin(self):
+        return self.role == "admin"
+
+    @property
+    def can_write(self):
+        """Can add/edit/delete devices, credentials, schedules, settings."""
+        return self.role in ("admin", "read-write")
+
+    @property
+    def can_backup(self):
+        """Can trigger backups and reachability checks."""
+        return self.role in ("admin", "read-write")
 
 
 class Credential(db.Model):

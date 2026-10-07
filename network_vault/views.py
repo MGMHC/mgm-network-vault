@@ -11,14 +11,44 @@ from sqlalchemy import func, or_
 
 from . import config, engine, gitsync, portable, reach
 from .diffing import side_by_side, stats, unified
-from .models import (DEFAULT_SETTINGS, MODELS, PLATFORMS, ROLES, Backup, Credential, Device, Job, LogEntry,
-                     Schedule, User, db, get_setting, now, set_setting)
+from .models import (DEFAULT_SETTINGS, MODELS, PLATFORMS, ROLES, USER_ROLES, Backup, Credential, Device, Job,
+                     LogEntry, Schedule, User, db, get_setting, now, set_setting)
 from .scheduler import make_trigger, next_run, resolve_targets, run_schedule, sync_schedules
 from .util import BACKUP_DIR, BASE_DIR, encrypt, log_event, read_backup_file, safe_name
 from .version import __version__
 
 bp = Blueprint("web", __name__)
 BOM = "\ufeff"  # lets Excel open our UTF-8 CSV files correctly
+
+
+def _current_user():
+    """Return the current User ORM object (or None)."""
+    uname = session.get("user")
+    return User.query.filter_by(username=uname).first() if uname else None
+
+
+def require_write(f):
+    """Decorator: 403 if user is read-only."""
+    from functools import wraps
+    @wraps(f)
+    def wrapper(*a, **kw):
+        u = _current_user()
+        if u and not u.can_write:
+            abort(403, "Your account is read-only. Contact an admin.")
+        return f(*a, **kw)
+    return wrapper
+
+
+def require_admin(f):
+    """Decorator: 403 unless user is admin."""
+    from functools import wraps
+    @wraps(f)
+    def wrapper(*a, **kw):
+        u = _current_user()
+        if u and not u.is_admin:
+            abort(403, "Admin access required.")
+        return f(*a, **kw)
+    return wrapper
 
 
 @bp.app_template_filter("dt")
@@ -118,20 +148,37 @@ def account():
                 flash("Password changed", "ok")
                 return redirect(url_for("web.dashboard"))
         elif action == "adduser":
+            if not me.is_admin:
+                abort(403, "Admin access required.")
             name = request.form.get("username", "").strip()
             pw = request.form.get("password", "")
+            role = request.form.get("role", "read-write")
+            if role not in USER_ROLES:
+                role = "read-write"
             if not name or len(pw) < 8:
                 flash("Username required and password must be at least 8 characters", "error")
             elif User.query.filter_by(username=name).first():
                 flash("User already exists", "error")
             else:
-                u = User(username=name, must_change=True)
+                u = User(username=name, must_change=True, role=role)
                 u.set_password(pw)
                 db.session.add(u)
                 db.session.commit()
-                log_event(f"User '{name}' created", "auth")
+                log_event(f"User '{name}' created with role '{role}'", "auth")
                 flash(f"User {name} created (must change password at first login)", "ok")
+        elif action == "setrole":
+            if not me.is_admin:
+                abort(403, "Admin access required.")
+            u = db.session.get(User, int(request.form.get("id", 0)))
+            new_role = request.form.get("role", "read-write")
+            if u and u.username != me.username and new_role in USER_ROLES:
+                u.role = new_role
+                db.session.commit()
+                log_event(f"User '{u.username}' role changed to '{new_role}'", "auth")
+                flash(f"Role updated for {u.username}", "ok")
         elif action == "deluser":
+            if not me.is_admin:
+                abort(403, "Admin access required.")
             u = db.session.get(User, int(request.form.get("id", 0)))
             if u and u.username != me.username:
                 db.session.delete(u)
@@ -139,7 +186,8 @@ def account():
                 log_event(f"User '{u.username}' deleted", "auth")
                 flash("User deleted", "ok")
         return redirect(url_for("web.account"))
-    return render_template("account.html", users=User.query.order_by(User.username).all(), me=me)
+    return render_template("account.html", users=User.query.order_by(User.username).all(), me=me,
+                           USER_ROLES=USER_ROLES)
 
 
 # --------------------------------------------------------------------------- dashboard
@@ -159,13 +207,44 @@ def dashboard():
         "changed_24h": Backup.query.filter(Backup.created_at >= since, Backup.changed.is_(True)).count(),
         "backups_24h": Backup.query.filter(Backup.created_at >= since).count(),
     }
+
+    # --- Floor-wise grouping (by device.group) ---
+    from collections import defaultdict
+    floor_map = defaultdict(list)
+    for d in devices:
+        floor_map[d.group or "(No Group)"].append(d)
+    floors = sorted(floor_map.items(), key=lambda x: x[0])
+
+    # --- Chart data: backups + changes per day over last 14 days ---
+    chart_days = 14
+    day_labels = []
+    daily_backups = []
+    daily_changes = []
+    for i in range(chart_days - 1, -1, -1):
+        day_start = (now() - timedelta(days=i)).replace(hour=0, minute=0, second=0)
+        day_end   = (now() - timedelta(days=i)).replace(hour=23, minute=59, second=59)
+        day_labels.append(day_start.strftime("%d %b"))
+        daily_backups.append(Backup.query.filter(Backup.created_at >= day_start, Backup.created_at <= day_end).count())
+        daily_changes.append(Backup.query.filter(Backup.created_at >= day_start, Backup.created_at <= day_end, Backup.changed.is_(True)).count())
+
+    # --- Reachability chart data ---
+    reach_data = {
+        "up": counts["up"],
+        "ssh_only": counts["sshdown"],
+        "down": counts["down"],
+        "unknown": counts["total"] - counts["up"] - counts["sshdown"] - counts["down"],
+    }
+
     recent_changes = (Backup.query.filter(Backup.changed.is_(True)).order_by(Backup.created_at.desc()).limit(8).all())
     logs = LogEntry.query.order_by(LogEntry.id.desc()).limit(12).all()
     schedules = [(s, next_run(s.id)) for s in Schedule.query.filter_by(enabled=True).all()]
     schedules.sort(key=lambda x: (x[1] is None, x[1].timestamp() if x[1] else 0))
     jobs = Job.query.order_by(Job.id.desc()).limit(5).all()
     return render_template("dashboard.html", devices=devices, c=counts, recent_changes=recent_changes,
-                           logs=logs, schedules=schedules[:5], jobs=jobs)
+                           logs=logs, schedules=schedules[:5], jobs=jobs,
+                           floors=floors, day_labels=day_labels,
+                           daily_backups=daily_backups, daily_changes=daily_changes,
+                           reach_data=reach_data)
 
 
 # --------------------------------------------------------------------------- devices
@@ -187,6 +266,7 @@ def devices():
 
 @bp.route("/devices/new", methods=["GET", "POST"])
 @bp.route("/devices/<int:dev_id>/edit", methods=["GET", "POST"])
+@require_write
 def device_edit(dev_id=None):
     d = db.session.get(Device, dev_id) if dev_id else Device()
     if dev_id and not d:
@@ -233,6 +313,7 @@ def device_edit(dev_id=None):
 
 
 @bp.route("/devices/<int:dev_id>/delete", methods=["POST"])
+@require_write
 def device_delete(dev_id):
     d = db.get_or_404(Device, dev_id)
     for b in d.backups.all():
@@ -824,6 +905,7 @@ def migrate_exported_config():
 # --------------------------------------------------------------------------- credentials & settings
 
 @bp.route("/credentials", methods=["GET", "POST"])
+@require_write
 def credentials():
     if request.method == "POST":
         cid = request.form.get("id")
@@ -862,6 +944,7 @@ def credential_delete(cid):
 
 
 @bp.route("/settings", methods=["GET", "POST"])
+@require_admin
 def settings():
     if request.method == "POST":
         for k in DEFAULT_SETTINGS:

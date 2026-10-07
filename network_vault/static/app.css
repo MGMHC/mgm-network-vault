@@ -35,7 +35,7 @@ h3 { font-size: 14px; margin: 0 0 8px; font-weight: 650; }
 
 /* layout */
 .layout { display: grid; grid-template-columns: 228px 1fr; min-height: 100vh; }
-.side { background: linear-gradient(180deg, var(--side), var(--side-2)); color: var(--side-text); padding: 18px 12px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; }
+.side { background: linear-gradient(180deg, var(--side), var(--side-2)); color: var(--side-text); padding: 18px 12px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; position: relative; }
 .brand { display: flex; gap: 10px; align-items: center; padding: 4px 10px 18px; color: #fff; font-weight: 700; font-size: 16px; }
 .brand-mark { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, var(--mgm-gold), var(--mgm-chrome)); color: var(--mgm-blue); display: grid; place-items: center; font-size: 15px; font-weight: 800; }
 .brand-card { display: block; background: #fff; border-radius: 12px; padding: 12px 12px 8px; margin: 0 2px 18px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
@@ -178,3 +178,97 @@ pre.code { background: var(--panel-2); border: 1px solid var(--border); border-r
   .main { padding: 16px; }
   .kv { grid-template-columns: 1fr; }
 }
+
+/* ── Sidebar collapse ────────────────────────────────────────────────────── */
+.sidebar-toggle {
+  position: absolute; top: 18px; right: -14px; z-index: 10;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--panel); border: 1px solid var(--border);
+  box-shadow: 0 2px 6px rgba(0,0,0,.15);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0; transition: transform .2s;
+  color: var(--muted);
+}
+.sidebar-toggle svg { width: 14px; height: 14px; transition: transform .25s; }
+.sidebar-toggle:hover { color: var(--text); }
+
+/* Collapsed state */
+.layout.sidebar-collapsed { grid-template-columns: 60px 1fr; }
+.layout.sidebar-collapsed .side { padding: 18px 8px; align-items: center; }
+.layout.sidebar-collapsed .brand-card { display: none; }
+.layout.sidebar-collapsed .nav-label { display: none; }
+.layout.sidebar-collapsed .nav-sep { display: none; }
+.layout.sidebar-collapsed .side-foot { display: none; }
+.layout.sidebar-collapsed .nav a { justify-content: center; padding: 10px 0; border-radius: 8px; }
+.layout.sidebar-collapsed .sidebar-toggle svg { transform: rotate(180deg); }
+
+/* ── Back button ─────────────────────────────────────────────────────────── */
+.back-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-bottom: 14px;
+  padding: 5px 11px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--panel); color: var(--muted); font: inherit; font-size: 12.5px;
+  cursor: pointer; transition: color .15s, background .15s;
+}
+.back-btn:hover { color: var(--text); background: var(--panel-2); }
+
+/* ── Dashboard chart grid ────────────────────────────────────────────────── */
+.dash-charts { margin-bottom: 18px; }
+.dash-charts .g3 { grid-template-columns: 2fr 1fr; }
+.chart-donut-card .donut-wrap { display: flex; align-items: center; gap: 16px; }
+.donut-legend { display: flex; flex-direction: column; gap: 8px; }
+.dl-item { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.dl-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+
+/* ── Section label ───────────────────────────────────────────────────────── */
+.section-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+
+/* ── Floor card ──────────────────────────────────────────────────────────── */
+.floor-card { margin-bottom: 14px; }
+.floor-header {
+  display: flex; align-items: center; gap: 12px; padding: 12px 18px;
+  border-bottom: 1px solid var(--border); flex-wrap: wrap;
+}
+.floor-name { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; min-width: 140px; }
+.floor-stats { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
+.floor-bar { flex: 1; min-width: 80px; max-width: 200px; height: 8px; border-radius: 99px; background: var(--border); overflow: hidden; display: flex; }
+.fb-seg { height: 100%; transition: width .4s; }
+.fb-up   { background: var(--ok); }
+.fb-ssh  { background: var(--mgm-chrome); }
+.fb-down { background: var(--bad); }
+.floor-toggle { border: none; background: transparent; padding: 4px; cursor: pointer; color: var(--muted); }
+.floor-toggle:hover { color: var(--text); }
+.floor-toggle svg { transition: transform .2s; }
+.floor-toggle.rotated svg { transform: rotate(-90deg); }
+
+.floor-devices { display: flex; flex-wrap: wrap; gap: 12px; padding: 14px 18px; }
+.floor-devices.collapsed { display: none; }
+
+.device-card {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; min-width: 170px; max-width: 220px; flex: 1;
+  display: flex; flex-direction: column; gap: 5px;
+  text-decoration: none; color: var(--text); transition: box-shadow .15s, transform .15s;
+  border-left: 3px solid transparent;
+}
+.device-card:hover { box-shadow: 0 4px 16px rgba(37,54,108,.13); transform: translateY(-2px); text-decoration: none; }
+.dc-up   { border-left-color: var(--ok); }
+.dc-down { border-left-color: var(--bad); }
+.dc-ssh  { border-left-color: var(--mgm-chrome); }
+.dc-unknown { border-left-color: var(--border); }
+.dc-name { font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dc-ip   { font-size: 11.5px; color: var(--muted); }
+.dc-meta { display: flex; gap: 4px; flex-wrap: wrap; }
+.dc-backup { font-size: 11.5px; display: flex; align-items: center; gap: 5px; margin-top: 2px; }
+
+/* ── Role badges ─────────────────────────────────────────────────────────── */
+.role-badge {
+  display: inline-block; padding: 1px 7px; border-radius: 99px; font-size: 10px;
+  font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+}
+.role-admin     { background: var(--accent-soft); color: var(--accent); }
+.role-read-write { background: var(--gold-soft); color: var(--gold); }
+.role-read-only { background: var(--info-soft); color: var(--muted); }
+
+.role-select { width: auto; min-width: 110px; padding: 4px 7px; font-size: 12px; }
+

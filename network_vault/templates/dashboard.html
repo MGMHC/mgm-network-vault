@@ -5,8 +5,10 @@
 <div class="topbar">
   <div><h1>Dashboard</h1><div class="sub">Network switch backup &amp; reachability overview</div></div>
   <div class="actions">
+    {% if current_user_obj and current_user_obj.can_backup %}
     <button class="btn" onclick="runCheck('all', this)">{{ icon('pulse') }}Check all reachability</button>
     <button class="btn primary" onclick="runBackup('all', this)">{{ icon('play') }}Backup all now</button>
+    {% endif %}
   </div>
 </div>
 
@@ -19,41 +21,79 @@
   <div class="stat {{ 'warn' if c.changed_24h else '' }}"><div class="label">Config changes 24h</div><div class="value">{{ c.changed_24h }}</div><div class="hint">{{ c.backups_24h }} backups taken</div></div>
 </div>
 
-<div class="card flush">
-  <div class="card-head"><h2>Switches</h2>
-    <div class="actions">
-      <button class="btn sm" onclick="runCheck(selected(), this)">{{ icon('pulse') }}Check selected</button>
-      <button class="btn sm" onclick="runBackup(selected(), this)">{{ icon('play') }}Backup selected</button>
-      <a class="btn sm" href="{{ url_for('web.backups_zip', latest=1) }}">{{ icon('download') }}Latest configs (ZIP)</a>
-    </div>
+{# ── Charts row ───────────────────────────────────────────────────────────── #}
+<div class="grid g3 dash-charts">
+  <div class="card">
+    <h2>Backup &amp; Change Activity <span class="small muted">(last 14 days)</span></h2>
+    <canvas id="activityChart" height="130"></canvas>
   </div>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th><input type="checkbox" class="sel-all"></th><th>Name</th><th>IP</th><th>Model</th><th>Role</th><th>Group</th><th>Status</th><th class="num">RTT</th><th>VC</th><th>Last backup</th><th>Result</th><th></th></tr></thead>
-    <tbody>
-    {% for d in devices %}
-      <tr {% if not d.enabled %}style="opacity:.5"{% endif %}>
-        <td><input type="checkbox" class="sel" value="{{ d.id }}"></td>
-        <td><a href="{{ url_for('web.device_detail', dev_id=d.id) }}"><b>{{ d.name }}</b></a></td>
-        <td class="mono">{{ d.host }}</td>
-        <td>{{ d.model_label }}</td>
-        <td>{% if d.role == 'core' %}<span class="badge blue">core</span>{% else %}{{ d.role }}{% endif %}</td>
-        <td>{{ d.group or '—' }}</td>
-        <td title="checked {{ d.last_checked|ago }}, since {{ d.status_since|dt }}">{{ status_badge(d.status) }}</td>
-        <td class="num">{{ '%.1f ms'|format(d.ping_ms) if d.ping_ms is not none else '—' }}</td>
-        <td>{% if d.is_vc %}{% set m = d.vc_members %}{% if d.vc_degraded %}<span class="badge warn">degraded</span>{% elif m %}<span class="badge ok">{{ m|length }} members</span>{% else %}<span class="badge">VC</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}</td>
-        <td title="{{ d.last_backup_at|dt }}">{{ d.last_backup_at|ago }}</td>
-        <td>{{ backup_badge(d) }}</td>
-        <td><button class="btn sm" onclick="runBackup([{{ d.id }}], this)">Backup</button></td>
-      </tr>
-    {% else %}
-      <tr><td colspan="12" class="empty">No devices yet. <a href="{{ url_for('web.device_edit') }}">Add a switch</a> or import a CSV on the <a href="{{ url_for('web.devices') }}">Devices</a> page. Create a <a href="{{ url_for('web.credentials') }}">credential profile</a> first.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
+  <div class="card chart-donut-card">
+    <h2>Reachability</h2>
+    <div class="donut-wrap">
+      <canvas id="reachChart" height="160"></canvas>
+      <div class="donut-legend">
+        <div class="dl-item"><span class="dl-dot" style="background:var(--ok)"></span>Up <b>{{ c.up }}</b></div>
+        <div class="dl-item"><span class="dl-dot" style="background:var(--warn)"></span>SSH only <b>{{ c.sshdown }}</b></div>
+        <div class="dl-item"><span class="dl-dot" style="background:var(--bad)"></span>Down <b>{{ c.down }}</b></div>
+        <div class="dl-item"><span class="dl-dot" style="background:var(--border)"></span>Unknown <b>{{ reach_data.unknown }}</b></div>
+      </div>
+    </div>
   </div>
 </div>
 
+{# ── Floor-wise device status ─────────────────────────────────────────────── #}
+<div class="section-label">Floor / Group Status</div>
+{% for floor_name, floor_devices in floors %}
+{% set f_up    = floor_devices | selectattr('status', 'eq', 'up') | list | length %}
+{% set f_down  = floor_devices | selectattr('status', 'eq', 'down') | list | length %}
+{% set f_ssh   = floor_devices | selectattr('status', 'eq', 'ssh-down') | list | length %}
+{% set f_total = floor_devices | length %}
+<div class="card flush floor-card">
+  <div class="floor-header">
+    <div class="floor-name">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01"/></svg>
+      {{ floor_name }}
+    </div>
+    <div class="floor-stats">
+      <span class="badge ok">{{ f_up }} up</span>
+      {% if f_ssh %}<span class="badge warn">{{ f_ssh }} SSH-only</span>{% endif %}
+      {% if f_down %}<span class="badge bad">{{ f_down }} down</span>{% endif %}
+      <span class="badge">{{ f_total }} total</span>
+    </div>
+    <div class="floor-bar" title="{{ f_up }} up / {{ f_ssh }} SSH only / {{ f_down }} down">
+      {% if f_total > 0 %}
+      <div class="fb-seg fb-up"   style="width:{{ (f_up / f_total * 100) | round(1) }}%"></div>
+      <div class="fb-seg fb-ssh"  style="width:{{ (f_ssh / f_total * 100) | round(1) }}%"></div>
+      <div class="fb-seg fb-down" style="width:{{ (f_down / f_total * 100) | round(1) }}%"></div>
+      {% endif %}
+    </div>
+    <button class="btn sm floor-toggle" onclick="toggleFloor(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+  </div>
+  <div class="floor-devices">
+    {% for d in floor_devices %}
+    <a href="{{ url_for('web.device_detail', dev_id=d.id) }}" class="device-card {% if d.status == 'up' %}dc-up{% elif d.status == 'down' %}dc-down{% elif d.status == 'ssh-down' %}dc-ssh{% else %}dc-unknown{% endif %}">
+      <div class="dc-name">{{ d.name }}</div>
+      <div class="dc-ip mono">{{ d.host }}</div>
+      <div class="dc-meta">
+        {{ status_badge(d.status) }}
+        {% if d.role == 'core' %}<span class="badge blue">core</span>{% endif %}
+        {% if d.is_vc %}
+          {% if d.vc_degraded %}<span class="badge warn">VC degraded</span>
+          {% else %}<span class="badge ok">VC</span>{% endif %}
+        {% endif %}
+      </div>
+      <div class="dc-backup">{{ backup_badge(d) }} <span class="muted small">{{ d.last_backup_at|ago }}</span></div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="card"><p class="empty">No devices yet. <a href="{{ url_for('web.device_edit') }}">Add a switch</a> or import a CSV on the <a href="{{ url_for('web.devices') }}">Devices</a> page.</p></div>
+{% endfor %}
+
+{# ── Recent changes + Schedules ───────────────────────────────────────────── #}
 <div class="grid g2">
   <div class="card flush">
     <div class="card-head"><h2>Recent configuration changes</h2><a href="{{ url_for('web.backups', changed=1) }}" class="small">All changes →</a></div>
@@ -94,4 +134,66 @@
     {% else %}<tr><td class="empty">No activity yet.</td></tr>{% endfor %}
   </tbody></table></div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+// Activity chart (bar + line)
+(function(){
+  const labels  = {{ day_labels | tojson }};
+  const backups = {{ daily_backups | tojson }};
+  const changes = {{ daily_changes | tojson }};
+  const isDark  = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const textCol = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#888';
+  new Chart(document.getElementById('activityChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Backups', data: backups, backgroundColor: 'rgba(37,54,108,0.25)', borderColor: '#25366C', borderWidth: 1.5, borderRadius: 4, order: 2 },
+        { label: 'Changes', data: changes, type: 'line', borderColor: '#C3A275', backgroundColor: 'rgba(195,162,117,0.15)', borderWidth: 2, pointRadius: 3, tension: 0.3, fill: true, order: 1 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { color: textCol, font: { size: 12 } } }, tooltip: { mode: 'index' } },
+      scales: {
+        x: { ticks: { color: textCol, font: { size: 11 } }, grid: { color: 'rgba(128,128,128,0.1)' } },
+        y: { ticks: { color: textCol, font: { size: 11 }, stepSize: 1 }, grid: { color: 'rgba(128,128,128,0.1)' }, beginAtZero: true }
+      }
+    }
+  });
+})();
+
+// Reachability donut
+(function(){
+  const d = {{ reach_data | tojson }};
+  new Chart(document.getElementById('reachChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Up', 'SSH only', 'Down', 'Unknown'],
+      datasets: [{
+        data: [d.up, d.ssh_only, d.down, d.unknown],
+        backgroundColor: ['#12805c', '#8A5A00', '#c0262d', '#ccc'],
+        borderWidth: 0, hoverOffset: 6
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true, cutout: '72%',
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } } }
+    }
+  });
+})();
+
+// Floor card toggle
+function toggleFloor(btn) {
+  const card = btn.closest('.floor-card');
+  const devices = card.querySelector('.floor-devices');
+  const isOpen = !devices.classList.contains('collapsed');
+  devices.classList.toggle('collapsed', isOpen);
+  btn.classList.toggle('rotated', isOpen);
+}
+</script>
 {% endblock %}
