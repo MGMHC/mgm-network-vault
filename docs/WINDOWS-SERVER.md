@@ -56,7 +56,7 @@ Pick **one** of these options.
 mkdir C:\Apps -Force; cd C:\Apps
 git clone https://github.com/MGMHC/mgm-network-vault.git network-vault
 cd network-vault
-git checkout v1.0.0        # or the latest release tag
+git checkout v1.0.1        # or the latest release tag
 ```
 The repository is private, so Git asks you to sign in to GitHub the first time. Use an account that has access to `MGMHC/mgm-network-vault`.
 
