@@ -44,6 +44,8 @@ def main():
     sub.add_parser("package").add_argument("file")
     sub.add_parser("reset-password").add_argument("user")
     sub.add_parser("info")
+    from network_vault.version import __version__
+    ap.add_argument("--version", action="version", version=f"MGM Network Vault {__version__}")
     a = ap.parse_args()
 
     from network_vault.util import BASE_DIR  # noqa: E402 - after argparse so --help works without data
@@ -81,6 +83,8 @@ def main():
             db.session.commit()
             print(f"Password for {a.user} changed.")
     elif a.cmd == "info":
+        from network_vault.version import __version__
+        print(f"Version:     {__version__}")
         print(f"Config file: {config.CONFIG_FILE} ({'found' if config.CONFIG_FILE.exists() else 'not found - defaults'})")
         print(f"Data folder: {BASE_DIR}")
         print(f"Listening:   {config.get('host')}:{config.get('port')}  (running: {_app_running()})")

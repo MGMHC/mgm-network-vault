@@ -6,7 +6,7 @@
     <div class="login-brand">
       <img src="{{ url_for('static', filename='mgm-logo.png') }}" alt="MGM Healthcare">
       <h1>Network Vault</h1>
-      <div class="muted">Switch configuration backup</div>
+      <div class="muted">Switch configuration backup · v{{ app_version }}</div>
     </div>
     {% with msgs = get_flashed_messages(with_categories=true) %}{% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}{% endwith %}
     <form method="post">

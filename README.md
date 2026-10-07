@@ -131,6 +131,26 @@ data\
 ```
 Back up the whole `data` folder, or use **Export & migrate** for a single encrypted file. The config files are plain text, so they can also be read without the app.
 
+## Versions & releases
+
+The current version is in `network_vault/version.py`. It's shown in the sidebar and on the login page,
+printed at start-up, and returned by `python manage.py --version`. Every release is a Git tag
+(`v1.0.0`, `v1.1.0`, ...) with its notes in [CHANGELOG.md](CHANGELOG.md).
+
+To make a new release:
+1. Bump `__version__` in `network_vault/version.py`: patch for fixes, minor for new features, major for breaking changes.
+2. Add a section at the top of `CHANGELOG.md`.
+3. Commit, tag and push:
+   ```bash
+   git commit -am "Release v1.1.0"
+   git tag -a v1.1.0 -m "MGM Network Vault 1.1.0"
+   git push --follow-tags
+   ```
+4. On GitHub, go to **Releases → Draft a new release**, choose the tag, and paste that version's CHANGELOG section.
+
+To update a server to a release: `git fetch --tags && git checkout v1.1.0`, then re-run `deploy\install-windows.ps1`.
+On Docker, re-run `docker compose ... up -d --build`. Take an export first.
+
 ## Notes
 
 - `paramiko` is pinned below 4.0 on purpose. Paramiko 4 removed `ssh-rsa` and SHA-1 key exchange, and older Junos on EX2200/EX3300 still needs them.

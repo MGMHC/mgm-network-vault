@@ -31,7 +31,8 @@
       <a href="{{ url_for('web.settings') }}" class="{{ 'active' if ep == 'web.settings' }}">{{ icon('gear') }}Settings</a>
       <a href="{{ url_for('web.account') }}" class="{{ 'active' if ep == 'web.account' }}">{{ icon('user') }}Users</a>
     </nav>
-    <div class="side-foot">Signed in as <b>{{ current_user }}</b> · <a href="{{ url_for('web.logout') }}">Log out</a></div>
+    <div class="side-foot">Signed in as <b>{{ current_user }}</b> · <a href="{{ url_for('web.logout') }}">Log out</a>
+      <div style="opacity:.6;margin-top:4px">v{{ app_version }}</div></div>
   </aside>
   <main class="main">
     {% with msgs = get_flashed_messages(with_categories=true) %}

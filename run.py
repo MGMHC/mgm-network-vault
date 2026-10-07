@@ -14,6 +14,7 @@ from waitress import serve
 from network_vault import config, create_app
 from network_vault.scheduler import init_scheduler
 from network_vault.util import BASE_DIR
+from network_vault.version import __version__
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logging.getLogger("paramiko").setLevel(logging.WARNING)
@@ -43,5 +44,5 @@ if __name__ == "__main__":
     else:
         urls = [f"http://{host}:{port}"]
     logging.info("Config: %s | data: %s", config.CONFIG_FILE if config.CONFIG_FILE.exists() else "defaults", BASE_DIR)
-    logging.info("MGM Network Vault is running. Open in a browser:\n    %s", "\n    ".join(urls))
+    logging.info("MGM Network Vault %s is running. Open in a browser:\n    %s", __version__, "\n    ".join(urls))
     serve(app, host=host, port=port, threads=config.get("threads"))  # proxy headers: see behind_proxy

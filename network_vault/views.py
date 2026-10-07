@@ -15,6 +15,7 @@ from .models import (DEFAULT_SETTINGS, MODELS, PLATFORMS, ROLES, Backup, Credent
                      Schedule, User, db, get_setting, now, set_setting)
 from .scheduler import make_trigger, next_run, resolve_targets, run_schedule, sync_schedules
 from .util import BACKUP_DIR, BASE_DIR, encrypt, log_event, read_backup_file, safe_name
+from .version import __version__
 
 bp = Blueprint("web", __name__)
 BOM = "\ufeff"  # lets Excel open our UTF-8 CSV files correctly
@@ -719,6 +720,7 @@ def migrate():
         "Listening on": f"{config.get('host')}:{config.get('port')}",
         "Behind proxy / secure cookies": f"{config.get('behind_proxy')} / {config.get('secure_cookies')}",
         "Server": f"{platform.node()} - {platform.system()} {platform.release()}",
+        "Version": f"MGM Network Vault {__version__}",
         "Python": sys.version.split()[0],
     }
     counts = {"Devices": Device.query.count(), "Backups": Backup.query.count(), "Backup data": fmt_size(usage),
@@ -808,7 +810,7 @@ def migrate_restart():
 def migrate_package():
     log_event("Application package downloaded", "system")
     return Response(portable.app_package(config.APP_ROOT), mimetype="application/zip", headers={
-        "Content-Disposition": f"attachment; filename=network-vault-app_{now():%Y%m%d}.zip"})
+        "Content-Disposition": f"attachment; filename=network-vault-app_v{__version__}.zip"})
 
 
 @bp.route("/migrate/config-from-export")

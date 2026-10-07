@@ -34,6 +34,8 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
+from .version import __version__
+
 FORMAT = 1
 MAGIC = b"NVAULTX1"
 CHUNK = 1024 * 1024
@@ -123,7 +125,7 @@ def export_archive(base_dir, out_path, passphrase, config_file=None):
 
         backup_files = [p for p in (base_dir / "backups").rglob("*") if p.is_file()]
         manifest = {
-            "format": FORMAT, "app": APP_NAME,
+            "format": FORMAT, "app": APP_NAME, "app_version": __version__,
             "created": datetime.now().isoformat(timespec="seconds"),
             "source_host": socket.gethostname(), "source_data_dir": str(base_dir),
             "counts": _counts(db_copy), "backup_files": len(backup_files),

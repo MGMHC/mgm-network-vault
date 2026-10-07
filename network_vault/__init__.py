@@ -8,6 +8,7 @@ from sqlalchemy import event
 from . import config
 from .models import User, db
 from .util import BASE_DIR, FLASK_SECRET, RESTORED, log_event
+from .version import __version__
 
 PUBLIC_ENDPOINTS = {"web.login", "web.logout", "web.devices_template", "static"}
 
@@ -88,6 +89,6 @@ def create_app():
     def inject():
         if "csrf" not in session:
             session["csrf"] = secrets.token_urlsafe(32)
-        return {"csrf_token": session["csrf"], "current_user": session.get("user")}
+        return {"csrf_token": session["csrf"], "current_user": session.get("user"), "app_version": __version__}
 
     return app
