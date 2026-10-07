@@ -42,7 +42,10 @@
 </div>
 
 {# ── Floor-wise device status ─────────────────────────────────────────────── #}
-<div class="section-label">Floor / Group Status</div>
+<div class="section-label" style="display: flex; justify-content: space-between; align-items: center;">
+  <span>Floor / Group Status</span>
+  <button class="btn sm" id="toggleAllFloorsBtn" onclick="toggleAllFloors(this)">Collapse All</button>
+</div>
 {% for floor_name, floor_devices in floors %}
 {% set f_up    = floor_devices | selectattr('status', 'eq', 'up') | list | length %}
 {% set f_down  = floor_devices | selectattr('status', 'eq', 'down') | list | length %}
@@ -197,6 +200,22 @@ function toggleFloor(btn) {
   const isOpen = !devices.classList.contains('collapsed');
   devices.classList.toggle('collapsed', isOpen);
   btn.classList.toggle('rotated', isOpen);
+}
+
+function toggleAllFloors(btn) {
+  const isCollapse = btn.textContent === 'Collapse All';
+  document.querySelectorAll('.floor-card').forEach(card => {
+    const devices = card.querySelector('.floor-devices');
+    const toggleBtn = card.querySelector('.floor-toggle');
+    if (isCollapse) {
+      devices.classList.add('collapsed');
+      toggleBtn.classList.add('rotated');
+    } else {
+      devices.classList.remove('collapsed');
+      toggleBtn.classList.remove('rotated');
+    }
+  });
+  btn.textContent = isCollapse ? 'Expand All' : 'Collapse All';
 }
 </script>
 {% endblock %}
