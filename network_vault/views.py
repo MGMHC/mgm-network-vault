@@ -9,7 +9,7 @@ from flask import (Blueprint, Response, abort, current_app, flash, jsonify, redi
                    request, send_file, session, url_for)
 from sqlalchemy import func, or_
 
-from . import config, engine, gitsync, portable, reach
+from . import config, engine, gitsync, portable, reach, updater
 from .diffing import side_by_side, stats, unified
 from .models import (DEFAULT_SETTINGS, MODELS, PLATFORMS, ROLES, USER_ROLES, Backup, Credential, Device, Job,
                      LogEntry, Schedule, User, db, get_setting, now, set_setting)
@@ -975,4 +975,23 @@ def settings():
         return redirect(url_for("web.settings"))
     usage = sum(p.stat().st_size for p in BACKUP_DIR.rglob("*") if p.is_file())
     return render_template("settings.html", s={k: get_setting(k) for k in DEFAULT_SETTINGS},
-                           backup_dir=BACKUP_DIR, usage=usage)
+                           backup_dir=BACKUP_DIR, usage=usage, is_git=updater.is_git_installation())
+
+
+@bp.route("/api/update/check", methods=["POST"])
+@require_admin
+def api_update_check():
+    """Check GitHub repository for software updates."""
+    status = updater.check_for_updates(force_fetch=True)
+    return jsonify(status)
+
+
+@bp.route("/api/update/apply", methods=["POST"])
+@require_admin
+def api_update_apply():
+    """Pull the latest software update from GitHub and restart the service."""
+    res = updater.apply_update()
+    if not res.get("ok"):
+        return jsonify(res), 500
+    return jsonify(res)
+

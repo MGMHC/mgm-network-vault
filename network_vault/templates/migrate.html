@@ -71,6 +71,7 @@
     </dl>
     {% if exported_config %}<p class="small">The server settings from the old machine are in <a href="{{ url_for('web.migrate_exported_config') }}">config.toml.from-export</a>. They aren't applied automatically; copy any values you need into <code>config.toml</code>.</p>{% endif %}
     {% if previous %}<p class="muted small">Data kept from earlier restores: {% for p in previous %}<code>{{ p }}</code>{{ ', ' if not loop.last }}{% endfor %}. Delete these folders from the data folder once you're satisfied.</p>{% endif %}
+    <div style="margin-top:14px"><a class="btn sm" href="{{ url_for('web.settings') }}#updateCard">{{ icon('refresh') }}Check for software updates</a></div>
   </div>
 </div>
 {% endblock %}

@@ -4,6 +4,14 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.2.0] - 2026-10-08
+
+### Added
+- **In-App Software Updates**: Added automated update checking and installation directly within the web UI (**Settings → Software Update**).
+  - Admin users can check the remote GitHub repository for new release tags and commits.
+  - One-click **Install update & restart**: pulls latest code (`git pull origin main`), upgrades dependencies, and triggers an automated service restart without needing manual CLI access on the server.
+  - Linked the sidebar version badge directly to the Software Update panel for instant status inspection.
+
 ## [1.1.1] - 2026-10-07
 
 ### Fixed

@@ -56,7 +56,7 @@ Pick **one** of these options.
 mkdir C:\Apps -Force; cd C:\Apps
 git clone https://github.com/MGMHC/mgm-network-vault.git network-vault
 cd network-vault
-git checkout v1.1.1        # or the latest release tag
+git checkout v1.2.0        # or the latest release tag
 ```
 The repository is private, so Git asks you to sign in to GitHub the first time. Use an account that has access to `MGMHC/mgm-network-vault`.
 
@@ -265,12 +265,16 @@ C:\Apps\network-vault\.venv\Scripts\python.exe C:\Apps\network-vault\manage.py e
 
 ## 8. Updating to a new version
 
+### Option A: From the Web UI (One-click update)
+As an admin, navigate to **Settings → Software Update** and click **Check for updates**. If an update is available, click **Install update & restart**. The app will pull the latest version, update dependencies, and restart automatically.
+
+### Option B: Via Command Line (PowerShell)
 1. Take an export: go to **Export & migrate → Download export**.
 2. Get the new version:
    ```powershell
    cd C:\Apps\network-vault
    git fetch --tags
-   git checkout v1.1.1          # the new release tag
+   git checkout v1.2.0          # the new release tag
    ```
    If you installed from the app package instead, extract the new package over the folder, keeping `config.toml`, `data` and `logs`.
 3. Re-run the installer. It updates dependencies, keeps config and data, and restarts the service.

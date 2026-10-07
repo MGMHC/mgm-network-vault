@@ -1,7 +1,37 @@
 {% extends 'base.html' %}
+{% from '_macros.html' import icon %}
 {% block title %}Settings{% endblock %}
 {% block content %}
 <div class="topbar"><div><h1>Settings</h1><div class="sub">Backups stored in <code>{{ backup_dir }}</code> · {{ usage|size }} on disk</div></div></div>
+
+<div class="card" id="updateCard" style="margin-bottom:18px">
+  <div class="card-head">
+    <div style="display:flex;align-items:center;gap:10px">
+      <h2 style="margin:0">Software Update</h2>
+      <span class="badge blue">v{{ app_version }}</span>
+    </div>
+    <span id="updateBadge" class="badge" style="display:none"></span>
+  </div>
+  <p class="muted" style="margin:12px 0">
+    Check GitHub for newer versions of MGM Network Vault and apply updates directly from the web interface.
+  </p>
+
+  <div id="updateResult" style="display:none;margin-bottom:14px;padding:12px 16px;border-radius:8px;background:var(--panel-2);border:1px solid var(--border)">
+    <div id="updateMessage" style="font-weight:600;margin-bottom:4px"></div>
+    <div id="updateDetails" class="small muted"></div>
+    <ul id="updateCommits" class="small mono" style="margin:8px 0 0;padding-left:18px;display:none"></ul>
+  </div>
+
+  <div class="actions">
+    <button type="button" class="btn" id="btnCheckUpdate" onclick="checkAppUpdate()">
+      {{ icon('refresh') }}<span id="btnCheckUpdateText">Check for updates</span>
+    </button>
+    <button type="button" class="btn primary" id="btnApplyUpdate" onclick="applyAppUpdate()" style="display:none">
+      {{ icon('download') }}<span id="btnApplyUpdateText">Install update &amp; restart</span>
+    </button>
+  </div>
+</div>
+
 <form class="card" method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <h2>Backup retention</h2>
@@ -29,4 +59,111 @@
   </div>
   <button class="btn primary">Save settings</button>
 </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function checkAppUpdate() {
+  const btn = document.getElementById('btnCheckUpdate');
+  const btnText = document.getElementById('btnCheckUpdateText');
+  const applyBtn = document.getElementById('btnApplyUpdate');
+  const resBox = document.getElementById('updateResult');
+  const msgEl = document.getElementById('updateMessage');
+  const detailsEl = document.getElementById('updateDetails');
+  const commitsEl = document.getElementById('updateCommits');
+  const badge = document.getElementById('updateBadge');
+
+  btn.disabled = true;
+  btnText.textContent = 'Checking GitHub…';
+  resBox.style.display = 'none';
+  applyBtn.style.display = 'none';
+
+  try {
+    const data = await api('/api/update/check', {});
+    resBox.style.display = 'block';
+    if (!data.ok) {
+      badge.style.display = 'inline-flex';
+      badge.className = 'badge bad';
+      badge.textContent = 'Check failed';
+      msgEl.textContent = 'Unable to check for updates';
+      detailsEl.textContent = data.message || data.error;
+      return;
+    }
+
+    if (!data.is_git) {
+      badge.style.display = 'inline-flex';
+      badge.className = 'badge';
+      badge.textContent = 'Standalone package';
+      msgEl.textContent = 'Standalone Installation';
+      detailsEl.textContent = 'This server was installed from a zip package rather than a Git repository. To update, download the latest package from GitHub.';
+      return;
+    }
+
+    if (data.update_available) {
+      badge.style.display = 'inline-flex';
+      badge.className = 'badge warn';
+      badge.textContent = 'Update available: ' + data.latest_tag;
+      msgEl.innerHTML = '🎉 A newer version is available: <b>' + escapeHtml(data.latest_tag) + '</b> (' + data.behind_count + ' new commit' + (data.behind_count === 1 ? '' : 's') + ')';
+      detailsEl.textContent = 'Click "Install update & restart" to pull the latest changes and automatically reload the service.';
+      
+      if (data.commits && data.commits.length > 0) {
+        commitsEl.innerHTML = data.commits.map(c => '<li>' + escapeHtml(c) + '</li>').join('');
+        commitsEl.style.display = 'block';
+      } else {
+        commitsEl.style.display = 'none';
+      }
+      applyBtn.style.display = 'inline-flex';
+    } else {
+      badge.style.display = 'inline-flex';
+      badge.className = 'badge ok';
+      badge.textContent = 'Up to date';
+      msgEl.textContent = 'MGM Network Vault is up to date!';
+      detailsEl.textContent = 'You are running the latest version (' + data.latest_tag + '). Checked at ' + (new Date()).toLocaleTimeString() + '.';
+      commitsEl.style.display = 'none';
+    }
+  } catch (err) {
+    resBox.style.display = 'block';
+    msgEl.textContent = 'Error checking for updates';
+    detailsEl.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+    btnText.textContent = 'Check for updates';
+  }
+}
+
+async function applyAppUpdate() {
+  if (!confirm('Install the update and restart MGM Network Vault now? Backups currently in progress will be stopped.')) return;
+  const applyBtn = document.getElementById('btnApplyUpdate');
+  const applyBtnText = document.getElementById('btnApplyUpdateText');
+  const btn = document.getElementById('btnCheckUpdate');
+  applyBtn.disabled = true;
+  btn.disabled = true;
+  applyBtnText.textContent = 'Updating…';
+
+  openModal('Updating MGM Network Vault', '<p class="muted">Pulling latest version from GitHub and restarting the service… Please wait.</p>');
+  try {
+    const res = await api('/api/update/apply', {});
+    openModal('Restarting…', '<p>' + escapeHtml(res.message) + '</p><p class="muted">This page will reload automatically in a few seconds.</p>');
+    setTimeout(() => {
+      let tries = 0;
+      const poll = setInterval(async () => {
+        tries++;
+        try {
+          const r = await fetch('/login', { cache: 'no-store' });
+          if (r.ok) { clearInterval(poll); location.reload(); }
+        } catch(e) {}
+        if (tries > 30) {
+          clearInterval(poll);
+          openModal('Notice', '<p>The app is taking longer than usual to restart. Please refresh the page manually.</p>');
+        }
+      }, 2000);
+    }, 2000);
+  } catch (err) {
+    openModal('Update failed', '<pre class="code">' + escapeHtml(err.message) + '</pre>');
+    applyBtn.disabled = false;
+    btn.disabled = false;
+    applyBtnText.textContent = 'Install update & restart';
+  }
+}
+</script>
 {% endblock %}

@@ -39,7 +39,7 @@
         Signed in as <b>{{ current_user }}</b>
         {% if current_user_obj %}<span class="role-badge role-{{ current_user_obj.role }}">{{ current_user_obj.role }}</span>{% endif %}
         · <a href="{{ url_for('web.logout') }}">Log out</a>
-        <div style="opacity:.6;margin-top:4px">v{{ app_version }}</div>
+        <div style="opacity:.6;margin-top:4px"><a href="{{ url_for('web.settings') }}#updateCard" style="color:inherit" title="Check for updates">v{{ app_version }}</a></div>
       </div>
     </div>
   </aside>
