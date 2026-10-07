@@ -4,6 +4,21 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.1.0] - 2026-10-07
+
+### Added
+- **Floorwise Dashboard & Visual Metrics**: Replaced flat device tables on the dashboard with Reachability and Backup Status donut charts, backed by collapsible Floor/Group device cards.
+- **Floor Card Controls**: Added "Expand All" / "Collapse All" toggle button for rapid overview of device states across all floors.
+- **Custom Floor Sort Order**: Floor cards naturally order descending from top floors (e.g. Floor 11) down to Ground Floor, followed by Utility / custom groups.
+- **Collapsible Sidebar**: Compact sidebar toggle for all menus, persisting navigation state via browser storage.
+- **Navigation Back Button**: Universal back button in the header bar with history fallback.
+- **Role-Based Access Control (RBAC)**: Added `admin`, `read-write`, and `read-only` user roles with permission enforcement across settings, user management, and device actions.
+- Automatic database schema migration and backfill ensuring existing accounts default safely to `admin` without lockout.
+
+### Fixed
+- Chart.js Reachability donut legend formatting and text alignment when expanding the dashboard layout.
+- Null-safe user role checks across authentication session decorators and model helpers.
+
 ## [1.0.1] - 2026-10-07
 
 ### Added

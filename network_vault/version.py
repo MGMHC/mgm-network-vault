@@ -1,2 +1,2 @@
 """Application version - bump this (Semantic Versioning: MAJOR.MINOR.PATCH) for every release."""
-__version__ = "1.0.1"
+__version__ = "1.1.0"
