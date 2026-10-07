@@ -213,7 +213,23 @@ def dashboard():
     floor_map = defaultdict(list)
     for d in devices:
         floor_map[d.group or "(No Group)"].append(d)
-    floors = sorted(floor_map.items(), key=lambda x: x[0])
+    import re
+    def _floor_sort_key(item):
+        name = item[0].strip()
+        # "Floor N" or "Floor-N" → descending by number (higher floors first)
+        m = re.match(r'floor[\s\-_]*(\d+)', name, re.IGNORECASE)
+        if m:
+            return (0, -int(m.group(1)), "")
+        nl = name.lower()
+        if nl in ("ground floor", "ground", "gf"):
+            return (1, 0, "")
+        if nl in ("utility", "utilities"):
+            return (2, 0, "")
+        if nl.startswith("("):          # e.g. "(No Group)"
+            return (4, 0, name.lower())
+        return (3, 0, name.lower())     # any other named group alphabetically
+
+    floors = sorted(floor_map.items(), key=_floor_sort_key)
 
     # --- Chart data: backups + changes per day over last 14 days ---
     chart_days = 14
