@@ -270,7 +270,7 @@ C:\Apps\network-vault\.venv\Scripts\python.exe C:\Apps\network-vault\manage.py e
    ```powershell
    cd C:\Apps\network-vault
    git fetch --tags
-   git checkout v1.1.0          # the new release tag
+   git checkout v1.1.1          # the new release tag
    ```
    If you installed from the app package instead, extract the new package over the folder, keeping `config.toml`, `data` and `logs`.
 3. Re-run the installer. It updates dependencies, keeps config and data, and restarts the service.
