@@ -24,6 +24,8 @@ def _add_missing_columns():
                 if col.name not in existing:
                     ddl = col.type.compile(dialect=db.engine.dialect)
                     conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {ddl}'))
+        # Backfill: any user with NULL role gets 'admin' (pre-existing accounts)
+        conn.execute(text("UPDATE \"user\" SET role = 'admin' WHERE role IS NULL OR role = ''"))
 
 
 def create_app():

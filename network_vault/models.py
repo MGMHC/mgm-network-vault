@@ -40,17 +40,17 @@ class User(db.Model):
 
     @property
     def is_admin(self):
-        return self.role == "admin"
+        return (self.role or "admin") == "admin"
 
     @property
     def can_write(self):
         """Can add/edit/delete devices, credentials, schedules, settings."""
-        return self.role in ("admin", "read-write")
+        return (self.role or "admin") in ("admin", "read-write")
 
     @property
     def can_backup(self):
         """Can trigger backups and reachability checks."""
-        return self.role in ("admin", "read-write")
+        return (self.role or "admin") in ("admin", "read-write")
 
 
 class Credential(db.Model):
