@@ -11,9 +11,97 @@ from . import gitsync
 from .models import Backup, Device, Job, db, get_int, get_setting, now
 from .util import BACKUP_DIR, decrypt, log_event, safe_name
 
+import paramiko
+from netmiko.cisco.cisco_s300 import CiscoS300SSH
+from netmiko.channel import SSHChannel
+from netmiko.exceptions import NetmikoAuthenticationException
+from netmiko.ssh_dispatcher import CLASS_MAPPER
+
+
+class CiscoC1300SSH(CiscoS300SSH):
+    """Cisco C1300 / CBS / SG switch driver with fallback for in-band SSH login.
+
+    On Cisco C1300 and Small Business switches, standard SSH password authentication
+    ('ip ssh password-auth') is disabled by factory default. In that case, standard
+    Paramiko auth_password fails with 'Bad authentication type; allowed types: []'.
+    This driver attempts standard SSH auth first; if that fails, it falls back to
+    transport auth_none followed by interactive in-band terminal login ('User Name:', 'Password:').
+    """
+
+    def establish_connection(self, width: int = 511, height: int = 1000) -> None:
+        try:
+            return super().establish_connection(width=width, height=height)
+        except NetmikoAuthenticationException:
+            return self._establish_inband_connection(width=width, height=height)
+
+    def _establish_inband_connection(self, width: int = 511, height: int = 1000) -> None:
+        import time
+        self.remote_conn_pre = self._build_ssh_client()
+        sock = (self.host, self.port)
+        t = paramiko.Transport(sock)
+        if self.disabled_algorithms:
+            t.disabled_algorithms = self.disabled_algorithms
+        t.start_client(timeout=self.conn_timeout)
+        try:
+            t.auth_none(self.username)
+        except Exception:
+            pass
+
+        if not t.is_authenticated():
+            raise NetmikoAuthenticationException(
+                f"Failed to authenticate to {self.host}:{self.port} (neither password nor in-band allowed)"
+            )
+
+        self.remote_conn = t.open_session()
+        self.remote_conn.get_pty(term="vt100", width=width, height=height)
+        self.remote_conn.invoke_shell()
+        self.remote_conn.settimeout(self.blocking_timeout)
+
+        buf = ""
+        start = time.time()
+        timeout = max(10, self.auth_timeout)
+        while time.time() - start < timeout:
+            if self.remote_conn.recv_ready():
+                chunk = self.remote_conn.recv(1024).decode(self.encoding, errors="ignore")
+                buf += chunk
+                if any(prompt in buf for prompt in ["User Name:", "User Name :", "login as:"]):
+                    break
+            time.sleep(0.1)
+
+        if any(prompt in buf for prompt in ["User Name:", "User Name :", "login as:"]):
+            self.remote_conn.send((self.username + "\r").encode(self.encoding))
+            buf = ""
+            start = time.time()
+            while time.time() - start < timeout:
+                if self.remote_conn.recv_ready():
+                    chunk = self.remote_conn.recv(1024).decode(self.encoding, errors="ignore")
+                    buf += chunk
+                    if "Password:" in buf or "Password :" in buf:
+                        break
+                time.sleep(0.1)
+
+        if "Password:" in buf or "Password :" in buf:
+            self.remote_conn.send((self.password + "\r").encode(self.encoding))
+            buf = ""
+            start = time.time()
+            while time.time() - start < timeout:
+                if self.remote_conn.recv_ready():
+                    chunk = self.remote_conn.recv(1024).decode(self.encoding, errors="ignore")
+                    buf += chunk
+                    if any(p in buf for p in [">", "#"]):
+                        break
+                time.sleep(0.1)
+
+        self.channel = SSHChannel(conn=self.remote_conn, encoding=self.encoding)
+        return None
+
+
+CLASS_MAPPER["cisco_s300"] = CiscoC1300SSH
+
 NETMIKO_TYPE = {
     "juniper_junos": "juniper_junos",
     "cisco_c1300": "cisco_s300",
+    "cisco_s300": "cisco_s300",
     "cisco_ios": "cisco_ios",
 }
 

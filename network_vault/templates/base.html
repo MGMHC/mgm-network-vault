@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf" content="{{ csrf_token }}">
   <title>{% block title %}MGM Network Vault{% endblock %} · MGM Network Vault</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v={{ app_version }}">
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
 </head>
 <body>

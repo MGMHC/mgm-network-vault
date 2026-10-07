@@ -4,6 +4,13 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.1.1] - 2026-10-07
+
+### Fixed
+- **Cisco Catalyst 1300 / CBS / SG SSH Authentication**: Added dual-mode Netmiko driver (`CiscoC1300SSH`) that automatically falls back to in-band interactive terminal authentication (`User Name:`, `Password:`) when switch firmware has transport-level `ip ssh password-auth` disabled by factory default.
+- **Sticky Sidebar on Page Scroll**: Fixed sidebar scrolling out of view on tall pages by removing conflicting `position: relative` and locking the sidebar to `position: sticky; top: 0; height: 100vh;` with independent navigation scrolling.
+- **Asset Cache Invalidation**: Added app version query parameter (`?v={{ app_version }}`) to stylesheet links to prevent stale browser CSS caches.
+
 ## [1.1.0] - 2026-10-07
 
 ### Added
