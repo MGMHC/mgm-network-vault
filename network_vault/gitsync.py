@@ -27,6 +27,7 @@ from .util import BASE_DIR, decrypt, encrypt, log_event, read_backup_file, safe_
 REPO_DIR = BASE_DIR / "git-repo"
 _lock = threading.RLock()
 _NO_WINDOW = 0x08000000 if os.name == "nt" else 0  # CREATE_NO_WINDOW
+_safe_dir_registered = False  # set to True once REPO_DIR is added to safe.directory
 
 GIT_DEFAULTS = {
     "git_enabled": "0",
@@ -75,7 +76,34 @@ def _scrub(text):
     return text
 
 
+def _ensure_safe_directory():
+    """Register REPO_DIR as a Git safe.directory (idempotent, once per process).
+
+    On Windows it is common for the git-repo directory to be owned by a different
+    account than the one running the service (e.g. SYSTEM vs a domain user).
+    Git 2.35.2+ refuses to operate on such directories unless they are explicitly
+    listed under safe.directory in the global config.  We add the entry
+    automatically so the operator never has to do this by hand.
+    """
+    global _safe_dir_registered
+    if _safe_dir_registered:
+        return
+    try:
+        path = REPO_DIR.as_posix()  # git expects forward-slash paths even on Windows
+        subprocess.run(
+            ["git", "config", "--global", "--add", "safe.directory", path],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            creationflags=_NO_WINDOW,
+        )
+        _safe_dir_registered = True
+    except Exception:  # noqa: BLE001 - best-effort; individual git calls will surface the real error
+        pass
+
+
 def git(*args, auth=False, check=True, date=None, timeout=180):
+    _ensure_safe_directory()
     env = os.environ.copy()
     env.update(GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never", LC_ALL="C")
     # config via environment keeps the token off the process command line
