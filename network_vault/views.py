@@ -1,6 +1,7 @@
 """HTTP routes."""
 import csv
 import io
+import re
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -184,6 +185,30 @@ def _site_filter(query, model=Device):
         else:
             return query.filter(model.site_id == -1)  # no sites assigned
     return query
+
+
+def _group_sort_key(name):
+    """Sort key for device groups: Level-11 -> Level-1 -> Ground -> Utility -> Distribution -> others -> (No Group)."""
+    if not name:
+        return (99, 0, "")
+    val = name.strip()
+    # Level-N, Level N, Floor-N, Floor N (descending order, higher level first)
+    m = re.match(r'^(?:level|floor)[\s\-_]*(\d+)$', val, re.IGNORECASE)
+    if m:
+        return (0, -int(m.group(1)), "")
+    
+    vl = val.lower()
+    if vl in ("ground", "ground floor", "gf"):
+        return (1, 0, "")
+    if vl in ("utility", "utilities"):
+        return (2, 0, "")
+    if vl in ("distribution", "dist", "distribution switch", "distribution switches"):
+        return (3, 0, "")
+    if vl in ("core", "core switch", "core switches"):
+        return (4, 0, "")
+    if val.startswith("("):
+        return (98, 0, vl)
+    return (10, 0, vl)
 
 
 @bp.route("/site/switch", methods=["POST"])
@@ -426,23 +451,7 @@ def dashboard():
     floor_map = defaultdict(list)
     for d in devices:
         floor_map[d.group or "(No Group)"].append(d)
-    import re
-    def _floor_sort_key(item):
-        name = item[0].strip()
-        # "Floor N" or "Floor-N" → descending by number (higher floors first)
-        m = re.match(r'floor[\s\-_]*(\d+)', name, re.IGNORECASE)
-        if m:
-            return (0, -int(m.group(1)), "")
-        nl = name.lower()
-        if nl in ("ground floor", "ground", "gf"):
-            return (1, 0, "")
-        if nl in ("utility", "utilities"):
-            return (2, 0, "")
-        if nl.startswith("("):          # e.g. "(No Group)"
-            return (4, 0, name.lower())
-        return (3, 0, name.lower())     # any other named group alphabetically
-
-    floors = sorted(floor_map.items(), key=_floor_sort_key)
+    floors = sorted(floor_map.items(), key=lambda item: _group_sort_key(item[0]))
 
     # --- Chart data: backups + changes per day over last 14 days ---
     chart_days = 14
@@ -501,8 +510,8 @@ def devices():
             q = q.filter(getattr(Device, k) == f[k])
     
     g_q = _site_filter(db.session.query(Device.group).distinct(), Device)
-    groups = [g for (g,) in g_q if g]
-    return render_template("devices.html", devices=q.order_by(Device.name).all(), f=f, groups=sorted(groups),
+    groups = sorted((g for (g,) in g_q if g), key=_group_sort_key)
+    return render_template("devices.html", devices=q.order_by(Device.name).all(), f=f, groups=groups,
                            PLATFORMS=PLATFORMS, ROLES=ROLES)
 
 
@@ -572,7 +581,7 @@ def device_edit(dev_id=None):
         d.site_id = _active_site_id() or (u.site_id if u else None)
     
     g_q = _site_filter(db.session.query(Device.group).distinct(), Device)
-    groups = sorted(g for (g,) in g_q if g)
+    groups = sorted((g for (g,) in g_q if g), key=_group_sort_key)
     
     cred_q = _site_filter(Credential.query, Credential)
     creds = cred_q.order_by(Credential.name).all()
@@ -634,7 +643,7 @@ def devices_export():
 def devices_template():
     rows = [CSV_FIELDS,
             ["CORE-EX3300-VC", "10.10.0.1", 22, "juniper_junos", "core", "Core", "Server room", 1, 1, 1, "juniper", ""],
-            ["F1-EX2300-VC", "10.10.1.10", 22, "juniper_junos", "access", "Floor-1", "IDF 1", 1, 0, 1, "juniper", ""],
+            ["L1-EX2300-VC", "10.10.1.10", 22, "juniper_junos", "access", "Level-1", "IDF 1", 1, 0, 1, "juniper", ""],
             ["OPD-EX2200", "10.10.2.10", 22, "juniper_junos", "access", "OPD", "IDF 2", 0, 1, 1, "juniper", ""],
             ["ADM-C1300", "10.10.3.10", 22, "cisco_c1300", "access", "Admin", "IDF 3", 0, 0, 1, "cisco", ""]]
     out = io.StringIO()
@@ -945,7 +954,7 @@ def schedules():
     
     g_q = _site_filter(db.session.query(Device.group).distinct(), Device)
     dev_q = _site_filter(Device.query, Device)
-    groups = sorted(g for (g,) in g_q if g)
+    groups = sorted((g for (g,) in g_q if g), key=_group_sort_key)
     edit = db.session.get(Schedule, int(request.args.get("edit", 0) or 0))
     return render_template("schedules.html", items=items, groups=groups, edit=edit,
                            devices=dev_q.order_by(Device.name).all(), ROLES=ROLES, PLATFORMS=PLATFORMS)

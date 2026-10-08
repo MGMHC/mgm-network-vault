@@ -53,6 +53,12 @@ def _add_missing_columns():
             conn.execute(text(f"UPDATE credential SET site_id = {primary_site.id} WHERE site_id IS NULL"))
             conn.execute(text(f"UPDATE schedule SET site_id = {primary_site.id} WHERE site_id IS NULL"))
 
+    # Migrate group names: 'Floor-X' or 'Floor X' -> 'Level-X'
+    with db.engine.begin() as conn:
+        for i in range(1, 30):
+            conn.execute(text(f"UPDATE device SET \"group\" = 'Level-{i}' WHERE \"group\" = 'Floor-{i}' OR \"group\" = 'Floor {i}'"))
+            conn.execute(text(f"UPDATE schedule SET target_value = 'Level-{i}' WHERE target = 'group' AND (target_value = 'Floor-{i}' OR target_value = 'Floor {i}')"))
+
 
 def create_app():
     app = Flask(__name__)

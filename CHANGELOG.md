@@ -4,6 +4,15 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.4.1] - 2026-10-09
+
+### Changed
+- **Device Grouping Standardized to Levels**:
+  - Migrated device group nomenclature from `Floor-X` to `Level-X` across database models, device inventory, and backup schedules.
+  - Standardized custom top-to-bottom natural sort order across all group dropdowns and dashboard sections:
+    `Level-11` → `Level-10` → `...` → `Level-1` → `Ground` → `Utility` → `Distribution`.
+  - Applied the natural sort order to the **Devices** filter dropdown, **Device Edit/Add** group datalist, **Schedules** target group selector, and the **Dashboard** Level/Group cards.
+
 ## [1.4.0] - 2026-10-08
 
 ### Added
