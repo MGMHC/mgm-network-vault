@@ -4,6 +4,12 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.4.2] - 2026-10-09
+
+### Fixed
+- **Device List Sorting**:
+  - Aligned the main **Devices** table list and CSV export to sort by device level/group from top to bottom (`Level-11` → `Level-1` → `Ground` → `Utility` → `Distribution`) followed by switch name, mirroring the group filter dropdown order.
+
 ## [1.4.1] - 2026-10-09
 
 ### Changed

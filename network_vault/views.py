@@ -511,7 +511,8 @@ def devices():
     
     g_q = _site_filter(db.session.query(Device.group).distinct(), Device)
     groups = sorted((g for (g,) in g_q if g), key=_group_sort_key)
-    return render_template("devices.html", devices=q.order_by(Device.name).all(), f=f, groups=groups,
+    dev_list = sorted(q.all(), key=lambda d: (_group_sort_key(d.group), d.name))
+    return render_template("devices.html", devices=dev_list, f=f, groups=groups,
                            PLATFORMS=PLATFORMS, ROLES=ROLES)
 
 
@@ -629,10 +630,11 @@ CSV_FIELDS = ["name", "host", "port", "platform", "role", "group", "location", "
 @bp.route("/devices/export.csv")
 def devices_export():
     q = _site_filter(Device.query, Device)
+    dev_list = sorted(q.all(), key=lambda d: (_group_sort_key(d.group), d.name))
     out = io.StringIO()
     w = csv.writer(out)
     w.writerow(CSV_FIELDS)
-    for d in q.order_by(Device.name):
+    for d in dev_list:
         w.writerow([d.name, d.host, d.port, d.platform, d.role, d.group, d.location, int(d.is_vc),
                     int(d.legacy_ssh), int(d.enabled), d.credential.name if d.credential else "", d.notes])
     return Response(BOM + out.getvalue(), content_type="text/csv; charset=utf-8",
