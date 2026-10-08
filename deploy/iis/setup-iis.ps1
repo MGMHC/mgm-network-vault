@@ -11,16 +11,16 @@
       powershell -ExecutionPolicy Bypass -File deploy\iis\setup-iis.ps1
 
   Optional parameters:
-      -HostName "networking.mgmhealthcare.in"
-      -CertThumbprint "BD2862498E3C9726DEF4B6830789EB52B4299F74"
+      -HostName "networkvault.mgmhealthcare.in"
+      -CertThumbprint "F8B88429298FB5FAF50C0F98DB4C7B292172D221"
       -PfxPath "C:\Certs\mgm-origin.pfx"
-      -PfxPassword "MGMvault2026!"
+      -PfxPassword "MGM@NetworkVault2026!"
 #>
 param(
-    [string]$HostName = "networking.mgmhealthcare.in",
-    [string]$CertThumbprint = "",
+    [string]$HostName = "networkvault.mgmhealthcare.in",
+    [string]$CertThumbprint = "F8B88429298FB5FAF50C0F98DB4C7B292172D221",
     [string]$PfxPath = "C:\Certs\mgm-origin.pfx",
-    [string]$PfxPassword = "MGMvault2026!",
+    [string]$PfxPassword = "MGM@NetworkVault2026!",
     [string]$SiteName = "MGM Network Vault",
     [string]$SitePath = "C:\inetpub\network-vault",
     [int]$AppPort = 8080,
