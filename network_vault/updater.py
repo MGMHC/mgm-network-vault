@@ -19,6 +19,11 @@ def is_git_installation() -> bool:
     return bool(git and (config.APP_ROOT / ".git").is_dir())
 
 
+def _git(args, **kwargs):
+    flags = kwargs.pop("creationflags", _NO_WINDOW)
+    return subprocess.run(["git", "-c", "safe.directory=*", *args], creationflags=flags, **kwargs)
+
+
 def check_for_updates(force_fetch: bool = True) -> dict:
     """Check if updates are available on GitHub remote.
 
@@ -42,34 +47,31 @@ def check_for_updates(force_fetch: bool = True) -> dict:
 
     try:
         if force_fetch:
-            subprocess.run(
-                ["git", "fetch", "origin", "--tags"],
+            _git(
+                ["fetch", "origin", "--tags"],
                 cwd=config.APP_ROOT,
                 capture_output=True,
                 text=True,
                 timeout=20,
-                creationflags=_NO_WINDOW,
             )
 
         # Count commits behind origin/main
-        behind_res = subprocess.run(
-            ["git", "rev-list", "--count", "HEAD..origin/main"],
+        behind_res = _git(
+            ["rev-list", "--count", "HEAD..origin/main"],
             cwd=config.APP_ROOT,
             capture_output=True,
             text=True,
             timeout=10,
-            creationflags=_NO_WINDOW,
         )
         behind = int(behind_res.stdout.strip() or "0") if behind_res.returncode == 0 else 0
 
         # Latest tag on remote
-        tags_res = subprocess.run(
-            ["git", "tag", "--sort=-v:refname"],
+        tags_res = _git(
+            ["tag", "--sort=-v:refname"],
             cwd=config.APP_ROOT,
             capture_output=True,
             text=True,
             timeout=10,
-            creationflags=_NO_WINDOW,
         )
         tags = [t.strip() for t in tags_res.stdout.splitlines() if t.strip()]
         latest_tag = tags[0] if tags else f"v{__version__}"
@@ -77,13 +79,12 @@ def check_for_updates(force_fetch: bool = True) -> dict:
         # Get summary of new commits if behind
         commits = []
         if behind > 0:
-            log_res = subprocess.run(
-                ["git", "log", "-n", "10", "--format=%h - %s (%cd)", "--date=short", "HEAD..origin/main"],
+            log_res = _git(
+                ["log", "-n", "10", "--format=%h - %s (%cd)", "--date=short", "HEAD..origin/main"],
                 cwd=config.APP_ROOT,
                 capture_output=True,
                 text=True,
                 timeout=10,
-                creationflags=_NO_WINDOW,
             )
             if log_res.returncode == 0 and log_res.stdout.strip():
                 commits = [l.strip() for l in log_res.stdout.splitlines() if l.strip()]
@@ -126,34 +127,31 @@ def apply_update() -> dict:
 
     try:
         # 1. Fetch latest commits and tags
-        subprocess.run(
-            ["git", "fetch", "origin", "--tags"],
+        _git(
+            ["fetch", "origin", "--tags"],
             cwd=config.APP_ROOT,
             capture_output=True,
             text=True,
             timeout=30,
             check=True,
-            creationflags=_NO_WINDOW,
         )
 
         # 2. Checkout main branch and pull changes
-        subprocess.run(
-            ["git", "checkout", "main"],
+        _git(
+            ["checkout", "main"],
             cwd=config.APP_ROOT,
             capture_output=True,
             text=True,
             timeout=15,
             check=True,
-            creationflags=_NO_WINDOW,
         )
-        pull_res = subprocess.run(
-            ["git", "pull", "--ff-only", "origin", "main"],
+        pull_res = _git(
+            ["pull", "--ff-only", "origin", "main"],
             cwd=config.APP_ROOT,
             capture_output=True,
             text=True,
             timeout=30,
             check=True,
-            creationflags=_NO_WINDOW,
         )
 
         # 3. Check/update dependencies if requirements exist

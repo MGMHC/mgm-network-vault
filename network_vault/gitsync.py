@@ -82,24 +82,26 @@ def _ensure_safe_directory():
     On Windows it is common for the git-repo directory to be owned by a different
     account than the one running the service (e.g. SYSTEM vs a domain user).
     Git 2.35.2+ refuses to operate on such directories unless they are explicitly
-    listed under safe.directory in the global config.  We add the entry
-    automatically so the operator never has to do this by hand.
+    listed under safe.directory in the system or global config. We attempt both
+    --system (works when running under LocalSystem / admin service) and --global
+    (works when running under an interactive user profile).
     """
     global _safe_dir_registered
     if _safe_dir_registered:
         return
-    try:
-        path = REPO_DIR.as_posix()  # git expects forward-slash paths even on Windows
-        subprocess.run(
-            ["git", "config", "--global", "--add", "safe.directory", path],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            creationflags=_NO_WINDOW,
-        )
-        _safe_dir_registered = True
-    except Exception:  # noqa: BLE001 - best-effort; individual git calls will surface the real error
-        pass
+    path = REPO_DIR.as_posix()  # git expects forward-slash paths even on Windows
+    for scope in ("--system", "--global"):
+        try:
+            subprocess.run(
+                ["git", "config", scope, "--add", "safe.directory", path],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                creationflags=_NO_WINDOW,
+            )
+        except Exception:
+            pass
+    _safe_dir_registered = True
 
 
 def git(*args, auth=False, check=True, date=None, timeout=180):
@@ -108,6 +110,7 @@ def git(*args, auth=False, check=True, date=None, timeout=180):
     env.update(GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never", LC_ALL="C")
     # config via environment keeps the token off the process command line
     cfg = [("credential.helper", ""), ("core.autocrlf", "false"), ("core.quotepath", "off"),
+           ("safe.directory", "*"),
            ("user.name", setting("git_author_name")), ("user.email", setting("git_author_email"))]
     if auth and _auth_header():
         cfg.append(("http.extraHeader", _auth_header()))
@@ -116,8 +119,9 @@ def git(*args, auth=False, check=True, date=None, timeout=180):
         env[f"GIT_CONFIG_KEY_{i}"], env[f"GIT_CONFIG_VALUE_{i}"] = k, v
     if date:
         env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = date.strftime("%Y-%m-%dT%H:%M:%S")
+    cmd = ["git", "-c", "safe.directory=*", *args]
     try:
-        r = subprocess.run(["git", *args], cwd=REPO_DIR, env=env, capture_output=True, text=True,
+        r = subprocess.run(cmd, cwd=REPO_DIR, env=env, capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=timeout, creationflags=_NO_WINDOW)
     except FileNotFoundError as e:
         raise GitError("Git is not installed on this server (https://git-scm.com/download/win)") from e
