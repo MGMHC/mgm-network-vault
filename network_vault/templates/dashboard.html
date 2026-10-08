@@ -3,7 +3,16 @@
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 <div class="topbar">
-  <div><h1>Dashboard</h1><div class="sub">Network switch backup &amp; reachability overview</div></div>
+  <div>
+    <h1>Dashboard</h1>
+    <div class="sub">
+      {% if active_site %}
+      <span class="badge blue" style="font-size:11px;font-weight:700">{{ active_site.code }}</span> {{ active_site.name }} · Backup &amp; reachability overview
+      {% else %}
+      <span class="badge blue" style="font-size:11px;font-weight:700">All Sites</span> Group overview across all locations
+      {% endif %}
+    </div>
+  </div>
   <div class="actions">
     {% if current_user_obj and current_user_obj.can_backup %}
     <button class="btn" onclick="runCheck('all', this)">{{ icon('pulse') }}Check all reachability</button>

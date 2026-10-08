@@ -4,6 +4,18 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.3.0] - 2026-10-08
+
+### Added
+- **Multi-Site Architecture**: Support for multiple hospital networks and campus locations:
+  - Default pre-configured sites: **MGMHC** (Main Hospital), **MGMCI** (Cancer Institute), **MGM-Malar** (Malar Hospital), and **MGM-Sevenhills** (Sevenhills Hospital).
+  - Switches, credential profiles, schedules, and backups are strictly partitioned per site.
+- **Hierarchical Role-Based Access Control (RBAC)**:
+  - **Group Administrator (`group-admin`)**: Full admin access across all sites, can switch between individual sites or view "All Sites (Group View)", manage sites, and assign users to sites.
+  - **Site Administrator (`site-admin`)**: Full admin rights restricted exclusively to their designated site. Can manage their site's switches, credentials, schedules, backups, and site users.
+- **Global Header Site Switcher**: Modern floating selector pill in the header allowing Group Administrators to seamlessly filter or view all sites in real-time.
+- **Sites Management View (`/sites`)**: Dedicated administration panel in the sidebar for Group Administrators to add, update, and manage network sites.
+
 ## [1.2.1] - 2026-10-08
 
 ### Added

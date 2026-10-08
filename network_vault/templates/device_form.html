@@ -25,6 +25,17 @@
     <div class="field"><label>Group</label><input type="text" name="group" value="{{ d.group or '' }}" list="groups" placeholder="e.g. Block-A">
       <datalist id="groups">{% for g in groups %}<option>{{ g }}</option>{% endfor %}</datalist></div>
     <div class="field"><label>Location</label><input type="text" name="location" value="{{ d.location or '' }}" placeholder="e.g. IDF 2nd floor"></div>
+    <div class="field"><label>Site *</label>
+      {% if current_user_obj and current_user_obj.is_group_admin %}
+      <select name="site_id" required>
+        {% for s in sites %}
+        <option value="{{ s.id }}" {{ 'selected' if (d.site_id == s.id or (not d.site_id and current_site_id == s.id)) }}>{{ s.code }} ({{ s.name }})</option>
+        {% endfor %}
+      </select>
+      {% else %}
+      <input type="text" value="{{ d.site.code if d.site else (active_site.code if active_site else '') }}" disabled>
+      {% endif %}
+    </div>
     <div class="field"><label>Credential profile</label>
       <select name="credential_id"><option value="">— none —</option>{% for c in creds %}<option value="{{ c.id }}" {{ 'selected' if d.credential_id == c.id }}>{{ c.name }} ({{ c.username }})</option>{% endfor %}</select>
       <div class="help"><a href="{{ url_for('web.credentials') }}">Manage credential profiles</a></div></div>

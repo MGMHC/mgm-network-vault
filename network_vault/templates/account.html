@@ -21,6 +21,7 @@
         <tr>
           <th>Username</th>
           <th>Role</th>
+          <th>Site</th>
           <th></th>
         </tr>
       </thead>
@@ -34,17 +35,35 @@
         <td>
           <span class="role-badge role-{{ u.role }}">{{ u.role }}</span>
         </td>
+        <td>
+          {% if u.role in ('group-admin', 'admin') %}
+          <span class="badge blue">All Sites</span>
+          {% else %}
+          <span class="badge">{{ u.site.code if u.site else 'None' }}</span>
+          {% endif %}
+        </td>
         <td class="num" style="white-space:nowrap">
           {% if me.is_admin and u.username != me.username %}
           <form method="post" class="inline" style="display:inline-flex;gap:6px;align-items:center;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="action" value="setrole">
             <input type="hidden" name="id" value="{{ u.id }}">
-            <select name="role" class="role-select" onchange="this.form.submit()">
+            <select name="role" class="role-select">
               {% for r in USER_ROLES %}
+              {% if me.is_group_admin or r != 'group-admin' %}
               <option value="{{ r }}" {% if u.role == r %}selected{% endif %}>{{ r }}</option>
+              {% endif %}
               {% endfor %}
             </select>
+            {% if me.is_group_admin %}
+            <select name="site_id" class="role-select" style="min-width:90px">
+              <option value="">— site —</option>
+              {% for s in sites %}
+              <option value="{{ s.id }}" {% if u.site_id == s.id %}selected{% endif %}>{{ s.code }}</option>
+              {% endfor %}
+            </select>
+            {% endif %}
+            <button class="btn sm">Save</button>
           </form>
           <form method="post" class="inline" data-confirm="Delete user {{ u.username }}?">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="deluser"><input type="hidden" name="id" value="{{ u.id }}"><button class="btn sm danger">Delete</button>
@@ -65,12 +84,27 @@
         <div class="field"><label>Temporary password</label><input type="password" name="password" required minlength="8" autocomplete="new-password"></div>
         <div class="field"><label>Role</label>
           <select name="role">
-            {% for r in USER_ROLES %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+            {% for r in USER_ROLES %}
+            {% if me.is_group_admin or r != 'group-admin' %}
+            <option value="{{ r }}" {% if r == 'site-admin' %}selected{% endif %}>{{ r }}</option>
+            {% endif %}
+            {% endfor %}
           </select>
-          <div class="help">
-            <b>admin</b>: full access · <b>read-write</b>: can run backups, no user/settings management · <b>read-only</b>: view only
-          </div>
         </div>
+        {% if me.is_group_admin %}
+        <div class="field"><label>Assigned Site</label>
+          <select name="site_id">
+            <option value="">None / All Sites (Group Admins)</option>
+            {% for s in sites %}
+            <option value="{{ s.id }}" {% if current_site_id == s.id %}selected{% endif %}>{{ s.code }} · {{ s.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="help">Leave empty for Group Administrators. Required for Site Administrators.</div>
+        </div>
+        {% endif %}
+      </div>
+      <div class="help" style="margin-bottom:12px">
+        <b>group-admin</b>: Full admin across all sites · <b>site-admin</b>: Full admin limited to assigned site · <b>read-write</b>: Run backups / edits on assigned site · <b>read-only</b>: View only
       </div>
       <button class="btn primary">Add user</button>
     </form>

@@ -455,14 +455,89 @@ pre.code { background: var(--panel-2); border: 1px solid var(--border); border-r
 .dc-meta { display: flex; gap: 4px; flex-wrap: wrap; }
 .dc-backup { font-size: 11.5px; display: flex; align-items: center; gap: 5px; margin-top: 2px; }
 
+/* ── Header bar & Site Switcher ───────────────────────────────────────── */
+.header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.header-left .back-btn {
+  margin-bottom: 0;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+.site-switcher-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  box-shadow: 0 1px 3px rgba(37,54,108,.05);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.site-switcher-pill:hover {
+  border-color: var(--mgm-gold);
+  box-shadow: 0 2px 8px rgba(37,54,108,.1);
+}
+.site-switcher-pill .s-icon {
+  display: flex;
+  align-items: center;
+  color: var(--mgm-gold);
+}
+.site-switcher-pill .s-icon svg {
+  width: 15px;
+  height: 15px;
+}
+.site-switch-form {
+  margin: 0;
+  display: inline-flex;
+}
+.site-select {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+  outline: none;
+}
+.site-select option {
+  background: var(--panel);
+  color: var(--text);
+}
+.site-badge-single {
+  font-size: 12.5px;
+  color: var(--text);
+}
+.site-badge-single b {
+  color: var(--mgm-blue);
+}
+
 /* ── Role badges ─────────────────────────────────────────────────────────── */
 .role-badge {
-  display: inline-block; padding: 1px 7px; border-radius: 99px; font-size: 10px;
+  display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 10px;
   font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
 }
-.role-admin     { background: var(--accent-soft); color: var(--accent); }
-.role-read-write { background: var(--gold-soft); color: var(--gold); }
-.role-read-only { background: var(--info-soft); color: var(--muted); }
+.role-group-admin { background: #E3F2FD; color: #1565C0; border: 1px solid rgba(21,101,192,.2); }
+.role-site-admin  { background: var(--accent-soft); color: var(--accent); border: 1px solid rgba(37,54,108,.2); }
+.role-admin       { background: #E3F2FD; color: #1565C0; }
+.role-read-write  { background: var(--gold-soft); color: var(--gold); }
+.role-read-only   { background: var(--info-soft); color: var(--muted); }
 
 .role-select { width: auto; min-width: 110px; padding: 4px 7px; font-size: 12px; }
 

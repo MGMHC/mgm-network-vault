@@ -25,6 +25,7 @@
         <button class="btn sm" style="margin-left:6px" onclick="runDetect([{{ d.id }}], this)">Detect</button></dd>
       <dt>Software</dt><dd>{{ d.sw_version or '—' }}</dd>
       <dt>Serial / VC ID</dt><dd class="mono">{{ d.serial or '—' }}</dd>
+      <dt>Site</dt><dd><b>{{ d.site.code if d.site else '—' }}</b> <span class="muted">({{ d.site.name if d.site else 'Unassigned' }})</span></dd>
       <dt>Group / location</dt><dd>{{ d.group or '—' }} · {{ d.location or '—' }}</dd>
       <dt>Credential</dt><dd>{{ d.credential.name if d.credential else '⚠ none assigned' }}</dd>
       <dt>Reachability</dt><dd>{{ status_badge(d.status) }} {{ '%.1f ms'|format(d.ping_ms) if d.ping_ms is not none }} <span class="muted small">checked {{ d.last_checked|ago }} · state since {{ d.status_since|dt }}</span></dd>

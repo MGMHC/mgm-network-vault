@@ -6,10 +6,11 @@
 
 <div class="card flush">
   <div class="table-wrap"><table>
-    <thead><tr><th>Name</th><th>When</th><th>Targets</th><th>Next run</th><th>Last run</th><th>Status</th><th></th></tr></thead>
+    <thead><tr>{% if current_site_id == 'all' %}<th>Site</th>{% endif %}<th>Name</th><th>When</th><th>Targets</th><th>Next run</th><th>Last run</th><th>Status</th><th></th></tr></thead>
     <tbody>
     {% for s, nr, n in items %}
       <tr>
+        {% if current_site_id == 'all' %}<td><span class="badge blue" style="font-size:10px">{{ s.site.code if s.site else '—' }}</span></td>{% endif %}
         <td><b>{{ s.name }}</b></td>
         <td>{% if s.frequency == 'hourly' %}Every hour at :{{ s.time.split(':')[1] }}
             {% elif s.frequency == 'daily' %}Daily at {{ s.time }}
@@ -27,7 +28,7 @@
           <form method="post" class="inline" action="{{ url_for('web.schedule_action', sid=s.id, action='delete') }}" data-confirm="Delete schedule {{ s.name }}?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn sm danger">Delete</button></form>
         </td>
       </tr>
-    {% else %}<tr><td colspan="7" class="empty">No schedules yet. A common setup: <b>daily 02:00 – all devices</b>, plus <b>hourly – core</b>.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="8" class="empty">No schedules yet. A common setup: <b>daily 02:00 – all devices</b>, plus <b>hourly – core</b>.</td></tr>{% endfor %}
     </tbody>
   </table></div>
 </div>

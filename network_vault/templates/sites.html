@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Sites{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1>Sites Management</h1>
+    <div class="sub">Configure independent hospital networks and sites across the MGM group</div>
+  </div>
+</div>
+
+<div class="grid g3">
+  <div class="card flush" style="grid-column: span 2">
+    <div class="card-head">
+      <h2>All Sites ({{ sites|length }})</h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Site Name</th>
+            <th>Description</th>
+            <th class="num">Switches</th>
+            <th class="num">Credentials</th>
+            <th class="num">Schedules</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in sites %}
+          <tr>
+            <td>
+              <span class="badge blue" style="font-size:12px;font-weight:700">{{ s.code }}</span>
+            </td>
+            <td><b>{{ s.name }}</b></td>
+            <td class="muted small">{{ s.description or '—' }}</td>
+            <td class="num">{{ stats[s.id].devices if s.id in stats else 0 }}</td>
+            <td class="num">{{ stats[s.id].creds if s.id in stats else 0 }}</td>
+            <td class="num">{{ stats[s.id].schedules if s.id in stats else 0 }}</td>
+            <td class="num" style="white-space:nowrap">
+              <a class="btn sm" href="{{ url_for('web.sites', edit=s.id) }}">Edit</a>
+              {% if (stats[s.id].devices if s.id in stats else 0) == 0 %}
+              <form method="post" class="inline" data-confirm="Delete site {{ s.code }}?">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="id" value="{{ s.id }}">
+                <button class="btn sm danger">Delete</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>{{ 'Edit Site' if edit else 'Add New Site' }}</h2>
+    <form method="post" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="action" value="save">
+      {% if edit %}
+      <input type="hidden" name="id" value="{{ edit.id }}">
+      {% endif %}
+      <div class="field">
+        <label>Site Code *</label>
+        <input type="text" name="code" value="{{ edit.code if edit else '' }}" required placeholder="e.g. MGM-Malar" style="text-transform:uppercase">
+        <div class="help">Short unique identifier (e.g. MGMHC, MGMCI)</div>
+      </div>
+      <div class="field">
+        <label>Site Display Name *</label>
+        <input type="text" name="name" value="{{ edit.name if edit else '' }}" required placeholder="e.g. MGM Malar Hospital">
+      </div>
+      <div class="field">
+        <label>Description</label>
+        <input type="text" name="description" value="{{ edit.description if edit else '' }}" placeholder="Location / facility details">
+      </div>
+      <div class="actions" style="margin-top:14px">
+        <button class="btn primary">{{ 'Update Site' if edit else 'Create Site' }}</button>
+        {% if edit %}
+        <a class="btn" href="{{ url_for('web.sites') }}">Cancel</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

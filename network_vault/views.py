@@ -12,7 +12,7 @@ from sqlalchemy import func, or_
 from . import config, engine, gitsync, portable, reach, updater
 from .diffing import side_by_side, stats, unified
 from .models import (DEFAULT_SETTINGS, MODELS, PLATFORMS, ROLES, USER_ROLES, Backup, Credential, Device, Job,
-                     LogEntry, Schedule, User, db, get_setting, now, set_setting)
+                     LogEntry, Schedule, Site, User, db, get_setting, now, set_setting)
 from .scheduler import make_trigger, next_run, resolve_targets, run_schedule, sync_schedules
 from .util import BACKUP_DIR, BASE_DIR, encrypt, log_event, read_backup_file, safe_name
 from .version import __version__
@@ -25,6 +25,22 @@ def _current_user():
     """Return the current User ORM object (or None)."""
     uname = session.get("user")
     return User.query.filter_by(username=uname).first() if uname else None
+
+
+def _active_site_id():
+    """Return the active site_id filter, or None if viewing all sites (group view)."""
+    u = _current_user()
+    if not u:
+        return None
+    if not u.is_group_admin and u.site_id:
+        return u.site_id
+    sid = session.get("active_site_id")
+    if sid == "all" or sid is None:
+        return None
+    try:
+        return int(sid)
+    except (ValueError, TypeError):
+        return None
 
 
 def require_write(f):
@@ -40,13 +56,25 @@ def require_write(f):
 
 
 def require_admin(f):
-    """Decorator: 403 unless user is admin."""
+    """Decorator: 403 unless user is site-admin or group-admin."""
     from functools import wraps
     @wraps(f)
     def wrapper(*a, **kw):
         u = _current_user()
         if u and not u.is_admin:
             abort(403, "Admin access required.")
+        return f(*a, **kw)
+    return wrapper
+
+
+def require_group_admin(f):
+    """Decorator: 403 unless user is Group Administrator."""
+    from functools import wraps
+    @wraps(f)
+    def wrapper(*a, **kw):
+        u = _current_user()
+        if u and not u.is_group_admin:
+            abort(403, "Group Administrator access required.")
         return f(*a, **kw)
     return wrapper
 
@@ -127,6 +155,81 @@ def logout():
     return redirect(url_for("web.login"))
 
 
+@bp.route("/site/switch", methods=["POST"])
+def site_switch():
+    sid = request.form.get("site_id", "all")
+    u = _current_user()
+    if u and not u.is_group_admin:
+        # Non-group-admin users are bound to their assigned site
+        session["active_site_id"] = u.site_id or "all"
+    else:
+        if sid == "all" or not sid:
+            session["active_site_id"] = "all"
+        else:
+            try:
+                s = db.session.get(Site, int(sid))
+                session["active_site_id"] = s.id if s else "all"
+            except (ValueError, TypeError):
+                session["active_site_id"] = "all"
+    nxt = request.referrer or url_for("web.dashboard")
+    return redirect(nxt)
+
+
+# --------------------------------------------------------------------------- sites management (Group Admin)
+
+@bp.route("/sites", methods=["GET", "POST"])
+@require_group_admin
+def sites():
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "save":
+            sid = request.form.get("id")
+            s = db.session.get(Site, int(sid)) if sid else Site()
+            code = request.form.get("code", "").strip().upper()
+            name = request.form.get("name", "").strip()
+            desc = request.form.get("description", "").strip()
+            clash = Site.query.filter(Site.code == code, Site.id != (s.id or 0)).first()
+            if not code or not name:
+                flash("Site code and site name are required", "error")
+            elif clash:
+                flash(f"A site with code '{code}' already exists", "error")
+            else:
+                s.code = code
+                s.name = name
+                s.description = desc
+                if not sid:
+                    db.session.add(s)
+                db.session.commit()
+                log_event(f"Site '{s.code}' ({s.name}) saved", "system")
+                flash(f"Site '{s.code}' saved", "ok")
+                return redirect(url_for("web.sites"))
+        elif action == "delete":
+            sid = request.form.get("id")
+            s = db.session.get(Site, int(sid)) if sid else None
+            if s:
+                dev_count = s.devices.count()
+                if dev_count > 0:
+                    flash(f"Cannot delete site '{s.code}' because it has {dev_count} device(s). Reassign or delete them first.", "error")
+                else:
+                    code = s.code
+                    db.session.delete(s)
+                    db.session.commit()
+                    log_event(f"Site '{code}' deleted", "system", "WARN")
+                    flash(f"Site '{code}' deleted", "ok")
+            return redirect(url_for("web.sites"))
+    edit_site = db.session.get(Site, int(request.args.get("edit", 0) or 0))
+    all_sites_list = Site.query.order_by(Site.code).all()
+    # Compute counts per site
+    site_stats = {}
+    for s in all_sites_list:
+        site_stats[s.id] = {
+            "devices": s.devices.count(),
+            "creds": s.credentials.count(),
+            "schedules": s.schedules.count(),
+        }
+    return render_template("sites.html", sites=all_sites_list, edit=edit_site, stats=site_stats)
+
+
 @bp.route("/account", methods=["GET", "POST"])
 def account():
     me = User.query.filter_by(username=session["user"]).first_or_404()
@@ -153,6 +256,13 @@ def account():
             name = request.form.get("username", "").strip()
             pw = request.form.get("password", "")
             role = request.form.get("role", "read-write")
+            site_id_val = request.form.get("site_id")
+            site_id = int(site_id_val) if site_id_val and site_id_val.isdigit() else None
+            if not me.is_group_admin:
+                # Site admins can only create users within their own site
+                site_id = me.site_id
+                if role == "group-admin":
+                    role = "site-admin"
             if role not in USER_ROLES:
                 role = "read-write"
             if not name or len(pw) < 8:
@@ -160,7 +270,7 @@ def account():
             elif User.query.filter_by(username=name).first():
                 flash("User already exists", "error")
             else:
-                u = User(username=name, must_change=True, role=role)
+                u = User(username=name, must_change=True, role=role, site_id=site_id)
                 u.set_password(pw)
                 db.session.add(u)
                 db.session.commit()
@@ -171,31 +281,53 @@ def account():
                 abort(403, "Admin access required.")
             u = db.session.get(User, int(request.form.get("id", 0)))
             new_role = request.form.get("role", "read-write")
+            site_id_val = request.form.get("site_id")
+            site_id = int(site_id_val) if site_id_val and site_id_val.isdigit() else None
             if u and u.username != me.username and new_role in USER_ROLES:
+                if not me.is_group_admin and (u.site_id != me.site_id or new_role == "group-admin"):
+                    abort(403, "Cannot modify users outside your assigned site.")
                 u.role = new_role
+                if me.is_group_admin:
+                    u.site_id = site_id if new_role != "group-admin" else None
                 db.session.commit()
-                log_event(f"User '{u.username}' role changed to '{new_role}'", "auth")
-                flash(f"Role updated for {u.username}", "ok")
+                log_event(f"User '{u.username}' updated (role='{new_role}')", "auth")
+                flash(f"User updated for {u.username}", "ok")
         elif action == "deluser":
             if not me.is_admin:
                 abort(403, "Admin access required.")
             u = db.session.get(User, int(request.form.get("id", 0)))
             if u and u.username != me.username:
+                if not me.is_group_admin and u.site_id != me.site_id:
+                    abort(403, "Cannot delete users outside your assigned site.")
                 db.session.delete(u)
                 db.session.commit()
                 log_event(f"User '{u.username}' deleted", "auth")
                 flash("User deleted", "ok")
         return redirect(url_for("web.account"))
-    return render_template("account.html", users=User.query.order_by(User.username).all(), me=me,
-                           USER_ROLES=USER_ROLES)
+    
+    users_q = User.query
+    if not me.is_group_admin and me.site_id:
+        users_q = users_q.filter(User.site_id == me.site_id)
+    return render_template("account.html", users=users_q.order_by(User.username).all(), me=me,
+                           USER_ROLES=USER_ROLES, sites=Site.query.order_by(Site.code).all())
 
 
 # --------------------------------------------------------------------------- dashboard
 
 @bp.route("/")
 def dashboard():
-    devices = Device.query.order_by(Device.role.desc(), Device.group, Device.name).all()
+    site_id = _active_site_id()
+    q_dev = Device.query
+    if site_id:
+        q_dev = q_dev.filter(Device.site_id == site_id)
+    devices = q_dev.order_by(Device.role.desc(), Device.group, Device.name).all()
+    dev_ids = [d.id for d in devices]
+
     since = now() - timedelta(hours=24)
+    q_b_since = Backup.query.filter(Backup.created_at >= since)
+    if site_id:
+        q_b_since = q_b_since.join(Device).filter(Device.site_id == site_id)
+
     counts = {
         "total": len(devices),
         "up": sum(d.status == "up" for d in devices),
@@ -204,8 +336,8 @@ def dashboard():
         "vc_degraded": sum(d.vc_degraded for d in devices),
         "backup_failed": sum(d.last_backup_status == "failed" for d in devices if d.enabled),
         "stale": sum(1 for d in devices if d.enabled and (not d.last_backup_at or d.last_backup_at < now() - timedelta(days=7))),
-        "changed_24h": Backup.query.filter(Backup.created_at >= since, Backup.changed.is_(True)).count(),
-        "backups_24h": Backup.query.filter(Backup.created_at >= since).count(),
+        "changed_24h": q_b_since.filter(Backup.changed.is_(True)).count(),
+        "backups_24h": q_b_since.count(),
     }
 
     # --- Floor-wise grouping (by device.group) ---
@@ -240,8 +372,11 @@ def dashboard():
         day_start = (now() - timedelta(days=i)).replace(hour=0, minute=0, second=0)
         day_end   = (now() - timedelta(days=i)).replace(hour=23, minute=59, second=59)
         day_labels.append(day_start.strftime("%d %b"))
-        daily_backups.append(Backup.query.filter(Backup.created_at >= day_start, Backup.created_at <= day_end).count())
-        daily_changes.append(Backup.query.filter(Backup.created_at >= day_start, Backup.created_at <= day_end, Backup.changed.is_(True)).count())
+        q_day = Backup.query.filter(Backup.created_at >= day_start, Backup.created_at <= day_end)
+        if site_id:
+            q_day = q_day.join(Device).filter(Device.site_id == site_id)
+        daily_backups.append(q_day.count())
+        daily_changes.append(q_day.filter(Backup.changed.is_(True)).count())
 
     # --- Reachability chart data ---
     reach_data = {
@@ -251,10 +386,22 @@ def dashboard():
         "unknown": counts["total"] - counts["up"] - counts["sshdown"] - counts["down"],
     }
 
-    recent_changes = (Backup.query.filter(Backup.changed.is_(True)).order_by(Backup.created_at.desc()).limit(8).all())
-    logs = LogEntry.query.order_by(LogEntry.id.desc()).limit(12).all()
-    schedules = [(s, next_run(s.id)) for s in Schedule.query.filter_by(enabled=True).all()]
+    q_recent = Backup.query.filter(Backup.changed.is_(True))
+    if site_id:
+        q_recent = q_recent.join(Device).filter(Device.site_id == site_id)
+    recent_changes = q_recent.order_by(Backup.created_at.desc()).limit(8).all()
+
+    q_logs = LogEntry.query
+    if site_id:
+        q_logs = q_logs.filter(or_(LogEntry.device_id.in_(dev_ids), LogEntry.device_id.is_(None)))
+    logs = q_logs.order_by(LogEntry.id.desc()).limit(12).all()
+
+    q_sched = Schedule.query.filter_by(enabled=True)
+    if site_id:
+        q_sched = q_sched.filter(Schedule.site_id == site_id)
+    schedules = [(s, next_run(s.id)) for s in q_sched.all()]
     schedules.sort(key=lambda x: (x[1] is None, x[1].timestamp() if x[1] else 0))
+
     jobs = Job.query.order_by(Job.id.desc()).limit(5).all()
     return render_template("dashboard.html", devices=devices, c=counts, recent_changes=recent_changes,
                            logs=logs, schedules=schedules[:5], jobs=jobs,
@@ -267,7 +414,10 @@ def dashboard():
 
 @bp.route("/devices")
 def devices():
+    site_id = _active_site_id()
     q = Device.query
+    if site_id:
+        q = q.filter(Device.site_id == site_id)
     f = {k: request.args.get(k, "") for k in ("q", "platform", "group", "role", "status")}
     if f["q"]:
         like = f"%{f['q']}%"
@@ -275,7 +425,11 @@ def devices():
     for k in ("platform", "group", "role", "status"):
         if f[k]:
             q = q.filter(getattr(Device, k) == f[k])
-    groups = [g for (g,) in db.session.query(Device.group).distinct() if g]
+    
+    g_q = db.session.query(Device.group).distinct()
+    if site_id:
+        g_q = g_q.filter(Device.site_id == site_id)
+    groups = [g for (g,) in g_q if g]
     return render_template("devices.html", devices=q.order_by(Device.name).all(), f=f, groups=sorted(groups),
                            PLATFORMS=PLATFORMS, ROLES=ROLES)
 
@@ -287,6 +441,9 @@ def device_edit(dev_id=None):
     d = db.session.get(Device, dev_id) if dev_id else Device()
     if dev_id and not d:
         abort(404)
+    u = _current_user()
+    if dev_id and not u.has_site_access(d.site_id):
+        abort(403, "Cannot edit devices belonging to another site.")
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         clash = Device.query.filter(Device.name == name, Device.id != (d.id or 0)).first()
@@ -309,6 +466,19 @@ def device_edit(dev_id=None):
             d.enabled = _bool("enabled")
             d.notes = request.form.get("notes", "")
             d.credential_id = int(request.form["credential_id"]) if request.form.get("credential_id") else None
+            
+            # Site assignment
+            if u.is_group_admin:
+                site_id_val = request.form.get("site_id")
+                d.site_id = int(site_id_val) if site_id_val and site_id_val.isdigit() else _active_site_id()
+            else:
+                d.site_id = u.site_id
+            if not d.site_id:
+                # default fallback to first site
+                first_s = Site.query.order_by(Site.id).first()
+                if first_s:
+                    d.site_id = first_s.id
+
             if not dev_id:
                 db.session.add(d)
             db.session.commit()
@@ -323,15 +493,31 @@ def device_edit(dev_id=None):
             return redirect(url_for("web.device_detail", dev_id=d.id))
     if not dev_id:
         d.enabled, d.port, d.platform, d.model, d.role = True, 22, "juniper_junos", "Auto", "access"
-    groups = sorted(g for (g,) in db.session.query(Device.group).distinct() if g)
-    return render_template("device_form.html", d=d, creds=Credential.query.order_by(Credential.name).all(),
-                           PLATFORMS=PLATFORMS, MODELS=MODELS, ROLES=ROLES, groups=groups)
+        d.site_id = _active_site_id() or (u.site_id if u else None)
+    
+    site_id = _active_site_id()
+    g_q = db.session.query(Device.group).distinct()
+    if site_id:
+        g_q = g_q.filter(Device.site_id == site_id)
+    groups = sorted(g for (g,) in g_q if g)
+    
+    cred_q = Credential.query
+    if site_id:
+        cred_q = cred_q.filter(Credential.site_id == site_id)
+    creds = cred_q.order_by(Credential.name).all()
+
+    return render_template("device_form.html", d=d, creds=creds,
+                           PLATFORMS=PLATFORMS, MODELS=MODELS, ROLES=ROLES, groups=groups,
+                           sites=Site.query.order_by(Site.code).all())
 
 
 @bp.route("/devices/<int:dev_id>/delete", methods=["POST"])
 @require_write
 def device_delete(dev_id):
     d = db.get_or_404(Device, dev_id)
+    u = _current_user()
+    if not u.has_site_access(d.site_id):
+        abort(403, "Cannot delete devices belonging to another site.")
     for b in d.backups.all():
         engine.delete_backup(b, commit=False)
     log_event(f"Device '{d.name}' ({d.host}) deleted with its backups", "device", "WARN", commit=False)
@@ -339,7 +525,8 @@ def device_delete(dev_id):
     db.session.delete(d)
     db.session.commit()
     gitsync.remove_device(name)
-    flash("Device deleted", "ok")
+    log_event(f"Device '{name}' deleted", "device")
+    flash(f"Device '{name}' deleted", "ok")
     return redirect(url_for("web.devices"))
 
 
@@ -358,10 +545,14 @@ CSV_FIELDS = ["name", "host", "port", "platform", "role", "group", "location", "
 
 @bp.route("/devices/export.csv")
 def devices_export():
+    site_id = _active_site_id()
+    q = Device.query
+    if site_id:
+        q = q.filter(Device.site_id == site_id)
     out = io.StringIO()
     w = csv.writer(out)
     w.writerow(CSV_FIELDS)
-    for d in Device.query.order_by(Device.name):
+    for d in q.order_by(Device.name):
         w.writerow([d.name, d.host, d.port, d.platform, d.role, d.group, d.location, int(d.is_vc),
                     int(d.legacy_ssh), int(d.enabled), d.credential.name if d.credential else "", d.notes])
     return Response(BOM + out.getvalue(), content_type="text/csv; charset=utf-8",
@@ -390,7 +581,14 @@ def devices_import():
     if not f:
         flash("Choose a CSV file", "error")
         return redirect(url_for("web.devices"))
-    creds = {c.name.lower(): c.id for c in Credential.query.all()}
+    site_id = _active_site_id()
+    if not site_id:
+        first_s = Site.query.order_by(Site.id).first()
+        site_id = first_s.id if first_s else None
+    cred_q = Credential.query
+    if site_id:
+        cred_q = cred_q.filter(Credential.site_id == site_id)
+    creds = {c.name.lower(): c.id for c in cred_q.all()}
     added = updated = 0
     errors = []
     imported = []
@@ -407,6 +605,7 @@ def devices_import():
         d = Device.query.filter_by(name=row["name"]).first()
         new = d is None
         d = d or Device(name=row["name"])
+        d.site_id = d.site_id or site_id
         d.host = row["host"]
         d.port = int(row.get("port") or 22)
         d.platform = row.get("platform") or d.platform or "juniper_junos"
@@ -449,8 +648,12 @@ def devices_import():
 @bp.route("/api/backup", methods=["POST"])
 def api_backup():
     data = request.get_json(silent=True) or {}
+    site_id = _active_site_id()
     if data.get("all"):
-        ids = [d.id for d in Device.query.filter_by(enabled=True)]
+        q = Device.query.filter_by(enabled=True)
+        if site_id:
+            q = q.filter(Device.site_id == site_id)
+        ids = [d.id for d in q.all()]
     else:
         ids = _ids(data.get("ids", []))
     if not ids:
@@ -470,7 +673,14 @@ def api_job(job_id):
 @bp.route("/api/check", methods=["POST"])
 def api_check():
     data = request.get_json(silent=True) or {}
-    ids = None if data.get("all") else _ids(data.get("ids", []))
+    site_id = _active_site_id()
+    if data.get("all"):
+        q = Device.query.filter_by(enabled=True)
+        if site_id:
+            q = q.filter(Device.site_id == site_id)
+        ids = [d.id for d in q.all()]
+    else:
+        ids = _ids(data.get("ids", []))
     res = reach.check_devices(current_app._get_current_object(), ids)
     return jsonify({str(k): {"status": s, "ping_ms": r} for k, (s, r) in res.items()})
 
@@ -512,7 +722,10 @@ def api_tool(dev_id):
 
 @bp.route("/backups")
 def backups():
+    site_id = _active_site_id()
     q = Backup.query.join(Device)
+    if site_id:
+        q = q.filter(Device.site_id == site_id)
     f = {k: request.args.get(k, "") for k in ("q", "device", "changed", "trigger", "since", "until")}
     if f["q"]:
         like = f"%{f['q']}%"
@@ -543,9 +756,19 @@ def backups():
             pass
     page = max(1, int(request.args.get("page", 1)))
     p = q.order_by(Backup.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
-    total_size = db.session.query(func.sum(Backup.size)).scalar() or 0
-    return render_template("backups.html", p=p, f=f, devices=Device.query.order_by(Device.name).all(),
-                           total_size=total_size, total=Backup.query.count())
+    
+    size_q = db.session.query(func.sum(Backup.size)).join(Device)
+    count_q = db.session.query(func.count(Backup.id)).join(Device)
+    dev_q = Device.query
+    if site_id:
+        size_q = size_q.filter(Device.site_id == site_id)
+        count_q = count_q.filter(Device.site_id == site_id)
+        dev_q = dev_q.filter(Device.site_id == site_id)
+        
+    total_size = size_q.scalar() or 0
+    total_backups = count_q.scalar() or 0
+    return render_template("backups.html", p=p, f=f, devices=dev_q.order_by(Device.name).all(),
+                           total_size=total_size, total=total_backups)
 
 
 @bp.route("/backups/<int:bid>")
@@ -656,11 +879,21 @@ def compare_download():
 
 @bp.route("/schedules")
 def schedules():
-    items = [(s, next_run(s.id), len(resolve_targets(s))) for s in Schedule.query.order_by(Schedule.name)]
-    groups = sorted(g for (g,) in db.session.query(Device.group).distinct() if g)
+    site_id = _active_site_id()
+    q_sched = Schedule.query
+    if site_id:
+        q_sched = q_sched.filter(Schedule.site_id == site_id)
+    items = [(s, next_run(s.id), len(resolve_targets(s))) for s in q_sched.order_by(Schedule.name)]
+    
+    g_q = db.session.query(Device.group).distinct()
+    dev_q = Device.query
+    if site_id:
+        g_q = g_q.filter(Device.site_id == site_id)
+        dev_q = dev_q.filter(Device.site_id == site_id)
+    groups = sorted(g for (g,) in g_q if g)
     edit = db.session.get(Schedule, int(request.args.get("edit", 0) or 0))
     return render_template("schedules.html", items=items, groups=groups, edit=edit,
-                           devices=Device.query.order_by(Device.name).all(), ROLES=ROLES, PLATFORMS=PLATFORMS)
+                           devices=dev_q.order_by(Device.name).all(), ROLES=ROLES, PLATFORMS=PLATFORMS)
 
 
 @bp.route("/schedules/save", methods=["POST"])
@@ -679,15 +912,20 @@ def schedule_save():
     else:
         s.target_value = request.form.get(f"target_{s.target}", "")
     s.enabled = _bool("enabled")
+    if not sid:
+        s.site_id = _active_site_id() or (_current_user().site_id if _current_user() else None)
+        if not s.site_id:
+            first_s = Site.query.order_by(Site.id).first()
+            s.site_id = first_s.id if first_s else None
     try:
         make_trigger(s)
     except Exception as e:  # noqa: BLE001
         db.session.rollback()
         flash(f"Invalid schedule: {e}", "error")
         return redirect(url_for("web.schedules"))
-    if Schedule.query.filter(Schedule.name == s.name, Schedule.id != (s.id or 0)).first():
+    if Schedule.query.filter(Schedule.name == s.name, Schedule.site_id == s.site_id, Schedule.id != (s.id or 0)).first():
         db.session.rollback()
-        flash("A schedule with that name already exists", "error")
+        flash("A schedule with that name already exists for this site", "error")
         return redirect(url_for("web.schedules"))
     if not sid:
         db.session.add(s)
@@ -940,9 +1178,13 @@ def migrate_exported_config():
 @bp.route("/credentials", methods=["GET", "POST"])
 @require_write
 def credentials():
+    site_id = _active_site_id()
+    u = _current_user()
     if request.method == "POST":
         cid = request.form.get("id")
         c = db.session.get(Credential, int(cid)) if cid else Credential()
+        if cid and not u.has_site_access(c.site_id):
+            abort(403, "Cannot edit credentials for another site.")
         c.name = request.form.get("name", "").strip()
         c.username = request.form.get("username", "").strip()
         if request.form.get("password"):
@@ -954,18 +1196,28 @@ def credentials():
             flash("Name, username and password are required", "error")
         else:
             if not cid:
+                c.site_id = site_id or (u.site_id if u else None)
+                if not c.site_id:
+                    first_s = Site.query.order_by(Site.id).first()
+                    c.site_id = first_s.id if first_s else None
                 db.session.add(c)
             db.session.commit()
             log_event(f"Credential profile '{c.name}' saved", "system")
             flash("Credential profile saved", "ok")
         return redirect(url_for("web.credentials"))
-    return render_template("credentials.html", creds=Credential.query.order_by(Credential.name).all(),
+    q_creds = Credential.query
+    if site_id:
+        q_creds = q_creds.filter(Credential.site_id == site_id)
+    return render_template("credentials.html", creds=q_creds.order_by(Credential.name).all(),
                            edit=db.session.get(Credential, int(request.args.get("edit", 0) or 0)))
 
 
 @bp.route("/credentials/<int:cid>/delete", methods=["POST"])
 def credential_delete(cid):
     c = db.get_or_404(Credential, cid)
+    u = _current_user()
+    if not u.has_site_access(c.site_id):
+        abort(403, "Cannot delete credentials for another site.")
     if c.devices:
         flash(f"Profile is used by {len(c.devices)} device(s) - reassign them first", "error")
     else:

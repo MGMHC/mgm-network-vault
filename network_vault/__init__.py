@@ -6,7 +6,7 @@ from flask import Flask, abort, redirect, request, session, url_for
 from sqlalchemy import event
 
 from . import config
-from .models import User, db
+from .models import Site, User, db
 from .util import BASE_DIR, FLASK_SECRET, RESTORED, log_event
 from .version import __version__
 
@@ -24,8 +24,34 @@ def _add_missing_columns():
                 if col.name not in existing:
                     ddl = col.type.compile(dialect=db.engine.dialect)
                     conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {ddl}'))
-        # Backfill: any user with NULL role gets 'admin' (pre-existing accounts)
-        conn.execute(text("UPDATE \"user\" SET role = 'admin' WHERE role IS NULL OR role = ''"))
+        # Backfill: any user with NULL or old 'admin' role gets 'group-admin'
+        conn.execute(text("UPDATE \"user\" SET role = 'group-admin' WHERE role IS NULL OR role = '' OR role = 'admin'"))
+
+    # Seed default sites if none exist
+    default_sites = [
+        ("MGMHC", "MGM Healthcare (Main)", "Primary healthcare center"),
+        ("MGMCI", "MGM Cancer Institute", "Cancer care specialty center"),
+        ("MGM-Malar", "MGM Malar Hospital", "Malar multispeciality center"),
+        ("MGM-Sevenhills", "MGM Sevenhills Hospital", "Sevenhills tertiary care center"),
+    ]
+    primary_site = None
+    for code, name, desc in default_sites:
+        s = Site.query.filter_by(code=code).first()
+        if not s:
+            s = Site(code=code, name=name, description=desc)
+            db.session.add(s)
+            db.session.flush()
+        if code == "MGMHC":
+            primary_site = s
+    db.session.commit()
+
+    # Backfill pre-existing devices, credentials, and schedules to primary site MGMHC if unassigned
+    if primary_site:
+        from sqlalchemy import text
+        with db.engine.begin() as conn:
+            conn.execute(text(f"UPDATE device SET site_id = {primary_site.id} WHERE site_id IS NULL"))
+            conn.execute(text(f"UPDATE credential SET site_id = {primary_site.id} WHERE site_id IS NULL"))
+            conn.execute(text(f"UPDATE schedule SET site_id = {primary_site.id} WHERE site_id IS NULL"))
 
 
 def create_app():
@@ -54,7 +80,7 @@ def create_app():
         db.create_all()
         _add_missing_columns()
         if not User.query.first():
-            u = User(username="admin", must_change=True)
+            u = User(username="admin", must_change=True, role="group-admin")
             u.set_password("admin")
             db.session.add(u)
             db.session.commit()
@@ -93,7 +119,35 @@ def create_app():
             session["csrf"] = secrets.token_urlsafe(32)
         uname = session.get("user")
         user_obj = User.query.filter_by(username=uname).first() if uname else None
-        return {"csrf_token": session["csrf"], "current_user": uname,
-                "current_user_obj": user_obj, "app_version": __version__}
+        
+        all_sites = Site.query.order_by(Site.code).all()
+        active_site = None
+        current_site_id = None
+        
+        if user_obj:
+            if not user_obj.is_group_admin and user_obj.site_id:
+                current_site_id = user_obj.site_id
+                active_site = Site.query.get(user_obj.site_id)
+            else:
+                sid = session.get("active_site_id")
+                if sid == "all" or sid is None:
+                    current_site_id = "all"
+                    active_site = None
+                else:
+                    try:
+                        active_site = Site.query.get(int(sid))
+                        current_site_id = int(sid) if active_site else "all"
+                    except (ValueError, TypeError):
+                        current_site_id = "all"
+
+        return {
+            "csrf_token": session["csrf"],
+            "current_user": uname,
+            "current_user_obj": user_obj,
+            "app_version": __version__,
+            "all_sites": all_sites,
+            "active_site": active_site,
+            "current_site_id": current_site_id,
+        }
 
     return app

@@ -22,7 +22,20 @@ MODELS = ["Auto", "EX2200", "EX2300", "EX3300", "C1300", "Other"]  # Auto = dete
 ROLES = ["access", "distribution", "core"]
 
 
-USER_ROLES = ["admin", "read-write", "read-only"]
+USER_ROLES = ["group-admin", "site-admin", "read-write", "read-only"]
+
+
+class Site(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(32), unique=True, nullable=False)   # e.g. MGMHC, MGMCI, MGM-Malar, MGM-Sevenhills
+    name = db.Column(db.String(128), nullable=False)               # e.g. MGM Healthcare (Main)
+    description = db.Column(db.String(256), default="")
+    created_at = db.Column(db.DateTime, default=now)
+
+    devices = db.relationship("Device", backref="site", lazy="dynamic", cascade="all, delete-orphan")
+    credentials = db.relationship("Credential", backref="site", lazy="dynamic", cascade="all, delete-orphan")
+    schedules = db.relationship("Schedule", backref="site", lazy="dynamic", cascade="all, delete-orphan")
+    users = db.relationship("User", backref="site", lazy=True)
 
 
 class User(db.Model):
@@ -30,7 +43,8 @@ class User(db.Model):
     username = db.Column(db.String(64), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     must_change = db.Column(db.Boolean, default=False)
-    role = db.Column(db.String(16), default="admin")  # admin | read-write | read-only
+    role = db.Column(db.String(24), default="group-admin")  # group-admin | site-admin | read-write | read-only
+    site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=True)
 
     def set_password(self, pw):
         self.password_hash = generate_password_hash(pw)
@@ -39,23 +53,42 @@ class User(db.Model):
         return check_password_hash(self.password_hash, pw)
 
     @property
+    def is_group_admin(self):
+        r = self.role or "group-admin"
+        return r in ("group-admin", "admin")
+
+    @property
+    def is_site_admin(self):
+        r = self.role or "group-admin"
+        return r in ("group-admin", "admin", "site-admin")
+
+    @property
     def is_admin(self):
-        return (self.role or "admin") == "admin"
+        return self.is_site_admin
 
     @property
     def can_write(self):
         """Can add/edit/delete devices, credentials, schedules, settings."""
-        return (self.role or "admin") in ("admin", "read-write")
+        r = self.role or "group-admin"
+        return r in ("group-admin", "admin", "site-admin", "read-write")
 
     @property
     def can_backup(self):
         """Can trigger backups and reachability checks."""
-        return (self.role or "admin") in ("admin", "read-write")
+        r = self.role or "group-admin"
+        return r in ("group-admin", "admin", "site-admin", "read-write")
+
+    def has_site_access(self, site_id):
+        """Returns True if user has access to the specified site_id (or all sites if group-admin)."""
+        if self.is_group_admin:
+            return True
+        return self.site_id == site_id
 
 
 class Credential(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(64), unique=True, nullable=False)
+    site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=True, index=True)
+    name = db.Column(db.String(64), nullable=False)
     username = db.Column(db.String(64), nullable=False)
     password_enc = db.Column(db.Text, nullable=False)
     secret_enc = db.Column(db.Text)  # enable secret (Cisco)
@@ -64,7 +97,8 @@ class Credential(db.Model):
 
 class Device(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(64), unique=True, nullable=False)
+    site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=True, index=True)
+    name = db.Column(db.String(64), nullable=False)
     host = db.Column(db.String(128), nullable=False)
     port = db.Column(db.Integer, default=22)
     platform = db.Column(db.String(32), nullable=False, default="juniper_junos")
@@ -141,7 +175,8 @@ class Backup(db.Model):
 
 class Schedule(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(64), unique=True, nullable=False)
+    site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=True, index=True)
+    name = db.Column(db.String(64), nullable=False)
     frequency = db.Column(db.String(16), default="daily")  # hourly | daily | weekly | monthly | cron
     time = db.Column(db.String(5), default="02:00")
     day_of_week = db.Column(db.String(32), default="sun")

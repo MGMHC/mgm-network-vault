@@ -28,6 +28,9 @@
       <a href="{{ url_for('web.schedules') }}" class="{{ 'active' if ep.startswith('web.schedule') }}">{{ icon('clock') }}<span class="nav-label">Schedules</span></a>
       <a href="{{ url_for('web.logs') }}" class="{{ 'active' if ep.startswith('web.logs') }}">{{ icon('log') }}<span class="nav-label">Logs</span></a>
       <div class="nav-sep">Admin</div>
+      {% if current_user_obj and current_user_obj.is_group_admin %}
+      <a href="{{ url_for('web.sites') }}" class="{{ 'active' if ep.startswith('web.site') and ep != 'web.site_switch' }}">{{ icon('building') }}<span class="nav-label">Sites</span></a>
+      {% endif %}
       <a href="{{ url_for('web.credentials') }}" class="{{ 'active' if ep.startswith('web.credential') }}">{{ icon('key') }}<span class="nav-label">Credentials</span></a>
       <a href="{{ url_for('web.github') }}" class="{{ 'active' if ep == 'web.github' }}">{{ icon('git') }}<span class="nav-label">GitHub sync</span></a>
       <a href="{{ url_for('web.migrate') }}" class="{{ 'active' if ep.startswith('web.migrate') }}">{{ icon('archive') }}<span class="nav-label">Export &amp; migrate</span></a>
@@ -44,12 +47,39 @@
     </div>
   </aside>
   <main class="main" id="main">
-    {% if request.endpoint != 'web.dashboard' %}
-    <button class="back-btn" onclick="history.back()" title="Go back">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-      Back
-    </button>
-    {% endif %}
+    <div class="header-bar">
+      <div class="header-left">
+        {% if request.endpoint != 'web.dashboard' %}
+        <button class="back-btn" onclick="history.back()" title="Go back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+          Back
+        </button>
+        {% endif %}
+      </div>
+      
+      <div class="header-right">
+        {% if current_user_obj %}
+        <div class="site-switcher-pill">
+          <div class="s-icon">{{ icon('building') }}</div>
+          {% if current_user_obj.is_group_admin %}
+          <form method="post" action="{{ url_for('web.site_switch') }}" class="site-switch-form" id="siteSwitchForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="site_id" onchange="this.form.submit()" class="site-select" title="Switch active site">
+              <option value="all" {% if current_site_id == 'all' %}selected{% endif %}>All Sites (Group View)</option>
+              {% for s in all_sites %}
+              <option value="{{ s.id }}" {% if current_site_id == s.id %}selected{% endif %}>{{ s.code }} · {{ s.name }}</option>
+              {% endfor %}
+            </select>
+          </form>
+          {% else %}
+          <span class="site-badge-single">
+            <b>{{ active_site.code if active_site else 'Site' }}</b> · {{ active_site.name if active_site else '' }}
+          </span>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
     {% with msgs = get_flashed_messages(with_categories=true) %}
       {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}
     {% endwith %}

@@ -100,7 +100,7 @@ def _counts(db_path):
     con = sqlite3.connect(db_path)
     try:
         return {t: con.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
-                for t in ("device", "backup", "schedule", "credential", "user", "log_entry")}
+                for t in ("site", "device", "backup", "schedule", "credential", "user", "log_entry")}
     finally:
         con.close()
 
