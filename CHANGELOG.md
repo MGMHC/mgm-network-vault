@@ -4,6 +4,17 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.2.1] - 2026-10-08
+
+### Added
+- **Backups Search Filter**: Added instant multi-field search (`q` query) in the Backups view supporting search across switch name, host IP, location, git commit hash, trigger, and backup path.
+- **Persistent Backup Progress Indicator**: Running device or full-network backups now persist their status toast across sidebar navigation and page changes, continually polling the active job until completion.
+- **Enhanced Transitions & Micro-Animations**: Upgraded page and card entrance/exit transitions with smoother motion curves and enhanced sidebar nav tap ripples.
+
+### Fixed
+- **Streamlined "Changes Only" Toggle**: Replaced irregular checkbox styles with an iOS/modern switch toggle featuring an integrated animated checkmark.
+- **Script Cache Invalidation**: Added version query param (`?v={{ app_version }}`) to `app.js` script tag in base layout.
+
 ## [1.2.0] - 2026-10-08
 
 ### Added

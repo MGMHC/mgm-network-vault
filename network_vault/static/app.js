@@ -38,29 +38,92 @@ document.addEventListener('submit', e => {
   if (msg && !confirm(msg)) e.preventDefault();
 });
 
+const ACTIVE_BACKUP_KEY = 'active_backup_job';
+
+function trackBackupJob(jobId, initialStatus) {
+  localStorage.setItem(ACTIVE_BACKUP_KEY, JSON.stringify({ job: jobId, time: Date.now() }));
+  
+  // Create or retrieve persistent toast
+  const t = toast(
+    `<b>Backup job #${jobId}</b> <span class="jt">${initialStatus || 'in progress…'}</span><div class="progress"><div></div></div>`,
+    '',
+    0
+  );
+
+  let active = true;
+
+  const poll = async () => {
+    while (active) {
+      try {
+        const j = await fetch(`/api/jobs/${jobId}`).then(r => r.json());
+        if (!j || !j.id) {
+          localStorage.removeItem(ACTIVE_BACKUP_KEY);
+          t.remove();
+          break;
+        }
+
+        const jtEl = t.querySelector('.jt');
+        const progEl = t.querySelector('.progress > div');
+
+        if (jtEl) {
+          jtEl.textContent = `${j.done}/${j.total} done · ${j.ok} ok · ${j.failed} failed`;
+        }
+        if (progEl) {
+          progEl.style.width = (j.total ? (100 * j.done / j.total) : 100) + '%';
+        }
+
+        if (j.status !== 'running') {
+          active = false;
+          localStorage.removeItem(ACTIVE_BACKUP_KEY);
+          t.className = 'toast ' + (j.failed ? 'bad' : 'ok');
+          if (jtEl) {
+            jtEl.textContent = `finished: ${j.ok} ok (${j.unchanged} unchanged), ${j.failed} failed of ${j.total}`;
+          }
+          setTimeout(() => {
+            t.remove();
+            // If on backups, devices or dashboard, refresh to show new data
+            if (['/devices', '/backups', '/', '/dashboard'].includes(location.pathname)) {
+              location.reload();
+            }
+          }, 3500);
+          break;
+        }
+      } catch (err) {
+        // network blip, retry next interval
+      }
+      await new Promise(r => setTimeout(r, 1500));
+    }
+  };
+
+  poll();
+  return t;
+}
+
+// Check for ongoing backup job on page load and maintain status toast
+(function initPersistentJobTracker() {
+  try {
+    const raw = localStorage.getItem(ACTIVE_BACKUP_KEY);
+    if (!raw) return;
+    const item = JSON.parse(raw);
+    // Ignore jobs older than 2 hours in case of stale state
+    if (Date.now() - item.time > 2 * 60 * 60 * 1000) {
+      localStorage.removeItem(ACTIVE_BACKUP_KEY);
+      return;
+    }
+    trackBackupJob(item.job, 'reconnecting…');
+  } catch (e) {
+    localStorage.removeItem(ACTIVE_BACKUP_KEY);
+  }
+})();
+
 async function runBackup(ids, btn) {
   const body = ids === 'all' ? { all: true } : { ids };
   if (ids !== 'all' && !ids.length) { toast('Select at least one device', 'bad'); return; }
   if (btn) btn.disabled = true;
-  let t;
   try {
     const { job } = await api('/api/backup', body);
-    t = toast(`<b>Backup job #${job}</b> <span class="jt">starting…</span><div class="progress"><div></div></div>`, '', 0);
-    while (true) {
-      await new Promise(r => setTimeout(r, 1500));
-      const j = await fetch(`/api/jobs/${job}`).then(r => r.json());
-      t.querySelector('.jt').textContent = `${j.done}/${j.total} done · ${j.ok} ok · ${j.failed} failed`;
-      t.querySelector('.progress > div').style.width = (j.total ? 100 * j.done / j.total : 100) + '%';
-      if (j.status !== 'running') {
-        t.className = 'toast ' + (j.failed ? 'bad' : 'ok');
-        t.querySelector('.jt').textContent =
-          `finished: ${j.ok} ok (${j.unchanged} unchanged), ${j.failed} failed of ${j.total}`;
-        setTimeout(() => location.reload(), 1600);
-        break;
-      }
-    }
+    trackBackupJob(job, 'starting…');
   } catch (err) {
-    if (t) t.remove();
     toast('Backup failed to start: ' + err.message, 'bad');
   } finally {
     if (btn) btn.disabled = false;
@@ -167,4 +230,64 @@ function toggleSidebar() {
     const layout = document.getElementById('layout');
     if (layout) layout.classList.add('sidebar-collapsed');
   }
+})();
+
+// ── Page transition & nav ripple ──────────────────────────────────────────
+(function () {
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduced) return;
+
+  // Ripple on sidebar nav links
+  document.querySelectorAll('.nav a').forEach(link => {
+    link.addEventListener('click', function (e) {
+      // Skip modifier-key clicks (open in new tab etc.)
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const r = document.createElement('span');
+      r.className = 'nav-ripple';
+      this.appendChild(r);
+      r.addEventListener('animationend', () => r.remove());
+    });
+  });
+
+  // Fade-out main content before navigating to a new page
+  function shouldAnimate(href) {
+    if (!href) return false;
+    try {
+      const url = new URL(href, location.href);
+      // Same origin only; skip hash-only changes and logout (instant redirect)
+      if (url.origin !== location.origin) return false;
+      if (url.pathname === location.pathname && url.hash) return false;
+      return true;
+    } catch { return false; }
+  }
+
+  document.addEventListener('click', function (e) {
+    // Walk up to find an <a> tag
+    const a = e.target.closest('a[href]');
+    if (!a) return;
+    if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (a.target === '_blank') return;
+    if (!shouldAnimate(a.href)) return;
+
+    const layout = document.getElementById('layout');
+    const loginWrap = document.querySelector('.login-wrap');
+    const target = layout || loginWrap;
+    if (!target) return;
+
+    e.preventDefault();
+    const dest = a.href;
+
+    if (layout) {
+      layout.classList.add('page-leaving');
+    } else {
+      // login page — fade out the card
+      const card = loginWrap.querySelector('.card');
+      if (card) {
+        card.style.transition = 'opacity .22s cubic-bezier(0.4, 0, 1, 1), transform .22s cubic-bezier(0.4, 0, 1, 1)';
+        card.style.opacity = '0';
+        card.style.transform = 'scale(.92) translateY(-10px)';
+      }
+    }
+    setTimeout(() => { location.href = dest; }, 220);
+  });
 })();

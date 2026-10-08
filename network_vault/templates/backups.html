@@ -3,18 +3,29 @@
 {% block title %}Backups{% endblock %}
 {% block content %}
 <div class="topbar">
-  <div><h1>Backups</h1><div class="sub">{{ total }} backup(s) stored · {{ total_size|size }} of configuration</div></div>
+  <div><h1>Backups</h1><div class="sub">{% if f.q or f.device or f.changed == '1' or f.trigger or f.since or f.until %}{{ p.total }} backup(s) matching · {% endif %}{{ total }} backup(s) stored · {{ total_size|size }} of configuration</div></div>
   <div class="actions">
     <a class="btn primary" href="{{ url_for('web.backups_zip', latest=1) }}">{{ icon('download') }}Download latest of every device (ZIP)</a>
   </div>
 </div>
 <div class="card flush">
   <form class="filters" method="get">
+    <div><label>Search</label><input type="search" name="q" value="{{ f.q }}" placeholder="device, commit, trigger..."></div>
     <div><label>Device</label><select name="device"><option value="">All devices</option>{% for d in devices %}<option value="{{ d.id }}" {{ 'selected' if f.device == d.id|string }}>{{ d.name }}</option>{% endfor %}</select></div>
     <div><label>Trigger</label><select name="trigger"><option value="">Any</option><option value="manual" {{ 'selected' if f.trigger == 'manual' }}>Manual</option><option value="schedule" {{ 'selected' if f.trigger == 'schedule' }}>Scheduled</option></select></div>
     <div><label>From</label><input type="date" name="since" value="{{ f.since }}"></div>
     <div><label>To</label><input type="date" name="until" value="{{ f.until }}"></div>
-    <label class="check" style="margin:0 0 8px"><input type="checkbox" name="changed" value="1" {{ 'checked' if f.changed == '1' }}> Changes only</label>
+    <label class="toggle-switch" title="Filter to backups with configuration changes only">
+      <input type="checkbox" name="changed" value="1" {{ 'checked' if f.changed == '1' }}>
+      <span class="toggle-track" aria-hidden="true">
+        <span class="toggle-thumb">
+          <svg class="toggle-tick-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2.5 6.2L4.7 8.5L9.5 3.5"/>
+          </svg>
+        </span>
+      </span>
+      <span>Changes only</span>
+    </label>
     <button class="btn">Filter</button> <a class="btn" href="{{ url_for('web.backups') }}">Reset</a>
   </form>
   <div class="card-head">

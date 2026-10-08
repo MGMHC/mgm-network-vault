@@ -55,6 +55,83 @@ h3 { font-size: 14px; margin: 0 0 8px; font-weight: 650; }
 .side-foot { margin-top: auto; padding: 10px 12px; font-size: 12px; border-top: 1px solid rgba(255,255,255,.12); flex-shrink: 0; }
 .side-foot a { color: var(--side-text); }
 .main { padding: 22px 28px 40px; min-width: 0; }
+
+/* ── Page transition & animations ────────────────────────────────────────── */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+@keyframes page-fade-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: scale(.93) translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+@keyframes nav-ripple {
+  0% {
+    opacity: .55;
+    transform: scale(0.1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.8);
+  }
+}
+
+.main {
+  animation: page-enter .32s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+.layout.page-leaving .main {
+  animation: page-fade-out .22s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+.login-wrap .card {
+  animation: card-enter .38s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.nav a {
+  position: relative;
+  overflow: hidden;
+  transition: background-color .15s ease, color .15s ease, transform .12s ease;
+}
+.nav a:active {
+  transform: scale(0.98);
+}
+.nav a .nav-ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: var(--side-accent);
+  animation: nav-ripple .5s ease-out forwards;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main, .layout.page-leaving .main, .login-wrap .card { animation: none !important; }
+  .nav a .nav-ripple { display: none; }
+}
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
 .topbar .sub { color: var(--muted); margin-top: 2px; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -119,11 +196,116 @@ input[type=text], input[type=password], input[type=number], input[type=date], in
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 textarea { min-height: 70px; }
 .check { display: flex; gap: 8px; align-items: center; font-weight: 500; font-size: 13.5px; margin-bottom: 8px; }
-.check input { width: 16px; height: 16px; }
+.check input { width: 16px; height: 16px; min-width: 16px; flex-shrink: 0; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0 16px; }
 .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; padding: 12px 18px; border-bottom: 1px solid var(--border); background: var(--panel-2); }
 .filters > * { width: auto; }
-.filters input, .filters select { width: auto; min-width: 130px; padding: 6px 9px; }
+.filters input:not([type="checkbox"]):not([type="radio"]), .filters select { width: auto; min-width: 130px; padding: 6px 9px; }
+.filters input[type="search"] { min-width: 160px; }
+.filters input[type="checkbox"], .filters input[type="radio"] { width: auto; min-width: 0; padding: 0; }
+
+/* ── Streamlined Toggle Switch ───────────────────────────────────────────── */
+.toggle-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 550;
+  font-size: 13px;
+  color: var(--text);
+  height: 35px;
+  padding: 0 8px;
+  border-radius: 8px;
+  transition: background-color .15s ease, color .15s ease;
+  margin: 0;
+  vertical-align: middle;
+}
+.toggle-switch:hover {
+  background: var(--panel);
+}
+.toggle-switch input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+  pointer-events: none;
+}
+.toggle-switch .toggle-track {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  background: var(--border);
+  border-radius: 99px;
+  transition: background-color .2s ease, border-color .2s ease, box-shadow .2s ease;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-sizing: border-box;
+}
+.toggle-switch:hover .toggle-track {
+  border-color: var(--accent);
+}
+.toggle-switch input:focus-visible + .toggle-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.toggle-switch input:checked + .toggle-track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.toggle-switch .toggle-thumb {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .22s cubic-bezier(0.34, 1.56, 0.64, 1), background-color .2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  color: var(--accent);
+}
+.toggle-switch input:checked + .toggle-track .toggle-thumb {
+  transform: translateX(16px);
+  color: var(--accent);
+}
+.toggle-switch .toggle-tick-icon {
+  width: 11px;
+  height: 11px;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity .18s ease, transform .18s cubic-bezier(0.34, 1.56, 0.64, 1);
+  stroke: currentColor;
+  stroke-width: 2.2;
+}
+.toggle-switch input:checked + .toggle-track .toggle-tick-icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media (prefers-color-scheme: dark) {
+  .toggle-switch .toggle-track {
+    border-color: var(--border);
+    background: #1c274d;
+  }
+  .toggle-switch input:checked + .toggle-track {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .toggle-switch .toggle-thumb {
+    background: #ffffff;
+    color: #121B37;
+  }
+  .toggle-switch input:checked + .toggle-track .toggle-thumb {
+    color: #121B37;
+  }
+}
 
 /* flash */
 .flash { padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; border: 1px solid; }
@@ -284,3 +466,10 @@ pre.code { background: var(--panel-2); border: 1px solid var(--border); border-r
 
 .role-select { width: auto; min-width: 110px; padding: 4px 7px; font-size: 12px; }
 
+/* ── Flash entrance ──────────────────────────────────────────────────────── */
+@keyframes flash-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.flash { animation: flash-in .2s ease both; }
+@media (prefers-reduced-motion: reduce) { .flash { animation: none; } }

@@ -63,7 +63,7 @@
 <div class="modal-bg" id="modal" onclick="if(event.target===this)closeModal()">
   <div class="modal"><header><h2 style="margin:0"></h2><button class="btn sm" onclick="closeModal()">Close</button></header><div class="body"></div></div>
 </div>
-<script src="{{ url_for('static', filename='app.js') }}"></script>
+<script src="{{ url_for('static', filename='app.js') }}?v={{ app_version }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

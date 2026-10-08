@@ -513,7 +513,18 @@ def api_tool(dev_id):
 @bp.route("/backups")
 def backups():
     q = Backup.query.join(Device)
-    f = {k: request.args.get(k, "") for k in ("device", "changed", "trigger", "since", "until")}
+    f = {k: request.args.get(k, "") for k in ("q", "device", "changed", "trigger", "since", "until")}
+    if f["q"]:
+        like = f"%{f['q']}%"
+        q = q.filter(or_(
+            Device.name.ilike(like),
+            Device.host.ilike(like),
+            Device.location.ilike(like),
+            Backup.last_commit.ilike(like),
+            Backup.trigger.ilike(like),
+            Backup.git_commit.ilike(like),
+            Backup.path.ilike(like),
+        ))
     if f["device"]:
         q = q.filter(Backup.device_id == int(f["device"]))
     if f["changed"] == "1":
@@ -521,9 +532,15 @@ def backups():
     if f["trigger"]:
         q = q.filter(Backup.trigger.like(f"{f['trigger']}%"))
     if f["since"]:
-        q = q.filter(Backup.created_at >= datetime.fromisoformat(f["since"]))
+        try:
+            q = q.filter(Backup.created_at >= datetime.fromisoformat(f["since"]))
+        except (ValueError, TypeError):
+            pass
     if f["until"]:
-        q = q.filter(Backup.created_at < datetime.fromisoformat(f["until"]) + timedelta(days=1))
+        try:
+            q = q.filter(Backup.created_at < datetime.fromisoformat(f["until"]) + timedelta(days=1))
+        except (ValueError, TypeError):
+            pass
     page = max(1, int(request.args.get("page", 1)))
     p = q.order_by(Backup.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
     total_size = db.session.query(func.sum(Backup.size)).scalar() or 0
