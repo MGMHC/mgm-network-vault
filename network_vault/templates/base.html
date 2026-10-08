@@ -61,19 +61,23 @@
         {% if current_user_obj %}
         <div class="site-switcher-pill">
           <div class="s-icon">{{ icon('building') }}</div>
-          {% if current_user_obj.is_group_admin %}
+          {% if current_user_obj.is_group_admin or user_available_sites|length > 1 %}
           <form method="post" action="{{ url_for('web.site_switch') }}" class="site-switch-form" id="siteSwitchForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <select name="site_id" onchange="this.form.submit()" class="site-select" title="Switch active site">
+              {% if current_user_obj.is_group_admin %}
               <option value="all" {% if current_site_id == 'all' %}selected{% endif %}>All Sites (Group View)</option>
-              {% for s in all_sites %}
+              {% else %}
+              <option value="all" {% if current_site_id == 'all' %}selected{% endif %}>All My Sites ({{ user_available_sites|length }})</option>
+              {% endif %}
+              {% for s in (all_sites if current_user_obj.is_group_admin else user_available_sites) %}
               <option value="{{ s.id }}" {% if current_site_id == s.id %}selected{% endif %}>{{ s.code }} · {{ s.name }}</option>
               {% endfor %}
             </select>
           </form>
           {% else %}
           <span class="site-badge-single">
-            <b>{{ active_site.code if active_site else 'Site' }}</b> · {{ active_site.name if active_site else '' }}
+            <b>{{ active_site.code if active_site else (user_available_sites[0].code if user_available_sites else 'Site') }}</b> · {{ active_site.name if active_site else (user_available_sites[0].name if user_available_sites else '') }}
           </span>
           {% endif %}
         </div>

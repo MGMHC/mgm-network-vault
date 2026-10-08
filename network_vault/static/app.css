@@ -541,6 +541,27 @@ pre.code { background: var(--panel-2); border: 1px solid var(--border); border-r
 
 .role-select { width: auto; min-width: 110px; padding: 4px 7px; font-size: 12px; }
 
+/* ── Multi-site tagging ─────────────────────────────────────────────────── */
+.site-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.site-tag-badge {
+  display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px;
+  font-weight: 600; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+}
+.site-check-group {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px;
+}
+.site-check-pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  font-size: 12px; font-weight: 500; cursor: pointer; user-select: none;
+  transition: all .15s ease;
+}
+.site-check-pill:hover { border-color: var(--mgm-blue); }
+.site-check-pill input[type="checkbox"] { margin: 0; cursor: pointer; }
+.site-check-pill:has(input:checked) {
+  background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600;
+}
+
 /* ── Flash entrance ──────────────────────────────────────────────────────── */
 @keyframes flash-in {
   from { opacity: 0; transform: translateY(-6px); }

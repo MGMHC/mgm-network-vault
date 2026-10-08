@@ -25,6 +25,13 @@ ROLES = ["access", "distribution", "core"]
 USER_ROLES = ["group-admin", "site-admin", "read-write", "read-only"]
 
 
+user_sites = db.Table(
+    "user_sites",
+    db.Column("user_id", db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), primary_key=True),
+    db.Column("site_id", db.Integer, db.ForeignKey("site.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
 class Site(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(32), unique=True, nullable=False)   # e.g. MGMHC, MGMCI, MGM-Malar, MGM-Sevenhills
@@ -44,7 +51,14 @@ class User(db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     must_change = db.Column(db.Boolean, default=False)
     role = db.Column(db.String(24), default="group-admin")  # group-admin | site-admin | read-write | read-only
-    site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=True)
+    site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=True)  # primary / fallback site
+
+    assigned_sites = db.relationship(
+        "Site",
+        secondary=user_sites,
+        lazy="subquery",
+        backref=db.backref("tagged_users", lazy=True),
+    )
 
     def set_password(self, pw):
         self.password_hash = generate_password_hash(pw)
@@ -78,11 +92,23 @@ class User(db.Model):
         r = self.role or "group-admin"
         return r in ("group-admin", "admin", "site-admin", "read-write")
 
+    @property
+    def allowed_site_ids(self):
+        """List of integer site IDs this user is authorized to access."""
+        if self.is_group_admin:
+            return None  # None indicates all sites
+        ids = {s.id for s in self.assigned_sites}
+        if self.site_id:
+            ids.add(self.site_id)
+        return list(ids)
+
     def has_site_access(self, site_id):
         """Returns True if user has access to the specified site_id (or all sites if group-admin)."""
         if self.is_group_admin:
             return True
-        return self.site_id == site_id
+        if not site_id:
+            return False
+        return site_id in self.allowed_site_ids
 
 
 class Credential(db.Model):

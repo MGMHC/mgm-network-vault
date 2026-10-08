@@ -39,11 +39,23 @@
           {% if u.role in ('group-admin', 'admin') %}
           <span class="badge blue">All Sites</span>
           {% else %}
-          <span class="badge">{{ u.site.code if u.site else 'None' }}</span>
+            {% set user_sites = u.assigned_sites or ([u.site] if u.site else []) %}
+            {% if user_sites %}
+            <div class="site-tags">
+              {% for s in user_sites %}
+              <span class="site-tag-badge">{{ s.code }}</span>
+              {% endfor %}
+            </div>
+            {% else %}
+            <span class="badge muted">None</span>
+            {% endif %}
           {% endif %}
         </td>
         <td class="num" style="white-space:nowrap">
           {% if me.is_admin and u.username != me.username %}
+          {% if me.is_group_admin and u.role != 'group-admin' %}
+          <button type="button" class="btn sm" onclick="document.getElementById('edit-sites-{{ u.id }}').toggleAttribute('hidden')">Sites ({{ u.assigned_sites|length }})</button>
+          {% endif %}
           <form method="post" class="inline" style="display:inline-flex;gap:6px;align-items:center;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="action" value="setrole">
@@ -55,19 +67,35 @@
               {% endif %}
               {% endfor %}
             </select>
-            {% if me.is_group_admin %}
-            <select name="site_id" class="role-select" style="min-width:90px">
-              <option value="">— site —</option>
-              {% for s in sites %}
-              <option value="{{ s.id }}" {% if u.site_id == s.id %}selected{% endif %}>{{ s.code }}</option>
-              {% endfor %}
-            </select>
-            {% endif %}
             <button class="btn sm">Save</button>
           </form>
           <form method="post" class="inline" data-confirm="Delete user {{ u.username }}?">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="deluser"><input type="hidden" name="id" value="{{ u.id }}"><button class="btn sm danger">Delete</button>
           </form>
+          {% if me.is_group_admin and u.role != 'group-admin' %}
+          <div id="edit-sites-{{ u.id }}" hidden style="margin-top:8px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;text-align:left;">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Tag sites to {{ u.username }}:</div>
+            <form method="post" style="margin:0">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="action" value="setrole">
+              <input type="hidden" name="id" value="{{ u.id }}">
+              <input type="hidden" name="role" value="{{ u.role }}">
+              {% set active_u_ids = u.assigned_sites|map(attribute='id')|list %}
+              <div class="site-check-group" style="margin-bottom:8px">
+                {% for s in sites %}
+                <label class="site-check-pill">
+                  <input type="checkbox" name="site_ids" value="{{ s.id }}" {% if s.id in active_u_ids or (not active_u_ids and u.site_id == s.id) %}checked{% endif %}>
+                  <span>{{ s.code }}</span>
+                </label>
+                {% endfor %}
+              </div>
+              <div style="display:flex;gap:6px">
+                <button class="btn sm primary">Update Tagged Sites</button>
+                <button type="button" class="btn sm" onclick="document.getElementById('edit-sites-{{ u.id }}').setAttribute('hidden', '')">Cancel</button>
+              </div>
+            </form>
+          </div>
+          {% endif %}
           {% endif %}
         </td>
       </tr>
@@ -83,7 +111,7 @@
         <div class="field"><label>Username</label><input type="text" name="username" required></div>
         <div class="field"><label>Temporary password</label><input type="password" name="password" required minlength="8" autocomplete="new-password"></div>
         <div class="field"><label>Role</label>
-          <select name="role">
+          <select name="role" id="newUserRole" onchange="toggleSiteSelector(this.value)">
             {% for r in USER_ROLES %}
             {% if me.is_group_admin or r != 'group-admin' %}
             <option value="{{ r }}" {% if r == 'site-admin' %}selected{% endif %}>{{ r }}</option>
@@ -91,23 +119,38 @@
             {% endfor %}
           </select>
         </div>
-        {% if me.is_group_admin %}
-        <div class="field"><label>Assigned Site</label>
-          <select name="site_id">
-            <option value="">None / All Sites (Group Admins)</option>
-            {% for s in sites %}
-            <option value="{{ s.id }}" {% if current_site_id == s.id %}selected{% endif %}>{{ s.code }} · {{ s.name }}</option>
-            {% endfor %}
-          </select>
-          <div class="help">Leave empty for Group Administrators. Required for Site Administrators.</div>
-        </div>
-        {% endif %}
       </div>
-      <div class="help" style="margin-bottom:12px">
-        <b>group-admin</b>: Full admin across all sites · <b>site-admin</b>: Full admin limited to assigned site · <b>read-write</b>: Run backups / edits on assigned site · <b>read-only</b>: View only
+      {% if me.is_group_admin %}
+      <div class="field" id="siteCheckboxesContainer" style="margin-top:12px">
+        <label>Tag Sites (Select one or multiple sites for this user)</label>
+        <div class="site-check-group">
+          {% for s in sites %}
+          <label class="site-check-pill">
+            <input type="checkbox" name="site_ids" value="{{ s.id }}" {% if current_site_id == s.id %}checked{% endif %}>
+            <span><b>{{ s.code }}</b> · {{ s.name }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        <div class="help" style="margin-top:4px">Non-group-admin users can be tagged with one or multiple sites. Group Administrators have automatic access to all sites.</div>
+      </div>
+      {% endif %}
+      <div class="help" style="margin:12px 0">
+        <b>group-admin</b>: Full admin across all sites · <b>site-admin</b>: Admin limited to tagged sites · <b>read-write</b>: Run backups / edits on tagged sites · <b>read-only</b>: View only
       </div>
       <button class="btn primary">Add user</button>
     </form>
+    <script>
+      function toggleSiteSelector(role) {
+        var box = document.getElementById('siteCheckboxesContainer');
+        if (box) {
+          box.style.display = (role === 'group-admin') ? 'none' : 'block';
+        }
+      }
+      document.addEventListener('DOMContentLoaded', function() {
+        var sel = document.getElementById('newUserRole');
+        if (sel) toggleSiteSelector(sel.value);
+      });
+    </script>
     {% endif %}
   </div>
   {% endif %}

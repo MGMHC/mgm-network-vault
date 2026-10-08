@@ -121,15 +121,43 @@ def create_app():
         user_obj = User.query.filter_by(username=uname).first() if uname else None
         
         all_sites = Site.query.order_by(Site.code).all()
+        user_available_sites = all_sites
         active_site = None
         current_site_id = None
         
         if user_obj:
-            if not user_obj.is_group_admin and user_obj.site_id:
-                current_site_id = user_obj.site_id
-                active_site = Site.query.get(user_obj.site_id)
+            if user_obj.is_group_admin:
+                user_available_sites = all_sites
             else:
-                sid = session.get("active_site_id")
+                user_available_sites = [s for s in all_sites if s.id in user_obj.allowed_site_ids]
+            
+            sid = session.get("active_site_id")
+            allowed_ids = [s.id for s in user_available_sites]
+
+            # If user is assigned to only 1 site, lock them to that site
+            if not user_obj.is_group_admin and len(user_available_sites) == 1:
+                active_site = user_available_sites[0]
+                current_site_id = active_site.id
+            elif not user_obj.is_group_admin and len(user_available_sites) > 1:
+                # User has multiple sites tagged
+                if sid == "all":
+                    current_site_id = "all"
+                    active_site = None
+                else:
+                    try:
+                        chosen_id = int(sid) if sid is not None else None
+                        if chosen_id in allowed_ids:
+                            active_site = Site.query.get(chosen_id)
+                            current_site_id = chosen_id
+                        else:
+                            # fallback to first allowed site
+                            active_site = user_available_sites[0]
+                            current_site_id = active_site.id
+                    except (ValueError, TypeError):
+                        active_site = user_available_sites[0]
+                        current_site_id = active_site.id
+            else:
+                # Group admin: can view 'all' or any specific site
                 if sid == "all" or sid is None:
                     current_site_id = "all"
                     active_site = None
@@ -146,6 +174,7 @@ def create_app():
             "current_user_obj": user_obj,
             "app_version": __version__,
             "all_sites": all_sites,
+            "user_available_sites": user_available_sites,
             "active_site": active_site,
             "current_site_id": current_site_id,
         }

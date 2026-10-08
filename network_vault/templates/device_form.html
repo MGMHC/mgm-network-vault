@@ -26,14 +26,15 @@
       <datalist id="groups">{% for g in groups %}<option>{{ g }}</option>{% endfor %}</datalist></div>
     <div class="field"><label>Location</label><input type="text" name="location" value="{{ d.location or '' }}" placeholder="e.g. IDF 2nd floor"></div>
     <div class="field"><label>Site *</label>
-      {% if current_user_obj and current_user_obj.is_group_admin %}
+      {% if current_user_obj and (current_user_obj.is_group_admin or user_available_sites|length > 1) %}
       <select name="site_id" required>
-        {% for s in sites %}
+        {% for s in (sites if current_user_obj.is_group_admin else user_available_sites) %}
         <option value="{{ s.id }}" {{ 'selected' if (d.site_id == s.id or (not d.site_id and current_site_id == s.id)) }}>{{ s.code }} ({{ s.name }})</option>
         {% endfor %}
       </select>
       {% else %}
       <input type="text" value="{{ d.site.code if d.site else (active_site.code if active_site else '') }}" disabled>
+      <input type="hidden" name="site_id" value="{{ d.site_id or (active_site.id if active_site else '') }}">
       {% endif %}
     </div>
     <div class="field"><label>Credential profile</label>
