@@ -4,6 +4,19 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.4.0] - 2026-10-08
+
+### Added
+- **Multi-Site User Tagging**: Non-group-admin users (`site-admin`, `read-write`, `read-only`) can now be assigned to multiple sites rather than strictly a single site.
+  - **Secondary Association (`user_sites`)**: Many-to-many relationship allowing flexible assignment of any combination of hospital campus sites to a user account.
+  - **Dynamic Site Switcher**: Users tagged with multiple sites now receive an interactive site switcher dropdown in the header bar, enabling seamless switching between their authorized sites or viewing aggregate data across "All My Sites".
+  - **Multi-Site Query Scoping**: Universal filtering helper (`_site_filter`) prevents unauthorized data exposure across all views (Dashboard, Devices, Backups, Schedules, Credentials, and Logs).
+  - **User Management Interface**:
+    - Distinct tag badges on the Users table showing all assigned sites for each user.
+    - Inline site tag manager (`Sites (N)`) allowing Group Administrators to toggle and save multiple sites per user.
+    - Multi-select pill checkboxes in the "Add new user" form for convenient multi-site assignment upon creation.
+  - **Multi-Site Device Forms**: Site Administrators tagged with multiple sites can choose the designated site when creating or editing switches.
+
 ## [1.3.0] - 2026-10-08
 
 ### Added
