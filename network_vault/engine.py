@@ -528,6 +528,23 @@ def live_command(device, kind, a=None, b=None):
                                              "startup-config", "running-config", lineterm=""))
             return "Unsaved changes (startup vs running)", "\n".join(diff) + "\n" if diff else \
                 "Running config matches startup config - nothing unsaved.\n"
+        if kind == "optics":
+            if device.is_juniper:
+                return "Optical Transceiver Diagnostics (DOM/DDM)", run(conn, "show interfaces diagnostics optics | no-more")
+            if device.platform == "cisco_c1300":
+                try:
+                    return "Optical Transceiver Diagnostics", run(conn, "show optical-transceiver-diagnostics")
+                except Exception:
+                    return "Optical Transceiver Diagnostics", run(conn, "show fiber-ports optical-transceiver")
+            return "Optical Transceiver Diagnostics", run(conn, "show interfaces transceiver detail")
+        if kind == "macs":
+            if device.is_juniper:
+                return "MAC Address Table", run(conn, "show ethernet-switching table | no-more")
+            return "MAC Address Table", run(conn, "show mac address-table")
+        if kind == "arp":
+            if device.is_juniper:
+                return "ARP Table", run(conn, "show arp no-resolve | no-more")
+            return "ARP Table", run(conn, "show ip arp")
         raise ValueError("Unsupported tool for this platform")
     finally:
         try:

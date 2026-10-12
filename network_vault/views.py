@@ -7,10 +7,10 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
 from flask import (Blueprint, Response, abort, current_app, flash, jsonify, redirect, render_template,
-                   request, send_file, session, url_for)
+                   request, send_file, session, stream_with_context, url_for)
 from sqlalchemy import func, or_
 
-from . import config, engine, gitsync, portable, reach, updater
+from . import config, engine, gitsync, operations, portable, reach, updater
 from .diffing import side_by_side, stats, unified
 from .models import (DEFAULT_SETTINGS, MODELS, PLATFORMS, ROLES, USER_ROLES, Backup, Credential, Device, Job,
                      LogEntry, Schedule, Site, User, db, get_setting, now, set_setting)
@@ -795,6 +795,184 @@ def api_tool(dev_id):
     except Exception as e:  # noqa: BLE001
         log_event(f"Live tool '{kind}' failed: {e}", "device", "ERROR", device=d)
         return jsonify(error=f"{type(e).__name__}: {e}"), 502
+
+
+# --------------------------------------------------------------------------- network operations (Port Locator & Optics)
+
+@bp.route("/operations/port-locator")
+def port_locator():
+    u = _current_user()
+    devs = _site_filter(Device.query, Device).order_by(Device.name).all()
+    user_sites_list = Site.query.order_by(Site.code).all() if (u and u.is_group_admin) else (u.assigned_sites if u else [])
+    return render_template("port_locator.html", devices=devs, sites=user_sites_list)
+
+
+@bp.route("/api/operations/port-locator", methods=["POST"])
+def api_port_locator():
+    u = _current_user()
+    data = request.get_json(silent=True) or {}
+    query_str = data.get("query", "").strip()
+    if not query_str:
+        return jsonify(error="Search target is required (IP or MAC address)."), 400
+
+    q_devs = _site_filter(Device.query, Device)
+    site_id = data.get("site_id")
+    if site_id and site_id != "all":
+        try:
+            sid = int(site_id)
+            if u and not u.has_site_access(sid):
+                abort(403, "Access to specified site is restricted.")
+            q_devs = q_devs.filter(Device.site_id == sid)
+        except (ValueError, TypeError):
+            pass
+
+    device_ids = data.get("device_ids")
+    if device_ids and isinstance(device_ids, list):
+        q_devs = q_devs.filter(Device.id.in_([int(i) for i in device_ids if str(i).isdigit()]))
+
+    devs = q_devs.filter_by(enabled=True).all()
+    try:
+        result = operations.locate_host(devs, query_str, user=session.get("user"))
+        log_event(f"Port locator search: '{query_str}' ({len(result.get('all_matches', []))} matches)",
+                  "device", user=session.get("user"))
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+    except Exception as e:
+        log_event(f"Port locator search failed: {e}", "device", "ERROR", user=session.get("user"))
+        return jsonify(error=f"{type(e).__name__}: {e}"), 500
+
+
+@bp.route("/api/operations/port-locator/stream", methods=["POST"])
+def api_port_locator_stream():
+    u = _current_user()
+    data = request.get_json(silent=True) or {}
+    query_str = data.get("query", "").strip()
+    if not query_str:
+        return jsonify(error="Search target is required (IP or MAC address)."), 400
+
+    q_devs = _site_filter(Device.query, Device)
+    site_id = data.get("site_id")
+    if site_id and site_id != "all":
+        try:
+            sid = int(site_id)
+            if u and not u.has_site_access(sid):
+                abort(403, "Access to specified site is restricted.")
+            q_devs = q_devs.filter(Device.site_id == sid)
+        except (ValueError, TypeError):
+            pass
+
+    device_ids = data.get("device_ids")
+    if device_ids and isinstance(device_ids, list):
+        q_devs = q_devs.filter(Device.id.in_([int(i) for i in device_ids if str(i).isdigit()]))
+
+    devs = q_devs.filter_by(enabled=True).all()
+    dev_ids = [d.id for d in devs if d.credential_id]
+    app = current_app._get_current_object()
+    run_id = data.get("run_id")
+    log_event(f"Port locator streaming search started for '{query_str}' ({len(dev_ids)} switches)", "device", user=session.get("user"))
+    return Response(
+        stream_with_context(operations.stream_locate_host(app, dev_ids, query_str, run_id=run_id)),
+        mimetype="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
+
+
+@bp.route("/api/operations/port-locator/status/<run_id>")
+def api_port_locator_status(run_id):
+    run = operations.get_locator_run(run_id)
+    if not run:
+        return jsonify(active=False), 404
+    return jsonify(run)
+
+
+@bp.route("/api/operations/port-locator/cancel/<run_id>", methods=["POST"])
+def api_port_locator_cancel(run_id):
+    cancelled = operations.cancel_locator_run(run_id)
+    return jsonify(cancelled=cancelled)
+
+
+@bp.route("/operations/optics")
+def optics():
+    u = _current_user()
+    devs = _site_filter(Device.query, Device).order_by(Device.name).all()
+    user_sites_list = Site.query.order_by(Site.code).all() if (u and u.is_group_admin) else (u.assigned_sites if u else [])
+    return render_template("optics.html", devices=devs, sites=user_sites_list)
+
+
+@bp.route("/api/operations/optics", methods=["POST"])
+def api_optics_scan():
+    u = _current_user()
+    data = request.get_json(silent=True) or {}
+    q_devs = _site_filter(Device.query, Device)
+    site_id = data.get("site_id")
+    if site_id and site_id != "all":
+        try:
+            sid = int(site_id)
+            if u and not u.has_site_access(sid):
+                abort(403, "Access to specified site is restricted.")
+            q_devs = q_devs.filter(Device.site_id == sid)
+        except (ValueError, TypeError):
+            pass
+
+    device_ids = data.get("device_ids")
+    if device_ids and isinstance(device_ids, list):
+        q_devs = q_devs.filter(Device.id.in_([int(i) for i in device_ids if str(i).isdigit()]))
+
+    devs = q_devs.filter_by(enabled=True).all()
+    try:
+        summary = operations.scan_network_optics(devs)
+        log_event(f"Optical diagnostics scanned {len(devs)} switches ({summary.get('total_ports', 0)} fiber ports)",
+                  "device", user=session.get("user"))
+        return jsonify(summary)
+    except Exception as e:
+        log_event(f"Optical diagnostics scan failed: {e}", "device", "ERROR", user=session.get("user"))
+        return jsonify(error=f"{type(e).__name__}: {e}"), 500
+
+
+@bp.route("/api/operations/optics/stream", methods=["POST"])
+def api_optics_stream():
+    u = _current_user()
+    data = request.get_json(silent=True) or {}
+    q_devs = _site_filter(Device.query, Device)
+    site_id = data.get("site_id")
+    if site_id and site_id != "all":
+        try:
+            sid = int(site_id)
+            if u and not u.has_site_access(sid):
+                abort(403, "Access to specified site is restricted.")
+            q_devs = q_devs.filter(Device.site_id == sid)
+        except (ValueError, TypeError):
+            pass
+
+    device_ids = data.get("device_ids")
+    if device_ids and isinstance(device_ids, list):
+        q_devs = q_devs.filter(Device.id.in_([int(i) for i in device_ids if str(i).isdigit()]))
+
+    devs = q_devs.filter_by(enabled=True).all()
+    dev_ids = [d.id for d in devs if d.credential_id]
+    app = current_app._get_current_object()
+    log_event(f"Optical diagnostics streaming scan started ({len(dev_ids)} switches)", "device", user=session.get("user"))
+    return Response(
+        stream_with_context(operations.stream_scan_optics(app, dev_ids)),
+        mimetype="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
+
+
+@bp.route("/api/devices/<int:dev_id>/optics")
+def api_device_optics(dev_id):
+    d = db.get_or_404(Device, dev_id)
+    u = _current_user()
+    if not u.has_site_access(d.site_id):
+        abort(403, "Cannot inspect optical transceivers on devices from another site.")
+    try:
+        ports = operations.query_device_optics(d)
+        log_event("Single-device optical diagnostics inspected", "device", device=d)
+        return jsonify(ports=ports, device_name=d.name, host=d.host)
+    except Exception as e:
+        log_event(f"Optical diagnostics failed: {e}", "device", "ERROR", device=d)
+        return jsonify(error=f"{type(e).__name__}: {e}"), 500
 
 
 # --------------------------------------------------------------------------- backups

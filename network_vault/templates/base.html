@@ -27,6 +27,9 @@
       <a href="{{ url_for('web.backups') }}" class="{{ 'active' if ep.startswith('web.backup') or ep == 'web.compare' }}">{{ icon('archive') }}<span class="nav-label">Backups</span></a>
       <a href="{{ url_for('web.schedules') }}" class="{{ 'active' if ep.startswith('web.schedule') }}">{{ icon('clock') }}<span class="nav-label">Schedules</span></a>
       <a href="{{ url_for('web.logs') }}" class="{{ 'active' if ep.startswith('web.logs') }}">{{ icon('log') }}<span class="nav-label">Logs</span></a>
+      <div class="nav-sep">Operations</div>
+      <a href="{{ url_for('web.port_locator') }}" class="{{ 'active' if ep == 'web.port_locator' }}">{{ icon('target') }}<span class="nav-label">Port Locator</span></a>
+      <a href="{{ url_for('web.optics') }}" class="{{ 'active' if ep == 'web.optics' }}">{{ icon('optic') }}<span class="nav-label">Optical Health</span></a>
       <div class="nav-sep">Admin</div>
       {% if current_user_obj and current_user_obj.is_group_admin %}
       <a href="{{ url_for('web.sites') }}" class="{{ 'active' if ep.startswith('web.site') and ep != 'web.site_switch' }}">{{ icon('building') }}<span class="nav-label">Sites</span></a>
@@ -96,6 +99,34 @@
 <div id="toast"></div>
 <div class="modal-bg" id="modal" onclick="if(event.target===this)closeModal()">
   <div class="modal"><header><h2 style="margin:0"></h2><button class="btn sm" onclick="closeModal()">Close</button></header><div class="body"></div></div>
+</div>
+
+<!-- Persistent Global Minimized Port Locator Dock -->
+<div id="globalLocatorDock" class="global-locator-dock" style="display:none;" onclick="handleGlobalLocatorClick(event)">
+  <div class="gld-header">
+    <div style="min-width:0;flex:1;">
+      <div class="gld-title">
+        <span class="gld-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></span>
+        <span id="gldTitleText" class="font-bold">Tracing Host Port Across Switch Fabric</span>
+      </div>
+      <div class="gld-sub small muted" id="gldSubText">Resolving ARP entries & probing switch forwarding tables</div>
+    </div>
+    <div class="gld-actions" onclick="event.stopPropagation()">
+      <button type="button" class="gld-btn" onclick="maximizeGlobalLocator(event)" title="Restore / View in Port Locator">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      </button>
+      <button type="button" class="gld-btn" onclick="dismissGlobalLocator(event)" title="Dismiss trace">✕</button>
+    </div>
+  </div>
+  <div class="gld-body">
+    <div class="gld-status-row">
+      <span id="gldStatusText" class="font-bold" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px;">Starting host trace…</span>
+      <span id="gldPercent" class="mono font-bold" style="color:var(--accent);margin-left:8px;">0%</span>
+    </div>
+    <div class="gld-progress-bar">
+      <div id="gldBarFill" class="gld-progress-fill" style="width:0%;"></div>
+    </div>
+  </div>
 </div>
 <script src="{{ url_for('static', filename='app.js') }}?v={{ app_version }}"></script>
 {% block scripts %}{% endblock %}

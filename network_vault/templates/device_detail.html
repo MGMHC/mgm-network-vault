@@ -51,6 +51,10 @@
         <button class="btn" onclick="runTool({{ d.id }}, 'unsaved', this)">{{ icon('diff') }}Unsaved changes (startup vs running)</button>
       {% endif %}
       <button class="btn" onclick="runTool({{ d.id }}, 'vc', this)">{{ 'Virtual Chassis status' if d.is_juniper else 'Stack status' }}</button>
+      <button class="btn" onclick="runOpticsModal({{ d.id }}, this)">{{ icon('optic') }}Optical transceivers (DOM/DDM)</button>
+      <button class="btn" onclick="runTool({{ d.id }}, 'macs', this)">MAC address table</button>
+      <button class="btn" onclick="runTool({{ d.id }}, 'arp', this)">ARP table</button>
+      <a class="btn" href="{{ url_for('web.port_locator') }}?device={{ d.id }}">{{ icon('target') }}Locate host on this switch…</a>
     </div>
   </div>
 </div>

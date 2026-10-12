@@ -1,0 +1,527 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Optical Transceiver Health (DOM/DDM){% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1><span class="title-icon">{{ icon('optic') }}</span> Optical Transceiver Health (DOM/DDM)</h1>
+    <div class="sub">Fiber optic signal power (TX/RX dBm), attenuation warnings, and loss-of-signal diagnostics across campus switches.</div>
+  </div>
+  <div class="actions">
+    <button id="scanBtn" class="btn primary" onclick="startOpticsScan()">
+      {{ icon('refresh') }} Scan Fiber Links Now
+    </button>
+  </div>
+</div>
+
+<!-- Optical Health Summary KPI Box (Top of page) -->
+<div class="card optics-summary-card">
+  <div class="optics-summary-strip">
+    <div class="optics-kpi-item optics-kpi-total active" data-filter="all" onclick="selectKpiFilter('all')" title="Filter: All Fiber Ports">
+      <div class="optics-kpi-icon">
+        {{ icon('optic') }}
+      </div>
+      <div class="optics-kpi-content">
+        <div class="optics-kpi-val"><span id="kpiTotal">0</span></div>
+        <div class="optics-kpi-label">Total Fiber Ports</div>
+      </div>
+    </div>
+
+    <div class="optics-kpi-item optics-kpi-ok" data-filter="ok" onclick="selectKpiFilter('ok')" title="Filter: Optimal Signals Only">
+      <div class="optics-kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="optics-kpi-content">
+        <div class="optics-kpi-val"><span id="kpiOk" style="color:var(--ok);">0</span></div>
+        <div class="optics-kpi-label">Optimal Signals</div>
+      </div>
+    </div>
+
+    <div class="optics-kpi-item optics-kpi-warn" data-filter="warn" onclick="selectKpiFilter('warn')" title="Filter: Low Signal / Attenuation Warnings">
+      <div class="optics-kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="optics-kpi-content">
+        <div class="optics-kpi-val"><span id="kpiWarn" style="color:var(--warn);">0</span></div>
+        <div class="optics-kpi-label">Low Signal / Attenuation</div>
+      </div>
+    </div>
+
+    <div class="optics-kpi-item optics-kpi-bad" data-filter="bad" onclick="selectKpiFilter('bad')" title="Filter: Loss of Light / Dark Fiber">
+      <div class="optics-kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      </div>
+      <div class="optics-kpi-content">
+        <div class="optics-kpi-val"><span id="kpiBad" style="color:var(--bad);">0</span></div>
+        <div class="optics-kpi-label">Loss of Light / Dark Fiber</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Controls Bar -->
+<div class="card" style="margin-bottom: 20px;">
+  <div class="locator-search-grid" style="align-items: center;">
+    <div class="form-group" style="flex: 1; min-width: 200px;">
+      <label for="opticsSiteFilter" style="display:block;margin-bottom:6px;font-weight:600;">Campus Site</label>
+      <select id="opticsSiteFilter" class="input-lg" style="width:100%;" onchange="filterLocalPorts()">
+        {% if current_user_obj.is_group_admin %}
+        <option value="all">All Sites (Group View)</option>
+        {% else %}
+        <option value="all">All My Sites</option>
+        {% endif %}
+        {% for s in (all_sites if current_user_obj.is_group_admin else user_available_sites) %}
+        <option value="{{ s.id }}" {% if current_site_id == s.id %}selected{% endif %}>{{ s.code }} · {{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-group" style="flex: 1; min-width: 200px;">
+      <label for="opticsSwitchFilter" style="display:block;margin-bottom:6px;font-weight:600;">Switch</label>
+      <select id="opticsSwitchFilter" class="input-lg" style="width:100%;" onchange="filterLocalPorts()">
+        <option value="all">All switches in scope</option>
+        {% for d in devices %}
+        <option value="{{ d.id }}">{{ d.name }} ({{ d.host }})</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-group" style="flex: 1; min-width: 200px;">
+      <label for="opticsStatusFilter" style="display:block;margin-bottom:6px;font-weight:600;">Signal Health Filter</label>
+      <select id="opticsStatusFilter" class="input-lg" style="width:100%;" onchange="filterLocalPorts()">
+        <option value="all">All Fiber Ports</option>
+        <option value="issues">Issues Only (Warnings & Critical)</option>
+        <option value="bad">Critical / Loss of Light Only</option>
+        <option value="warn">Low Signal Warnings Only</option>
+        <option value="ok">Optimal Signal Only</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- Results Area -->
+<div id="opticsResultsArea">
+  <!-- Initial Callout if Not Scanned -->
+  <div id="opticsEmptyInitial" class="card" style="text-align:center; padding: 48px 20px;">
+    <div style="font-size:36px;margin-bottom:12px;">💡</div>
+    <h3 style="margin-bottom:8px;">Optical Diagnostics Ready</h3>
+    <p class="muted small" style="max-width:560px;margin:0 auto 18px;">Click below to scan transceiver DOM/DDM telemetry on campus switches. Check fiber optic health, detect dirty patches, and find dark fibers before links fail.</p>
+    <button class="btn primary btn-lg" onclick="startOpticsScan()">{{ icon('optic') }} Scan All Fiber Links</button>
+  </div>
+
+  <!-- Ports Table Card -->
+  <div id="opticsTableCard" class="card flush" style="display:none;">
+    <div class="card-head">
+      <h2>Fiber Transceivers (<span id="visiblePortsCount">0</span>)</h2>
+      <span class="muted small">DOM/DDM Telemetry Readings</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Switch</th>
+            <th>Floor / Location</th>
+            <th>Interface</th>
+            <th style="min-width: 170px;">Receiver Signal (RX Power)</th>
+            <th>Transmitter (TX)</th>
+            <th>Temp / Volt / Bias</th>
+            <th>Status / Diagnosis</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="opticsBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Progress Window with Live Logging Modal -->
+<div id="opticsProgressModal" class="op-modal-backdrop" style="display: none;">
+  <div class="op-modal" role="dialog" aria-modal="true" aria-labelledby="opModalTitle">
+    <div class="op-modal-header" onclick="restoreOpticsModal(event)">
+      <div>
+        <h3 id="opModalTitle" class="op-modal-title">
+          <span style="color:var(--mgm-gold);">{{ icon('optic') }}</span>
+          Scanning Optical Transceivers (DOM/DDM)
+        </h3>
+        <div class="op-modal-sub">Live SSH hardware telemetry stream across campus switches</div>
+      </div>
+      <div class="op-modal-header-actions" onclick="event.stopPropagation()">
+        <button type="button" class="op-modal-btn" id="opticsMinimizeBtn" onclick="toggleOpticsMinimize(event)" title="Minimize scan (run in background)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button type="button" class="op-modal-close" onclick="closeOpticsProgressModal()" title="Close">&times;</button>
+      </div>
+    </div>
+
+    <!-- Progress Bar & KPIs -->
+    <div class="op-progress-section" onclick="restoreOpticsModal(event)">
+      <div class="op-progress-info">
+        <span id="opticsModalStatusText" class="font-bold">Initializing scan…</span>
+        <span id="opticsModalPercent" class="mono font-bold" style="color:var(--accent);">0%</span>
+      </div>
+      <div class="op-progress-bar">
+        <div id="opticsModalBarFill" class="op-progress-fill" style="width: 0%;"></div>
+      </div>
+      <div class="op-progress-stats">
+        <div class="op-stat-pill">Switches Scanned: <b id="modalStatSwitches">0 / 0</b></div>
+        <div class="op-stat-pill">Fiber Ports Found: <b id="modalStatPorts" style="color:var(--accent);">0</b></div>
+        <div class="op-stat-pill">Optimal: <b id="modalStatOk" style="color:var(--ok);">0</b></div>
+        <div class="op-stat-pill">Warnings: <b id="modalStatWarn" style="color:var(--warn);">0</b></div>
+        <div class="op-stat-pill">Critical: <b id="modalStatBad" style="color:var(--bad);">0</b></div>
+      </div>
+    </div>
+
+    <!-- Live Terminal Console -->
+    <div class="op-terminal">
+      <div class="op-terminal-header">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="color:#38bdf8;">●</span>
+          <span>Live Switch SSH Telemetry Stream</span>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center;">
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;">
+            <input type="checkbox" id="opticsAutoScroll" checked> Auto-Scroll
+          </label>
+          <button class="btn sm" onclick="copyOpticsLogs()" style="padding:2px 8px;font-size:11px;">Copy Logs</button>
+        </div>
+      </div>
+      <div id="opticsTerminalLogs" class="op-terminal-logs"></div>
+    </div>
+
+    <!-- Modal Footer -->
+    <div class="op-modal-footer">
+      <div>
+        <button id="opticsCancelBtn" class="btn bad sm" onclick="abortOpticsScan()">Cancel Scan</button>
+      </div>
+      <div>
+        <button id="opticsDoneBtn" class="btn primary" onclick="closeOpticsProgressModal()" disabled>Close & View Results</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allOpticsPorts = [];
+let opticsAbortCtrl = null;
+let opticsLogs = [];
+
+function appendOpticsLog(timeStr, level, msg) {
+  const term = document.getElementById('opticsTerminalLogs');
+  if (!term) return;
+  const line = document.createElement('div');
+  line.className = 'op-log-line';
+  
+  const time = timeStr || new Date().toTimeString().slice(0, 8);
+  const lvl = (level || 'info').toLowerCase();
+  
+  line.innerHTML = `
+    <span class="op-log-time">${escapeHtml(time)}</span>
+    <span class="op-log-badge ${lvl}">${escapeHtml(lvl.toUpperCase())}</span>
+    <span class="op-log-msg">${escapeHtml(msg)}</span>
+  `;
+  term.appendChild(line);
+  opticsLogs.push(`[${time}] [${lvl.toUpperCase()}] ${msg}`);
+
+  if (document.getElementById('opticsAutoScroll')?.checked) {
+    term.scrollTop = term.scrollHeight;
+  }
+}
+
+function copyOpticsLogs() {
+  const text = opticsLogs.join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    toast('Logs copied to clipboard', 'ok');
+  }).catch(() => {
+    toast('Failed to copy logs', 'bad');
+  });
+}
+
+function toggleOpticsMinimize(e) {
+  if (e) e.stopPropagation();
+  const modal = document.getElementById('opticsProgressModal');
+  const isMin = modal.classList.toggle('minimized');
+  const btn = document.getElementById('opticsMinimizeBtn');
+  if (isMin) {
+    btn.title = "Maximize / Restore console";
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`;
+  } else {
+    btn.title = "Minimize scan (run in background)";
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+  }
+}
+
+function restoreOpticsModal(e) {
+  const modal = document.getElementById('opticsProgressModal');
+  if (modal.classList.contains('minimized')) {
+    if (e) e.stopPropagation();
+    toggleOpticsMinimize();
+  }
+}
+
+function closeOpticsProgressModal() {
+  const modal = document.getElementById('opticsProgressModal');
+  modal.classList.remove('minimized');
+  modal.style.display = 'none';
+  const btn = document.getElementById('opticsMinimizeBtn');
+  if (btn) {
+    btn.title = "Minimize scan (run in background)";
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+  }
+}
+
+function abortOpticsScan() {
+  if (opticsAbortCtrl) {
+    opticsAbortCtrl.abort();
+  }
+}
+
+async function startOpticsScan() {
+  const siteId = document.getElementById('opticsSiteFilter').value;
+  const devVal = document.getElementById('opticsSwitchFilter').value;
+  const device_ids = devVal !== 'all' ? [parseInt(devVal)] : null;
+  const btn = document.getElementById('scanBtn');
+
+  // Open modal
+  const modal = document.getElementById('opticsProgressModal');
+  modal.classList.remove('minimized');
+  const minBtn = document.getElementById('opticsMinimizeBtn');
+  if (minBtn) {
+    minBtn.title = "Minimize scan (run in background)";
+    minBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+  }
+  const term = document.getElementById('opticsTerminalLogs');
+  const statusText = document.getElementById('opticsModalStatusText');
+  const barFill = document.getElementById('opticsModalBarFill');
+  const percentText = document.getElementById('opticsModalPercent');
+  const doneBtn = document.getElementById('opticsDoneBtn');
+  const cancelBtn = document.getElementById('opticsCancelBtn');
+
+  modal.style.display = 'flex';
+  term.innerHTML = '';
+  opticsLogs = [];
+  statusText.textContent = 'Connecting to campus switches…';
+  barFill.style.width = '0%';
+  percentText.textContent = '0%';
+  doneBtn.disabled = true;
+  cancelBtn.disabled = false;
+  btn.disabled = true;
+
+  document.getElementById('modalStatSwitches').textContent = '0 / 0';
+  document.getElementById('modalStatPorts').textContent = '0';
+  document.getElementById('modalStatOk').textContent = '0';
+  document.getElementById('modalStatWarn').textContent = '0';
+  document.getElementById('modalStatBad').textContent = '0';
+  document.getElementById('kpiTotal').textContent = '0';
+  document.getElementById('kpiOk').textContent = '0';
+  document.getElementById('kpiWarn').textContent = '0';
+  document.getElementById('kpiBad').textContent = '0';
+
+  opticsAbortCtrl = new AbortController();
+
+  try {
+    const res = await fetch('/api/operations/optics/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': CSRF,
+      },
+      body: JSON.stringify({ site_id: siteId, device_ids: device_ids }),
+      signal: opticsAbortCtrl.signal,
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: Failed to start optics scan`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let totalSwitches = 0;
+    let portsFound = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // Keep unfinished tail
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let evt = null;
+        try { evt = JSON.parse(line); } catch (e) { continue; }
+
+        if (evt.type === 'init') {
+          totalSwitches = evt.total;
+          document.getElementById('modalStatSwitches').textContent = `0 / ${totalSwitches}`;
+          appendOpticsLog(evt.timestamp, 'info', evt.msg);
+        } else if (evt.type === 'log') {
+          appendOpticsLog(evt.timestamp, evt.level || 'info', evt.msg);
+        } else if (evt.type === 'progress') {
+          barFill.style.width = `${evt.percent}%`;
+          percentText.textContent = `${evt.percent}%`;
+          statusText.textContent = `Scanning switch ${evt.done} of ${evt.total}: ${evt.device}…`;
+          document.getElementById('modalStatSwitches').textContent = `${evt.done} / ${evt.total}`;
+          if (evt.ports_count) {
+            portsFound += evt.ports_count;
+            document.getElementById('modalStatPorts').textContent = portsFound;
+          }
+        } else if (evt.type === 'complete') {
+          const sum = evt.summary;
+          allOpticsPorts = sum.ports || [];
+          document.getElementById('kpiTotal').textContent = sum.total_ports || 0;
+          document.getElementById('kpiOk').textContent = sum.healthy_count || 0;
+          document.getElementById('kpiWarn').textContent = sum.warning_count || 0;
+          document.getElementById('kpiBad').textContent = sum.critical_count || 0;
+
+          document.getElementById('modalStatPorts').textContent = sum.total_ports || 0;
+          document.getElementById('modalStatOk').textContent = sum.healthy_count || 0;
+          document.getElementById('modalStatWarn').textContent = sum.warning_count || 0;
+          document.getElementById('modalStatBad').textContent = sum.critical_count || 0;
+
+          barFill.style.width = '100%';
+          percentText.textContent = '100%';
+          statusText.textContent = '✅ Scan complete! Telemetry updated.';
+          filterLocalPorts();
+        }
+      }
+    }
+
+    doneBtn.disabled = false;
+    cancelBtn.disabled = true;
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      appendOpticsLog(new Date().toTimeString().slice(0, 8), 'warn', 'Scan aborted by user.');
+      statusText.textContent = 'Scan cancelled by user.';
+    } else {
+      appendOpticsLog(new Date().toTimeString().slice(0, 8), 'error', 'Error: ' + err.message);
+      statusText.textContent = 'Scan failed: ' + err.message;
+    }
+    doneBtn.disabled = false;
+    cancelBtn.disabled = true;
+  } finally {
+    btn.disabled = false;
+    opticsAbortCtrl = null;
+  }
+}
+
+function selectKpiFilter(filterValue) {
+  const select = document.getElementById('opticsStatusFilter');
+  if (select) {
+    select.value = filterValue;
+  }
+  filterLocalPorts();
+}
+
+function updateActiveKpiItem(filterValue) {
+  document.querySelectorAll('.optics-kpi-item').forEach(el => {
+    if (el.dataset.filter === filterValue) {
+      el.classList.add('active');
+    } else {
+      el.classList.remove('active');
+    }
+  });
+}
+
+function filterLocalPorts() {
+  const statusFilter = document.getElementById('opticsStatusFilter').value;
+  const switchFilter = document.getElementById('opticsSwitchFilter').value;
+
+  updateActiveKpiItem(statusFilter);
+
+  let inScopePorts = allOpticsPorts;
+
+  if (switchFilter !== 'all') {
+    const swId = parseInt(switchFilter);
+    inScopePorts = inScopePorts.filter(p => p.switch_id === swId);
+  }
+
+  // Update summary counts based on active switch scope
+  if (allOpticsPorts.length > 0) {
+    document.getElementById('kpiTotal').textContent = inScopePorts.length;
+    document.getElementById('kpiOk').textContent = inScopePorts.filter(p => p.status === 'ok').length;
+    document.getElementById('kpiWarn').textContent = inScopePorts.filter(p => p.status === 'warn').length;
+    document.getElementById('kpiBad').textContent = inScopePorts.filter(p => p.status === 'bad').length;
+  }
+
+  let filtered = inScopePorts;
+
+  if (statusFilter === 'issues') {
+    filtered = filtered.filter(p => p.status === 'bad' || p.status === 'warn');
+  } else if (statusFilter !== 'all') {
+    filtered = filtered.filter(p => p.status === statusFilter);
+  }
+
+  renderPorts(filtered);
+}
+
+function renderPorts(ports) {
+  const tableCard = document.getElementById('opticsTableCard');
+  const tbody = document.getElementById('opticsBody');
+  document.getElementById('visiblePortsCount').textContent = ports.length;
+
+  if (ports.length === 0 && allOpticsPorts.length === 0) {
+    tableCard.style.display = 'none';
+    document.getElementById('opticsEmptyInitial').style.display = 'block';
+    return;
+  }
+
+  document.getElementById('opticsEmptyInitial').style.display = 'none';
+  tableCard.style.display = 'block';
+  tbody.innerHTML = '';
+
+  if (ports.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">No optical ports match the selected filter.</td></tr>';
+    return;
+  }
+
+  ports.forEach(p => {
+    const tr = document.createElement('tr');
+
+    // Determine signal meter bar color
+    let barColor = 'var(--ok)';
+    if (p.status === 'warn') barColor = 'var(--warn)';
+    if (p.status === 'bad') barColor = 'var(--bad)';
+
+    const rxDbmText = p.rx_dbm !== null ? `${p.rx_dbm.toFixed(2)} dBm` : 'N/A';
+    const txDbmText = p.tx_dbm !== null ? `${p.tx_dbm.toFixed(2)} dBm` : 'N/A';
+    const tempText = p.temp_c !== null ? `${p.temp_c.toFixed(1)}°C` : '—';
+    const voltText = p.voltage_v !== null ? `${p.voltage_v.toFixed(2)}V` : '—';
+    const biasText = p.bias_ma !== null ? `${p.bias_ma.toFixed(1)}mA` : '—';
+
+    tr.innerHTML = `
+      <td>
+        <a href="/devices/${p.switch_id}"><b>${escapeHtml(p.switch_name)}</b></a>
+        <div class="muted small mono">${escapeHtml(p.switch_ip)}</div>
+      </td>
+      <td>${escapeHtml(p.switch_group)} · ${escapeHtml(p.switch_location)}</td>
+      <td class="mono font-bold" style="font-size:13.5px;color:var(--accent);">${escapeHtml(p.interface)}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="mono font-bold" style="font-size:13px;min-width:76px;">${rxDbmText}</span>
+          <div class="signal-meter" title="RX Signal: ${p.rx_percent}%">
+            <div class="signal-fill" style="width:${p.rx_percent}%;background:${barColor};"></div>
+          </div>
+        </div>
+      </td>
+      <td class="mono small">${txDbmText}</td>
+      <td class="small muted mono">${tempText} · ${voltText} · ${biasText}</td>
+      <td>
+        <span class="badge ${p.status}">${escapeHtml(p.status_label)}</span>
+        <div class="small muted" style="margin-top:2px;">${escapeHtml(p.status_desc)}</div>
+        ${(p.alarms && p.alarms.length) ? `<div class="badge bad" style="margin-top:4px;">${escapeHtml(p.alarms.join(', '))}</div>` : ''}
+      </td>
+      <td class="num">
+        <a class="btn sm" href="/devices/${p.switch_id}">Switch ↗</a>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+</script>
+{% endblock %}

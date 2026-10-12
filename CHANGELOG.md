@@ -4,6 +4,36 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.5.0] - 2026-10-10
+
+### Added
+- **MAC / IP Port Locator across Switches**:
+  - Live discovery tool located under the new **Operations** sidebar navigation (`/operations/port-locator`).
+  - Search any endpoint by **IPv4 address** (e.g. `10.10.45.120`) or **MAC address** (colon, Cisco dot, dash, or unformatted hex).
+  - Automatically queries ARP tables across core and distribution switches to resolve IP-to-MAC mapping, then queries MAC address tables across campus switches in parallel.
+  - **Edge vs Uplink Distinction & Accurate Trunk Validation**: Validates Junos `port-mode trunk`, `interface-mode trunk`, `vlan members all`, `802.3ad` LACP bundles, `native-vlan-id`, Cisco `switchport mode trunk`, and uplink descriptions (`uplink-to-distribution`, `to-dist`, `dsw`, etc.) from switch backups, ensuring transit hops are never falsely classified as direct edge ports.
+  - **Persistent Floating Search Dock**: Minimized Port Locator search widget stays consistently visible and updates live across all pages and sidebar menus (Dashboard, Devices, Backups, Optics, Settings), allowing seamless navigation during searches.
+  - **OUI Vendor Hardware Identification**: Integrated catalog of enterprise and hospital hardware vendors (VMware, Philips Healthcare, GE Healthcare, Mindray, Siemens Healthineers, Apple, Cisco, Juniper, etc.) to immediately identify connected device types.
+  - **Live Trace Progress Window & Terminal Console**: Real-time streaming modal with progress bar, step status, and auto-scrolling terminal logs showing step-by-step ARP resolution and switch table probing.
+  - Site-aware scoping and permissions adhering to multi-site access control.
+
+- **Optical Transceiver (SFP / SFP+) Signal Health (DOM/DDM)**:
+  - Dedicated campus-wide fiber diagnostics monitor (`/operations/optics`) for checking fiber link health.
+  - **Real-Time Scan Progress Window & Streaming Terminal**: Animated progress modal with live terminal logs streaming each switch connection, SFP detection, RX/TX power levels, and diagnostic results in real time.
+  - Real-time optical telemetry polling over SSH:
+    - Junos: `show interfaces diagnostics optics`
+    - Cisco Catalyst 1300 / CBS / SG: `show optical-transceiver-diagnostics` / `show fiber-ports optical-transceiver`
+    - Cisco IOS: `show interfaces transceiver detail`
+  - Parses Receiver Optical Power (RX dBm), Transmitter Output Power (TX dBm), Module Temperature (°C), Supply Voltage, and Laser Bias Current.
+  - **Intelligent Health Grading & Visual Gauges**:
+    - **Optimal Signal (Green)**: Within standard operating margin (-1 dBm to -18 dBm).
+    - **Low Signal Warning (Amber)**: High optical attenuation (-18 dBm to -28 dBm), alerting engineers to dirty patches or high fiber bend loss.
+    - **Critical / Loss of Light (Red)**: RX signal <= -28 dBm or loss-of-signal alarm, identifying dark fibers or broken transceiver lasers.
+  - Integrated into single switch view: "Optical transceivers (DOM/DDM)" live tool button on [device_detail.html](file:///l:/MGM/network-vault/network_vault/templates/device_detail.html) with interactive modal breakdown.
+
+- **MAC & ARP Live Inspection Tools**:
+  - Direct live tools on Device Detail page for instant inspection of switch MAC address forwarding tables and ARP tables without manual terminal access.
+
 ## [1.4.2] - 2026-10-09
 
 ### Fixed

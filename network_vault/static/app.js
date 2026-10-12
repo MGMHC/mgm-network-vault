@@ -291,3 +291,293 @@ function toggleSidebar() {
     setTimeout(() => { location.href = dest; }, 220);
   });
 })();
+
+async function runOpticsModal(devId, btn) {
+  if (btn) btn.disabled = true;
+  openModal('Optical Diagnostics', '<div style="text-align:center;padding:24px"><div class="spinner-pulse" style="margin:0 auto 12px"></div><p class="muted">Reading transceiver optical telemetry from switch over SSH…</p></div>');
+  try {
+    const res = await fetch(`/api/devices/${devId}/optics`).then(r => r.json());
+    if (res.error) throw new Error(res.error);
+    const ports = res.ports || [];
+    if (!ports.length) {
+      openModal(
+        `${res.device_name || 'Switch'} · Optical Transceivers`,
+        `<div style="text-align:center;padding:24px">
+          <p><b>No optical transceivers detected.</b></p>
+          <p class="muted small">This switch may have all-copper RJ45 interfaces or digital optical monitoring (DDM) is not supported on the inserted modules.</p>
+        </div>`
+      );
+      return;
+    }
+
+    let rows = ports.map(p => {
+      let barColor = 'var(--ok)';
+      if (p.status === 'warn') barColor = 'var(--warn)';
+      if (p.status === 'bad') barColor = 'var(--bad)';
+      const rxText = p.rx_dbm !== null ? `${p.rx_dbm.toFixed(2)} dBm` : 'N/A';
+      const txText = p.tx_dbm !== null ? `${p.tx_dbm.toFixed(2)} dBm` : 'N/A';
+      const tempText = p.temp_c !== null ? `${p.temp_c.toFixed(1)}°C` : '—';
+      return `
+        <tr>
+          <td class="mono font-bold" style="color:var(--accent);">${escapeHtml(p.interface)}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="mono font-bold">${rxText}</span>
+              <div class="signal-meter" title="RX Signal: ${p.rx_percent}%">
+                <div class="signal-fill" style="width:${p.rx_percent}%;background:${barColor};"></div>
+              </div>
+            </div>
+          </td>
+          <td class="mono small">${txText}</td>
+          <td class="mono small muted">${tempText}</td>
+          <td>
+            <span class="badge ${p.status}">${escapeHtml(p.status_label)}</span>
+            ${p.alarms && p.alarms.length ? `<div class="badge bad" style="margin-top:2px;">${escapeHtml(p.alarms.join(', '))}</div>` : ''}
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    const html = `
+      <div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+        <div><b>${escapeHtml(res.device_name)}</b> <span class="mono muted small">(${escapeHtml(res.host)})</span></div>
+        <span class="badge blue">${ports.length} Optical Port(s)</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Port</th>
+              <th>RX Optical Power</th>
+              <th>TX Power</th>
+              <th>Temp</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+    openModal(`${res.device_name} · Optical Diagnostics (DOM/DDM)`, html);
+  } catch (err) {
+    openModal('Optical Diagnostics Failed', `<div class="flash error" style="margin:0">${escapeHtml(err.message)}</div>`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+/* --------------------------------------------------------------------------- Persistent Global Port Locator Dock & Tracker */
+const ACTIVE_LOCATOR_KEY = 'nv_active_locator_trace';
+
+function getActiveLocatorTrace() {
+  try {
+    const raw = localStorage.getItem(ACTIVE_LOCATOR_KEY);
+    if (!raw) return null;
+    const item = JSON.parse(raw);
+    if (Date.now() - (item.time || 0) > 30 * 60 * 1000) {
+      localStorage.removeItem(ACTIVE_LOCATOR_KEY);
+      return null;
+    }
+    return item;
+  } catch (e) {
+    localStorage.removeItem(ACTIVE_LOCATOR_KEY);
+    return null;
+  }
+}
+
+function setActiveLocatorTrace(data) {
+  try {
+    const existing = getActiveLocatorTrace() || {};
+    const updated = { ...existing, ...data, time: Date.now() };
+    localStorage.setItem(ACTIVE_LOCATOR_KEY, JSON.stringify(updated));
+    return updated;
+  } catch (e) {}
+}
+
+function clearActiveLocatorTrace() {
+  localStorage.removeItem(ACTIVE_LOCATOR_KEY);
+  const dock = document.getElementById('globalLocatorDock');
+  if (dock) dock.style.display = 'none';
+}
+
+function renderGlobalLocatorDock(trace) {
+  const dock = document.getElementById('globalLocatorDock');
+  if (!dock || !trace) return;
+
+  const isPortLocatorPage = window.location.pathname.startsWith('/operations/port-locator');
+  // If we are on port-locator page, the dock only shows if explicitly minimized
+  if (isPortLocatorPage && !trace.minimized) {
+    dock.style.display = 'none';
+    return;
+  }
+
+  const titleEl = document.getElementById('gldTitleText');
+  const statusEl = document.getElementById('gldStatusText');
+  const percentEl = document.getElementById('gldPercent');
+  const barFillEl = document.getElementById('gldBarFill');
+
+  if (titleEl) titleEl.textContent = `Tracing '${trace.query || 'host'}'…`;
+
+  if (trace.status === 'complete') {
+    dock.classList.add('success');
+    dock.classList.remove('error');
+    if (barFillEl) barFillEl.style.width = '100%';
+    if (percentEl) {
+      percentEl.textContent = '100%';
+      percentEl.style.color = 'var(--ok)';
+    }
+    if (statusEl) {
+      if (trace.result && trace.result.best_match) {
+        const bm = trace.result.best_match;
+        statusEl.textContent = `✅ Found: ${bm.switch_name} (${bm.interface})`;
+        statusEl.className = 'small ok font-bold';
+      } else {
+        statusEl.textContent = 'Trace finished · Click to view';
+        statusEl.className = 'small muted';
+      }
+    }
+  } else if (trace.status === 'error' || trace.status === 'cancelled') {
+    dock.classList.add('error');
+    dock.classList.remove('success');
+    if (percentEl) percentEl.style.color = 'var(--danger)';
+    if (statusEl) {
+      statusEl.textContent = trace.error || 'Trace cancelled';
+      statusEl.className = 'small danger';
+    }
+  } else {
+    dock.classList.remove('success', 'error');
+    const pct = trace.percent || 0;
+    if (barFillEl) barFillEl.style.width = `${pct}%`;
+    if (percentEl) {
+      percentEl.textContent = `${pct}%`;
+      percentEl.style.color = 'var(--accent)';
+    }
+    if (statusEl) {
+      statusEl.textContent = trace.message || `Probing switches (${trace.done || 0}/${trace.total || 0})…`;
+      statusEl.className = 'small muted';
+    }
+  }
+
+  dock.style.display = 'block';
+}
+
+function handleGlobalLocatorClick(e) {
+  if (e) e.stopPropagation();
+  maximizeGlobalLocator(e);
+}
+
+function maximizeGlobalLocator(e) {
+  if (e) e.stopPropagation();
+  const trace = getActiveLocatorTrace();
+  if (!trace) return;
+
+  const targetUrl = `/operations/port-locator?run_id=${encodeURIComponent(trace.runId)}&q=${encodeURIComponent(trace.query || '')}`;
+
+  if (window.location.pathname.startsWith('/operations/port-locator')) {
+    if (typeof restoreLocatorModal === 'function') {
+      restoreLocatorModal();
+    } else {
+      window.location.href = targetUrl;
+    }
+  } else {
+    window.location.href = targetUrl;
+  }
+}
+
+async function dismissGlobalLocator(e) {
+  if (e) e.stopPropagation();
+  const trace = getActiveLocatorTrace();
+  if (trace && trace.runId) {
+    try {
+      fetch(`/api/operations/port-locator/cancel/${trace.runId}`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': CSRF },
+      });
+    } catch (_) {}
+  }
+  clearActiveLocatorTrace();
+  if (window.location.pathname.startsWith('/operations/port-locator')) {
+    if (typeof closeLocatorProgressModal === 'function') {
+      closeLocatorProgressModal();
+    }
+  }
+}
+
+let _globalLocatorPollInterval = null;
+
+function pollGlobalLocatorStatus(runId) {
+  if (_globalLocatorPollInterval) clearInterval(_globalLocatorPollInterval);
+
+  const poll = async () => {
+    const trace = getActiveLocatorTrace();
+    if (!trace || trace.runId !== runId) {
+      clearInterval(_globalLocatorPollInterval);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/operations/port-locator/status/${runId}`);
+      if (!res.ok) {
+        if (res.status === 404) {
+          clearInterval(_globalLocatorPollInterval);
+          clearActiveLocatorTrace();
+        }
+        return;
+      }
+      const data = await res.json();
+
+      const updated = setActiveLocatorTrace({
+        status: data.status,
+        percent: data.percent,
+        done: data.done,
+        total: data.total,
+        message: data.device ? `Probing switch ${data.done}/${data.total}: ${data.device}…` : trace.message,
+        result: data.result || trace.result,
+        error: data.error,
+      });
+
+      renderGlobalLocatorDock(updated);
+
+      if (data.status !== 'running') {
+        clearInterval(_globalLocatorPollInterval);
+        if (data.status === 'complete' && !window.location.pathname.startsWith('/operations/port-locator')) {
+          const hit = data.result && data.result.best_match;
+          if (hit) {
+            toast(`🎯 Port Locator: Host physical port pinpointed on <b>${hit.switch_name}</b> (port ${hit.interface})! Click widget below to view.`, 'ok', 7000);
+          } else {
+            toast(`Port Locator: Trace completed. Click widget below to view results.`, 'ok', 5000);
+          }
+        }
+      }
+    } catch (err) {
+      // transient network blip
+    }
+  };
+
+  poll();
+  _globalLocatorPollInterval = setInterval(poll, 1500);
+}
+
+(function initGlobalLocatorTracker() {
+  try {
+    const trace = getActiveLocatorTrace();
+    if (!trace || !trace.runId) return;
+
+    const isPortLocatorPage = window.location.pathname.startsWith('/operations/port-locator');
+
+    // If not on port-locator page, show the dock and start polling if running
+    if (!isPortLocatorPage) {
+      renderGlobalLocatorDock(trace);
+      if (trace.status === 'running') {
+        pollGlobalLocatorStatus(trace.runId);
+      }
+    } else {
+      // On port locator page: if minimized is true, show the dock
+      if (trace.minimized) {
+        renderGlobalLocatorDock(trace);
+      }
+    }
+  } catch (e) {}
+})();
+
+
