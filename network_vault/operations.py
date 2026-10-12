@@ -754,7 +754,23 @@ def get_locator_run(run_id):
         run = _LOCATOR_RUNS.get(run_id)
         if not run:
             return None
-        return dict(run)
+        return {
+            "id": run.get("id"),
+            "query": run.get("query"),
+            "status": run.get("status"),
+            "is_running": run.get("is_running"),
+            "percent": run.get("percent", 0),
+            "done": run.get("done", 0),
+            "total": run.get("total", 0),
+            "device": run.get("device", ""),
+            "matches_found": run.get("matches_found", 0),
+            "resolved_ip": run.get("resolved_ip"),
+            "resolved_mac": run.get("resolved_mac"),
+            "logs": list(run.get("logs", [])),
+            "result": run.get("result"),
+            "error": run.get("error"),
+            "started_at": run.get("started_at"),
+        }
 
 def cancel_locator_run(run_id):
     """Signal cancellation for a running locator trace."""
@@ -802,6 +818,9 @@ def stream_locate_host(app, devices, query_str, run_id=None):
             "total": total,
             "device": "",
             "matches_found": 0,
+            "resolved_ip": None,
+            "resolved_mac": None,
+            "logs": [],
             "result": None,
             "error": None,
             "started_at": now_ts,
@@ -812,6 +831,23 @@ def stream_locate_host(app, devices, query_str, run_id=None):
     def timestamp():
         return datetime.now().strftime("%H:%M:%S")
 
+    def emit_log(level, msg, ts=None):
+        t_str = ts or timestamp()
+        entry = {
+            "type": "log",
+            "level": level,
+            "timestamp": t_str,
+            "msg": msg,
+        }
+        with _LOCATOR_LOCK:
+            if run_id in _LOCATOR_RUNS:
+                _LOCATOR_RUNS[run_id]["logs"].append({
+                    "timestamp": t_str,
+                    "level": level,
+                    "msg": msg,
+                })
+        q.put(entry)
+
     global _APP_REF
     _APP_REF = app
 
@@ -819,15 +855,25 @@ def stream_locate_host(app, devices, query_str, run_id=None):
         ctx = app.app_context()
         ctx.push()
         try:
+            init_msg = f"Starting trace for '{q_str}' across {total} campus switches..."
+            with _LOCATOR_LOCK:
+                if run_id in _LOCATOR_RUNS:
+                    _LOCATOR_RUNS[run_id]["logs"].append({
+                        "timestamp": timestamp(),
+                        "level": "info",
+                        "msg": init_msg,
+                    })
+
             q.put({
                 "type": "init",
                 "run_id": run_id,
                 "total": total,
                 "timestamp": timestamp(),
-                "msg": f"Starting trace for '{q_str}' across {total} campus switches...",
+                "msg": init_msg,
             })
 
             if not q_str:
+                emit_log("error", "Search target is empty.")
                 q.put({
                     "type": "error",
                     "timestamp": timestamp(),
@@ -837,6 +883,7 @@ def stream_locate_host(app, devices, query_str, run_id=None):
                 return
 
             if not all_dev_ids:
+                emit_log("error", "No reachable switches available with credentials in this scope.")
                 q.put({
                     "type": "error",
                     "timestamp": timestamp(),
@@ -848,29 +895,27 @@ def stream_locate_host(app, devices, query_str, run_id=None):
             if is_ip(q_str):
                 target_ip = q_str
                 target_mac_clean = None
-                q.put({
-                    "type": "log",
-                    "level": "info",
-                    "timestamp": timestamp(),
-                    "msg": f"[Step 1/2] IP target detected: {target_ip}. Querying ARP on Core & Distribution switches...",
-                })
+                with _LOCATOR_LOCK:
+                    if run_id in _LOCATOR_RUNS:
+                        _LOCATOR_RUNS[run_id]["resolved_ip"] = target_ip
+                emit_log("info", f"[Step 1/2] IP target detected: {target_ip}. Querying ARP on Core & Distribution switches...")
             else:
                 target_ip = None
                 target_mac_clean = clean_mac(q_str)
                 if not target_mac_clean:
+                    err_msg = f"'{q_str}' is neither a valid IPv4 address nor a recognized MAC address."
+                    emit_log("error", err_msg)
                     q.put({
                         "type": "error",
                         "timestamp": timestamp(),
-                        "msg": f"'{q_str}' is neither a valid IPv4 address nor a recognized MAC address.",
+                        "msg": err_msg,
                     })
                     q.put(None)
                     return
-                q.put({
-                    "type": "log",
-                    "level": "info",
-                    "timestamp": timestamp(),
-                    "msg": f"[Step 1/2] MAC target detected: {format_mac(target_mac_clean)}. Querying ARP to resolve assigned IP...",
-                })
+                with _LOCATOR_LOCK:
+                    if run_id in _LOCATOR_RUNS:
+                        _LOCATOR_RUNS[run_id]["resolved_mac"] = format_mac(target_mac_clean, "colon")
+                emit_log("info", f"[Step 1/2] MAC target detected: {format_mac(target_mac_clean)}. Querying ARP to resolve assigned IP...")
 
             with app.app_context():
                 workers = min(total, max(2, get_int("max_workers")))
@@ -895,53 +940,49 @@ def stream_locate_host(app, devices, query_str, run_id=None):
                         resolved_mac = entries[0]["mac"]
                     if not resolved_ip:
                         resolved_ip = entries[0]["ip"]
-                    q.put({
-                        "type": "log",
-                        "level": "ok",
-                        "timestamp": timestamp(),
-                        "msg": f"[{dev_name}] ARP Resolved: IP {entries[0]['ip']} <-> MAC {entries[0]['mac']} (Interface: {entries[0]['interface']})",
-                    })
+                    with _LOCATOR_LOCK:
+                        if run_id in _LOCATOR_RUNS:
+                            _LOCATOR_RUNS[run_id]["resolved_ip"] = resolved_ip
+                            _LOCATOR_RUNS[run_id]["resolved_mac"] = resolved_mac
+                    emit_log("ok", f"[{dev_name}] ARP Resolved: IP {entries[0]['ip']} <-> MAC {entries[0]['mac']} (Interface: {entries[0]['interface']})")
                     break
 
             if not target_mac_clean:
-                q.put({
-                    "type": "log",
-                    "level": "warn",
-                    "timestamp": timestamp(),
-                    "msg": f"Target IP {target_ip} not found in campus ARP tables. Switch forwarding table lookup will not proceed.",
-                })
+                emit_log("warn", f"Target IP {target_ip} not found in campus ARP tables. Switch forwarding table lookup will not proceed.")
+                not_found_res = {
+                    "query": q_str,
+                    "query_type": "ip",
+                    "resolved_ip": target_ip,
+                    "resolved_mac": None,
+                    "vendor": "Unknown",
+                    "best_match": None,
+                    "all_matches": [],
+                    "switches_queried": total,
+                    "switches_responding": total,
+                    "message": f"Host IP {target_ip} not found in ARP tables on campus switches.",
+                }
+                with _LOCATOR_LOCK:
+                    if run_id in _LOCATOR_RUNS:
+                        _LOCATOR_RUNS[run_id]["status"] = "complete"
+                        _LOCATOR_RUNS[run_id]["is_running"] = False
+                        _LOCATOR_RUNS[run_id]["percent"] = 100
+                        _LOCATOR_RUNS[run_id]["done"] = total
+                        _LOCATOR_RUNS[run_id]["resolved_ip"] = target_ip
+                        _LOCATOR_RUNS[run_id]["resolved_mac"] = None
+                        _LOCATOR_RUNS[run_id]["result"] = not_found_res
+
                 q.put({
                     "type": "complete",
-                    "result": {
-                        "query": q_str,
-                        "query_type": "ip",
-                        "resolved_ip": target_ip,
-                        "resolved_mac": None,
-                        "vendor": "Unknown",
-                        "best_match": None,
-                        "all_matches": [],
-                        "switches_queried": total,
-                        "switches_responding": total,
-                        "message": f"Host IP {target_ip} not found in ARP tables on campus switches.",
-                    },
+                    "run_id": run_id,
+                    "result": not_found_res,
                     "timestamp": timestamp(),
                 })
                 q.put(None)
                 return
 
             vendor = lookup_oui(target_mac_clean)
-            q.put({
-                "type": "log",
-                "level": "ok",
-                "timestamp": timestamp(),
-                "msg": f"Hardware Vendor identified: {vendor} ({format_mac(target_mac_clean)})",
-            })
-            q.put({
-                "type": "log",
-                "level": "info",
-                "timestamp": timestamp(),
-                "msg": f"[Step 2/2] Scanning MAC forwarding tables across {total} switches...",
-            })
+            emit_log("ok", f"Hardware Vendor identified: {vendor} ({format_mac(target_mac_clean)})")
+            emit_log("info", f"[Step 2/2] Scanning MAC forwarding tables across {total} switches...")
 
             # Step 2: MAC Forwarding table search across all devices
             done_cnt = 0
@@ -963,12 +1004,7 @@ def stream_locate_host(app, devices, query_str, run_id=None):
                         matches = query_mac_table(d, target_mac_clean=target_mac_clean)
                 except Exception as e:
                     matches = []
-                    q.put({
-                        "type": "log",
-                        "level": "error",
-                        "timestamp": timestamp(),
-                        "msg": f"[{d_name}] Query error: {e}",
-                    })
+                    emit_log("error", f"[{d_name}] Query error: {e}")
 
                 with cnt_lock:
                     done_cnt += 1
@@ -982,12 +1018,7 @@ def stream_locate_host(app, devices, query_str, run_id=None):
                         is_up = is_uplink_port(m["interface"], device=d, device_id=did, app=app)
                         lvl = "warn" if is_up else "ok"
                         port_kind = "Uplink / Trunk" if is_up else "⭐ Access Edge Port"
-                        q.put({
-                            "type": "log",
-                            "level": lvl,
-                            "timestamp": timestamp(),
-                            "msg": f"[{d_name}] Found MAC on {m['interface']} (VLAN {m['vlan']}) -> {port_kind}",
-                        })
+                        emit_log(lvl, f"[{d_name}] Found MAC on {m['interface']} (VLAN {m['vlan']}) -> {port_kind}")
 
                 with _LOCATOR_LOCK:
                     if run_id in _LOCATOR_RUNS:
@@ -1004,6 +1035,8 @@ def stream_locate_host(app, devices, query_str, run_id=None):
                     "percent": pct,
                     "device": d_name,
                     "matches_found": len(all_matches),
+                    "resolved_ip": resolved_ip,
+                    "resolved_mac": resolved_mac or (format_mac(target_mac_clean, "colon") if target_mac_clean else None),
                     "timestamp": timestamp(),
                 })
 
@@ -1031,32 +1064,17 @@ def stream_locate_host(app, devices, query_str, run_id=None):
             best_match = all_matches[0] if all_matches else None
 
             if best_match and not best_match["is_uplink"]:
-                q.put({
-                    "type": "log",
-                    "level": "ok",
-                    "timestamp": timestamp(),
-                    "msg": f"🎯 Success! Host physical edge port pinpointed at {best_match['switch_name']} interface {best_match['interface']} (VLAN {best_match['vlan']}).",
-                })
+                emit_log("ok", f"🎯 Success! Host physical edge port pinpointed at {best_match['switch_name']} interface {best_match['interface']} (VLAN {best_match['vlan']}).")
             elif best_match:
-                q.put({
-                    "type": "log",
-                    "level": "warn",
-                    "timestamp": timestamp(),
-                    "msg": f"Host active on switch fabrics (seen on {len(all_matches)} ports), but only transit/uplink ports were reported.",
-                })
+                emit_log("warn", f"Host active on switch fabrics (seen on {len(all_matches)} ports), but only transit/uplink ports were reported.")
             else:
-                q.put({
-                    "type": "log",
-                    "level": "warn",
-                    "timestamp": timestamp(),
-                    "msg": f"Target MAC {format_mac(target_mac_clean)} not currently active in switch forwarding tables.",
-                })
+                emit_log("warn", f"Target MAC {format_mac(target_mac_clean)} not currently active in switch forwarding tables.")
 
             final_result = {
                 "query": q_str,
                 "query_type": "ip" if target_ip else "mac",
                 "resolved_ip": resolved_ip,
-                "resolved_mac": resolved_mac or format_mac(target_mac_clean, "colon"),
+                "resolved_mac": resolved_mac or (format_mac(target_mac_clean, "colon") if target_mac_clean else None),
                 "vendor": vendor,
                 "best_match": best_match,
                 "all_matches": all_matches,
@@ -1071,6 +1089,8 @@ def stream_locate_host(app, devices, query_str, run_id=None):
                     _LOCATOR_RUNS[run_id]["percent"] = 100
                     _LOCATOR_RUNS[run_id]["done"] = total
                     _LOCATOR_RUNS[run_id]["matches_found"] = len(all_matches)
+                    _LOCATOR_RUNS[run_id]["resolved_ip"] = resolved_ip
+                    _LOCATOR_RUNS[run_id]["resolved_mac"] = resolved_mac or (format_mac(target_mac_clean, "colon") if target_mac_clean else None)
                     _LOCATOR_RUNS[run_id]["result"] = final_result
 
             q.put({
@@ -1081,6 +1101,7 @@ def stream_locate_host(app, devices, query_str, run_id=None):
             })
 
         except Exception as e:
+            emit_log("error", f"Unexpected locator failure: {e}")
             with _LOCATOR_LOCK:
                 if run_id in _LOCATOR_RUNS:
                     _LOCATOR_RUNS[run_id]["status"] = "error"

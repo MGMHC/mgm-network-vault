@@ -78,9 +78,15 @@
             <span id="resVendor" class="badge blue" style="font-size:13px;padding:4px 10px;">—</span>
           </div>
         </div>
-        <div style="text-align:right;">
-          <span class="muted small">Switches responding</span>
-          <div id="resSwitchStats" class="mono font-bold" style="font-size:15px;margin-top:2px;">—</div>
+        <div style="text-align:right; display:flex; align-items:center; gap:16px;">
+          <div>
+            <span class="muted small">Switches responding</span>
+            <div id="resSwitchStats" class="mono font-bold" style="font-size:15px;margin-top:2px;">—</div>
+          </div>
+          <button type="button" class="btn sm" onclick="restoreLocatorModal(event)" style="display:inline-flex;align-items:center;gap:6px;" title="View trace terminal console and history">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            <span>Trace Console</span>
+          </button>
         </div>
       </div>
     </div>
@@ -191,12 +197,33 @@
 <script>
 let locatorAbortCtrl = null;
 let locatorLogs = [];
-
 let locatorCurrentRunId = null;
+let _locatorModalPollInterval = null;
 
-async function resumeRunningTrace(runId, q) {
-  locatorCurrentRunId = runId;
-  const modal = document.getElementById('locatorProgressModal');
+function appendLocatorLog(timeStr, level, msg) {
+  const term = document.getElementById('locatorTerminalLogs');
+  if (!term) return;
+  const line = document.createElement('div');
+  line.className = 'op-log-line';
+
+  const time = timeStr || new Date().toTimeString().slice(0, 8);
+  const lvl = (level || 'info').toLowerCase();
+
+  line.innerHTML = `
+    <span class="op-log-time">${escapeHtml(time)}</span>
+    <span class="op-log-badge ${lvl}">${escapeHtml(lvl.toUpperCase())}</span>
+    <span class="op-log-msg">${escapeHtml(msg)}</span>
+  `;
+  term.appendChild(line);
+  locatorLogs.push(`[${time}] [${lvl.toUpperCase()}] ${msg}`);
+
+  if (document.getElementById('locatorAutoScroll')?.checked) {
+    term.scrollTop = term.scrollHeight;
+  }
+}
+
+function syncLocatorModalData(data, queryStr) {
+  if (!data) return;
   const term = document.getElementById('locatorTerminalLogs');
   const statusText = document.getElementById('locatorModalStatusText');
   const barFill = document.getElementById('locatorModalBarFill');
@@ -204,50 +231,103 @@ async function resumeRunningTrace(runId, q) {
   const doneBtn = document.getElementById('locatorDoneBtn');
   const cancelBtn = document.getElementById('locatorCancelBtn');
 
-  modal.classList.remove('minimized');
-  modal.style.display = 'flex';
-  statusText.textContent = `Tracing '${q}'…`;
-  doneBtn.disabled = true;
-  cancelBtn.disabled = false;
+  // Stats
+  if (data.total !== undefined && data.total !== null) {
+    document.getElementById('modalLocSwitches').textContent = `${data.done || 0} / ${data.total}`;
+  }
+  if (data.resolved_ip) {
+    document.getElementById('modalLocIp').textContent = data.resolved_ip;
+  }
+  if (data.resolved_mac) {
+    document.getElementById('modalLocMac').textContent = data.resolved_mac;
+  }
+  if (data.matches_found !== undefined && data.matches_found !== null) {
+    document.getElementById('modalLocMatches').textContent = data.matches_found;
+  } else if (data.result && data.result.all_matches) {
+    document.getElementById('modalLocMatches').textContent = data.result.all_matches.length;
+  }
 
-  const pollInterval = setInterval(async () => {
+  // Progress Bar & Status Text
+  const pct = data.status === 'complete' ? 100 : (data.percent || 0);
+  barFill.style.width = `${pct}%`;
+  percentText.textContent = `${pct}%`;
+
+  if (data.status === 'complete') {
+    statusText.textContent = (data.result && data.result.best_match)
+      ? '✅ Target port pinpointed!'
+      : 'Trace finished.';
+    doneBtn.disabled = false;
+    cancelBtn.disabled = true;
+  } else if (data.status === 'error' || data.status === 'cancelled') {
+    statusText.textContent = data.error || 'Trace cancelled';
+    doneBtn.disabled = false;
+    cancelBtn.disabled = true;
+  } else {
+    if (data.device) {
+      statusText.textContent = `Probing switch ${data.done} of ${data.total}: ${data.device}…`;
+    } else {
+      statusText.textContent = `Tracing '${queryStr || data.query || ''}'…`;
+    }
+    doneBtn.disabled = true;
+    cancelBtn.disabled = false;
+  }
+
+  // Terminal Logs
+  if (data.logs && Array.isArray(data.logs)) {
+    if (locatorLogs.length === 0) {
+      term.innerHTML = '';
+      for (const logItem of data.logs) {
+        appendLocatorLog(logItem.timestamp, logItem.level || 'info', logItem.msg);
+      }
+    } else if (data.logs.length > locatorLogs.length) {
+      for (let i = locatorLogs.length; i < data.logs.length; i++) {
+        const logItem = data.logs[i];
+        appendLocatorLog(logItem.timestamp, logItem.level || 'info', logItem.msg);
+      }
+    }
+  }
+}
+
+function startModalPolling(runId, q) {
+  if (_locatorModalPollInterval) clearInterval(_locatorModalPollInterval);
+
+  const poll = async () => {
     try {
       const res = await fetch(`/api/operations/port-locator/status/${runId}`);
-      if (!res.ok) { clearInterval(pollInterval); return; }
+      if (!res.ok) {
+        clearInterval(_locatorModalPollInterval);
+        return;
+      }
       const data = await res.json();
-      
-      if (data.total) {
-        document.getElementById('modalLocSwitches').textContent = `${data.done || 0} / ${data.total}`;
-      }
-      if (data.matches_found !== undefined) {
-        document.getElementById('modalLocMatches').textContent = data.matches_found;
-      }
-      barFill.style.width = `${data.percent || 0}%`;
-      percentText.textContent = `${data.percent || 0}%`;
-      if (data.device) {
-        statusText.textContent = `Probing switch ${data.done} of ${data.total}: ${data.device}…`;
-      }
+      syncLocatorModalData(data, q);
 
-      if (data.status === 'complete' && data.result) {
-        clearInterval(pollInterval);
-        barFill.style.width = '100%';
-        percentText.textContent = '100%';
-        statusText.textContent = data.result.best_match ? '✅ Target port pinpointed!' : 'Trace finished.';
-        doneBtn.disabled = false;
-        cancelBtn.disabled = true;
-        if (data.result.resolved_ip) document.getElementById('modalLocIp').textContent = data.result.resolved_ip;
-        if (data.result.resolved_mac) document.getElementById('modalLocMac').textContent = data.result.resolved_mac;
-        document.getElementById('modalLocMatches').textContent = (data.result.all_matches || []).length;
-        document.getElementById('resultsArea').style.display = 'block';
-        renderLocatorResults(data.result, q);
+      if (data.status === 'complete') {
+        clearInterval(_locatorModalPollInterval);
+        if (data.result) {
+          document.getElementById('resultsArea').style.display = 'block';
+          renderLocatorResults(data.result, q);
+        }
       } else if (data.status === 'error' || data.status === 'cancelled') {
-        clearInterval(pollInterval);
-        statusText.textContent = data.error || 'Trace cancelled';
-        doneBtn.disabled = false;
-        cancelBtn.disabled = true;
+        clearInterval(_locatorModalPollInterval);
       }
     } catch (_) {}
-  }, 1200);
+  };
+
+  poll();
+  _locatorModalPollInterval = setInterval(poll, 1200);
+}
+
+async function resumeRunningTrace(runId, q) {
+  locatorCurrentRunId = runId;
+  const modal = document.getElementById('locatorProgressModal');
+  modal.classList.remove('minimized');
+  modal.style.display = 'flex';
+
+  document.getElementById('locatorModalStatusText').textContent = `Tracing '${q}'…`;
+  document.getElementById('locatorDoneBtn').disabled = true;
+  document.getElementById('locatorCancelBtn').disabled = false;
+
+  startModalPolling(runId, q);
 }
 
 (async function initParams() {
@@ -287,9 +367,14 @@ async function resumeRunningTrace(runId, q) {
           });
           document.getElementById('resultsArea').style.display = 'block';
           renderLocatorResults(data.result, traceQuery);
+          syncLocatorModalData(data, traceQuery);
 
           if (activeTrace && activeTrace.minimized) {
             renderGlobalLocatorDock(getActiveLocatorTrace());
+          } else {
+            const modal = document.getElementById('locatorProgressModal');
+            modal.classList.remove('minimized');
+            modal.style.display = 'flex';
           }
           return;
         } else if (data.status === 'running') {
@@ -310,28 +395,6 @@ async function resumeRunningTrace(runId, q) {
   }
 })();
 
-function appendLocatorLog(timeStr, level, msg) {
-  const term = document.getElementById('locatorTerminalLogs');
-  if (!term) return;
-  const line = document.createElement('div');
-  line.className = 'op-log-line';
-
-  const time = timeStr || new Date().toTimeString().slice(0, 8);
-  const lvl = (level || 'info').toLowerCase();
-
-  line.innerHTML = `
-    <span class="op-log-time">${escapeHtml(time)}</span>
-    <span class="op-log-badge ${lvl}">${escapeHtml(lvl.toUpperCase())}</span>
-    <span class="op-log-msg">${escapeHtml(msg)}</span>
-  `;
-  term.appendChild(line);
-  locatorLogs.push(`[${time}] [${lvl.toUpperCase()}] ${msg}`);
-
-  if (document.getElementById('locatorAutoScroll')?.checked) {
-    term.scrollTop = term.scrollHeight;
-  }
-}
-
 function copyLocatorLogs() {
   const text = locatorLogs.join('\n');
   navigator.clipboard.writeText(text).then(() => {
@@ -351,7 +414,7 @@ function toggleLocatorMinimize(e) {
   renderGlobalLocatorDock(trace);
 }
 
-function restoreLocatorModal(e) {
+async function restoreLocatorModal(e) {
   if (e) e.stopPropagation();
   const dock = document.getElementById('globalLocatorDock');
   if (dock) dock.style.display = 'none';
@@ -361,9 +424,30 @@ function restoreLocatorModal(e) {
   modal.style.display = 'flex';
 
   setActiveLocatorTrace({ minimized: false });
+
+  const active = getActiveLocatorTrace();
+  const runId = locatorCurrentRunId || (active && active.runId);
+  const q = (active && active.query) || document.getElementById('queryInput').value.trim();
+
+  if (runId) {
+    try {
+      const res = await fetch(`/api/operations/port-locator/status/${runId}`);
+      if (res.ok) {
+        const data = await res.json();
+        syncLocatorModalData(data, q);
+        if (data.status === 'running') {
+          startModalPolling(runId, q);
+        }
+      }
+    } catch (_) {}
+  }
 }
 
 function closeLocatorProgressModal() {
+  if (_locatorModalPollInterval) {
+    clearInterval(_locatorModalPollInterval);
+    _locatorModalPollInterval = null;
+  }
   const modal = document.getElementById('locatorProgressModal');
   modal.classList.remove('minimized');
   modal.style.display = 'none';
@@ -499,6 +583,12 @@ async function handleLocate(e) {
           document.getElementById('modalLocSwitches').textContent = `${evt.done} / ${evt.total}`;
           if (evt.matches_found !== undefined) {
             document.getElementById('modalLocMatches').textContent = evt.matches_found;
+          }
+          if (evt.resolved_ip) {
+            document.getElementById('modalLocIp').textContent = evt.resolved_ip;
+          }
+          if (evt.resolved_mac) {
+            document.getElementById('modalLocMac').textContent = evt.resolved_mac;
           }
           const curTrace = setActiveLocatorTrace({
             percent: evt.percent,
