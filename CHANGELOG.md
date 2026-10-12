@@ -4,6 +4,22 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.5.1] - 2026-10-13
+
+### Fixed
+- **Port Locator Navigation & Trace Log Persistence**:
+  - Resolved issue where navigating between menus (Dashboard, Devices, Backups, etc.) while a host trace was in progress caused the "Tracing Host Port Across Switch Fabric" modal to show empty statistics and a blank terminal console upon return.
+  - Implemented persistent server-side trace state in `_LOCATOR_RUNS` storing all accumulated console logs (`logs`), step-by-step progress, `resolved_ip`, and `resolved_mac`.
+  - Updated `/api/operations/port-locator/status/<run_id>` to deliver real-time logs and resolution telemetry to connecting and returning clients.
+  - Added immediate client-side synchronization (`syncLocatorModalData`) so returning to Port Locator or restoring the minimized dock instantly populates the terminal logs, switches queried, progress percentage, resolved IP, resolved MAC, and path matches without delay.
+  - Added a dedicated **Trace Console** button in the target host banner so users can re-open the real-time terminal trace console and review full diagnostic logs at any time.
+
+### Improved
+- **Trunk & Edge Port Classification**:
+  - Enhanced trunk interface parsing to support Cisco interface abbreviations (e.g., `Fa4/0/48` ↔ `FastEthernet4/0/48`, `Gi`, `Te`, `Po`) with `switchport mode trunk` and channel groups.
+  - Strengthened Junos hierarchical brace parsing for `port-mode trunk`, `interface-mode trunk`, `vlan members all`, `802.3ad` LACP bundles, and transit descriptions.
+  - Fixed Flask application context management inside parallel background threads.
+
 ## [1.5.0] - 2026-10-10
 
 ### Added
