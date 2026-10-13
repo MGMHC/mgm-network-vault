@@ -489,11 +489,15 @@ def dashboard():
     schedules.sort(key=lambda x: (x[1] is None, x[1].timestamp() if x[1] else 0))
 
     jobs = Job.query.order_by(Job.id.desc()).limit(5).all()
+    from . import lifecycle as lc
+    lifecycle_analysis = lc.analyze_device_lifecycle(devices)
+
     return render_template("dashboard.html", devices=devices, c=counts, recent_changes=recent_changes,
                            logs=logs, schedules=schedules[:5], jobs=jobs,
                            floors=floors, day_labels=day_labels,
                            daily_backups=daily_backups, daily_changes=daily_changes,
-                           reach_data=reach_data)
+                           reach_data=reach_data, lifecycle=lifecycle_analysis)
+
 
 
 # --------------------------------------------------------------------------- devices

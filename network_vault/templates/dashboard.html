@@ -50,6 +50,56 @@
   </div>
 </div>
 
+{% if lifecycle %}
+{# ── Lifecycle & Firmware Overview (Compact Widgets) ───────────────────────── #}
+<div class="grid g2" style="margin-bottom:18px;gap:14px">
+  <a href="{{ url_for('web.lifecycle') }}" class="card hover-card" style="margin:0;padding:12px 14px;text-decoration:none;color:inherit;display:block;transition:border-color .15s,box-shadow .15s" title="Open Hardware & Firmware Lifecycle Dashboard">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:6px;font-size:0.85rem;font-weight:700">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Hardware Family Lifecycle</span>
+      </div>
+      <span class="small muted" style="font-size:0.75rem;display:inline-flex;align-items:center;gap:3px">
+        Lifecycle &amp; EOL &rarr;
+      </span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      {% for fam, count in lifecycle.family_breakdown.items() %}
+      {% set pct = (count / (lifecycle.kpi.total or 1) * 100)|round|int %}
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:0.75rem;line-height:1.2;margin-bottom:2px">
+          <span style="font-weight:600;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fam }}</span>
+          <span class="muted" style="font-variant-numeric:tabular-nums">{{ count }} ({{ pct }}%)</span>
+        </div>
+        <div style="height:4px;background:var(--panel-2);border-radius:2px;overflow:hidden">
+          <div style="height:100%;width:{{ pct }}%;background:{% if '2200' in fam or '3750' in fam or '3300' in fam %}var(--bad){% elif '2300' in fam or '1300' in fam %}var(--ok){% else %}var(--blue){% endif %};border-radius:2px"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </a>
+
+  <a href="{{ url_for('web.lifecycle') }}" class="card hover-card" style="margin:0;padding:12px 14px;text-decoration:none;color:inherit;display:block;transition:border-color .15s,box-shadow .15s" title="Open Firmware Standards in Lifecycle Dashboard">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:6px;font-size:0.85rem;font-weight:700">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        <span>Firmware &amp; OS Standards</span>
+      </div>
+      <span class="badge blue" style="font-size:10px;padding:1px 6px">{{ lifecycle.distinct_sw_count }} Builds</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(210px, 1fr));gap:5px;max-height:148px;overflow-y:auto;padding-right:2px">
+      {% for sw_label, count in lifecycle.sw_versions.items() %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;background:var(--panel-2);border-radius:5px;border:1px solid var(--border);font-size:0.75rem">
+        <span style="font-family:var(--mono);font-size:0.72rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:6px" title="{{ sw_label }}">{{ sw_label }}</span>
+        <span class="badge" style="background:var(--bg);font-size:10px;padding:1px 5px;flex:none">{{ count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </a>
+</div>
+{% endif %}
+
+
 {# ── Level / Group device status ─────────────────────────────────────────────── #}
 <div class="section-label" style="display: flex; justify-content: space-between; align-items: center;">
   <span>Level / Group Status</span>
