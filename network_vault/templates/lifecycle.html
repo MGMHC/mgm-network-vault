@@ -134,7 +134,7 @@
   </div>
 
   <div class="muted small" id="filteredCountLabel">
-    Showing {{ analysis.items|length }} switches
+    Showing {{ analysis.devices|length }} switches
   </div>
 </div>
 
@@ -154,7 +154,7 @@
       </tr>
     </thead>
     <tbody>
-      {% for it in analysis.items %}
+      {% for it in analysis.devices %}
       <tr class="lifecycle-row"
           data-status="{{ it.status_key }}"
           data-vendor="{{ it.vendor }}"
@@ -162,7 +162,7 @@
           data-search="{{ it.device.name }} {{ it.device.host }} {{ it.hw_model }} {{ it.serial }} {{ it.sw_version }}">
         
         <td>
-          <a href="{{ url_for('web.device_view', did=it.device.id) }}" style="font-weight:600">
+          <a href="{{ url_for('web.device_detail', dev_id=it.device.id) }}" style="font-weight:600">
             {{ it.device.name }}
           </a>
           <div class="muted small mono">{{ it.device.host }} · {{ it.device.group or 'Default' }}</div>
@@ -227,7 +227,7 @@
         </td>
 
         <td>
-          <a href="{{ url_for('web.device_view', did=it.device.id) }}" class="btn sm" title="View switch details and backups">
+          <a href="{{ url_for('web.device_detail', dev_id=it.device.id) }}" class="btn sm" title="View switch details and backups">
             View
           </a>
         </td>

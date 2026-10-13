@@ -1006,7 +1006,7 @@ def lifecycle_export_csv():
         "Last Date of Support (EOL)", "Notes"
     ])
 
-    for it in analysis["items"]:
+    for it in analysis["devices"]:
         d = it["device"]
         site_name = d.site.code if d.site else "N/A"
         entry = it["entry"] or {}

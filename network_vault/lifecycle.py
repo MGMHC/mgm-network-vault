@@ -281,7 +281,7 @@ def analyze_device_lifecycle(devices) -> dict:
 
     return {
         "kpi": kpi,
-        "items": items,
+        "devices": items,
         "vendor_breakdown": vendor_breakdown,
         "family_breakdown": family_breakdown,
         "sw_versions": sw_versions,
