@@ -1,0 +1,348 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Firmware &amp; EOL / EOS Lifecycle{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1><span class="title-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom;margin-right:6px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span> Hardware &amp; Firmware Lifecycle</h1>
+    <div class="sub">End-of-Sale (EOS), End-of-Software-Maintenance (EoSW), and End-of-Life (EOL) compliance audit for campus switch infrastructure.</div>
+  </div>
+  <div class="actions">
+    <a href="{{ url_for('lifecycle.export_csv') }}" class="btn">
+      {{ icon('download') }} Export Lifecycle Audit (CSV)
+    </a>
+  </div>
+</div>
+
+<!-- Executive Lifecycle KPI Strip -->
+<div class="card lifecycle-summary-card" style="margin-bottom:18px">
+  <div class="lifecycle-kpi-grid">
+    
+    <div class="lifecycle-kpi-box active" data-filter="all" onclick="filterLifecycle('all')">
+      <div class="lifecycle-kpi-icon blue">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01"/></svg>
+      </div>
+      <div class="lifecycle-kpi-content">
+        <div class="lifecycle-kpi-val">{{ analysis.kpi.total }}</div>
+        <div class="lifecycle-kpi-lbl">Total Switches</div>
+      </div>
+    </div>
+
+    <div class="lifecycle-kpi-box" data-filter="supported" onclick="filterLifecycle('supported')">
+      <div class="lifecycle-kpi-icon ok">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="lifecycle-kpi-content">
+        <div class="lifecycle-kpi-val" style="color:var(--ok)">{{ analysis.kpi.supported }}</div>
+        <div class="lifecycle-kpi-lbl">Active &amp; Supported</div>
+      </div>
+    </div>
+
+    <div class="lifecycle-kpi-box" data-filter="eos_soon" onclick="filterLifecycle('eos_soon')">
+      <div class="lifecycle-kpi-icon warn">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="lifecycle-kpi-content">
+        <div class="lifecycle-kpi-val" style="color:var(--warn)">{{ analysis.kpi.eos_soon }}</div>
+        <div class="lifecycle-kpi-lbl">Approaching EOL / EoSW</div>
+      </div>
+    </div>
+
+    <div class="lifecycle-kpi-box" data-filter="eol" onclick="filterLifecycle('eol')">
+      <div class="lifecycle-kpi-icon bad">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      </div>
+      <div class="lifecycle-kpi-content">
+        <div class="lifecycle-kpi-val" style="color:var(--bad)">{{ analysis.kpi.eol }}</div>
+        <div class="lifecycle-kpi-lbl">End-of-Life / Past Support</div>
+      </div>
+    </div>
+
+    <div class="lifecycle-kpi-box" data-filter="diverged" onclick="filterLifecycle('diverged')">
+      <div class="lifecycle-kpi-icon purple">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      </div>
+      <div class="lifecycle-kpi-content">
+        <div class="lifecycle-kpi-val">{{ analysis.distinct_sw_count }}</div>
+        <div class="lifecycle-kpi-lbl">Firmware Variations</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Fleet Breakdown Gauges & Recommendations -->
+<div class="grid cols-2" style="margin-bottom:18px;gap:18px">
+  
+  <div class="card" style="margin:0">
+    <div class="card-head">
+      <h3>Hardware Family Lifecycle Distribution</h3>
+    </div>
+    <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
+      {% for fam, count in analysis.family_breakdown.items() %}
+      {% set pct = (count / analysis.kpi.total * 100)|round|int %}
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:0.88rem;margin-bottom:4px">
+          <span style="font-weight:600">{{ fam }}</span>
+          <span class="muted">{{ count }} switches ({{ pct }}%)</span>
+        </div>
+        <div style="height:6px;background:var(--panel-2);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:{{ pct }}%;background:{% if '2200' in fam or '3750' in fam or '3300' in fam %}var(--bad){% elif '2300' in fam or '1300' in fam %}var(--ok){% else %}var(--blue){% endif %};border-radius:3px"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card" style="margin:0">
+    <div class="card-head">
+      <h3>Firmware &amp; OS Release Standards</h3>
+      <span class="badge blue">{{ analysis.distinct_sw_count }} Active Builds</span>
+    </div>
+    <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+      {% for sw_label, count in analysis.sw_versions.items() %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--panel-2);border-radius:6px;border:1px solid var(--border)">
+        <span style="font-family:var(--font-mono);font-size:0.85rem">{{ sw_label }}</span>
+        <span class="badge" style="background:var(--bg)">{{ count }} device{{ 's' if count > 1 }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Inventory Table Filter Strip -->
+<div class="filter-strip" style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <input type="text" id="searchInput" placeholder="Search switch, model, serial, IP…" onkeyup="applyFilters()" style="min-width:240px">
+    
+    <select id="statusFilter" onchange="applyFilters()">
+      <option value="all">All Lifecycle States</option>
+      <option value="eol">End-of-Life / Past Support</option>
+      <option value="eos_soon">Approaching EOL (< 12 mo)</option>
+      <option value="supported">Active &amp; Supported</option>
+      <option value="diverged">Outdated Firmware Only</option>
+    </select>
+
+    <select id="vendorFilter" onchange="applyFilters()">
+      <option value="all">All Vendors</option>
+      {% for v in analysis.vendor_breakdown.keys() %}
+      <option value="{{ v }}">{{ v }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="muted small" id="filteredCountLabel">
+    Showing {{ analysis.items|length }} switches
+  </div>
+</div>
+
+<!-- Lifecycle Table -->
+<div class="card" style="padding:0;overflow:hidden">
+  <table class="table" id="lifecycleTable">
+    <thead>
+      <tr>
+        <th>Switch</th>
+        <th>Vendor / Family</th>
+        <th>Hardware Model</th>
+        <th>Running OS</th>
+        <th>Recommended OS</th>
+        <th>Lifecycle State</th>
+        <th>End-of-Life (EOL)</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in analysis.items %}
+      <tr class="lifecycle-row"
+          data-status="{{ it.status_key }}"
+          data-vendor="{{ it.vendor }}"
+          data-fw="{{ it.fw_status }}"
+          data-search="{{ it.device.name }} {{ it.device.host }} {{ it.hw_model }} {{ it.serial }} {{ it.sw_version }}">
+        
+        <td>
+          <a href="{{ url_for('web.device_view', did=it.device.id) }}" style="font-weight:600">
+            {{ it.device.name }}
+          </a>
+          <div class="muted small mono">{{ it.device.host }} · {{ it.device.group or 'Default' }}</div>
+        </td>
+
+        <td>
+          <span class="badge" style="background:var(--panel-2)">{{ it.vendor }}</span>
+          <div class="small muted" style="margin-top:2px">{{ it.family }}</div>
+        </td>
+
+        <td>
+          <span style="font-weight:500">{{ it.hw_model }}</span>
+          {% if it.serial and it.serial != 'N/A' %}
+          <div class="small muted mono">{{ it.serial }}</div>
+          {% endif %}
+        </td>
+
+        <td>
+          <span class="mono small">{{ it.sw_version or 'Not detected' }}</span>
+        </td>
+
+        <td>
+          {% if it.fw_status == 'match' %}
+          <span class="badge ok" title="Running recommended gold standard release">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-right:3px"><polyline points="20 6 9 17 4 12"/></svg>
+            {{ it.recommended_sw }}
+          </span>
+          {% elif it.fw_status == 'diverged' %}
+          <span class="badge warn" title="Upgrade recommended to baseline release">
+            {{ it.recommended_sw }}
+          </span>
+          {% else %}
+          <span class="muted small">Baseline pending</span>
+          {% endif %}
+        </td>
+
+        <td>
+          {% if it.status_key == 'eol' %}
+          <span class="badge bad" title="{{ it.notes }}">
+            <span class="dot"></span> {{ it.status_label }}
+          </span>
+          {% elif it.status_key in ('eosec', 'eosw', 'eos_soon') %}
+          <span class="badge warn" title="{{ it.notes }}">
+            <span class="dot"></span> {{ it.status_label }}
+          </span>
+          {% elif it.status_key == 'supported' %}
+          <span class="badge ok" title="{{ it.notes }}">
+            <span class="dot"></span> Supported
+          </span>
+          {% else %}
+          <span class="badge"><span class="dot"></span> Unknown</span>
+          {% endif %}
+        </td>
+
+        <td class="mono small">
+          {{ it.eol_date }}
+          {% if it.status_key in ('eol', 'eosec') %}
+          <div class="small bad" style="font-size:0.75rem">Expired</div>
+          {% elif it.status_key == 'supported' %}
+          <div class="small ok" style="font-size:0.75rem">Active</div>
+          {% endif %}
+        </td>
+
+        <td>
+          <a href="{{ url_for('web.device_view', did=it.device.id) }}" class="btn sm" title="View switch details and backups">
+            View
+          </a>
+        </td>
+
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.lifecycle-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.lifecycle-kpi-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.lifecycle-kpi-box:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+}
+.lifecycle-kpi-box.active {
+  border-color: var(--primary);
+  background: var(--panel);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+.lifecycle-kpi-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lifecycle-kpi-icon.blue { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+.lifecycle-kpi-icon.ok { background: rgba(34, 197, 94, 0.15); color: var(--ok); }
+.lifecycle-kpi-icon.warn { background: rgba(245, 158, 11, 0.15); color: var(--warn); }
+.lifecycle-kpi-icon.bad { background: rgba(239, 68, 68, 0.15); color: var(--bad); }
+.lifecycle-kpi-icon.purple { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+
+.lifecycle-kpi-val {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.lifecycle-kpi-lbl {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+</style>
+
+<script>
+let currentKpiFilter = 'all';
+
+function filterLifecycle(filterKey) {
+  currentKpiFilter = filterKey;
+  document.querySelectorAll('.lifecycle-kpi-box').forEach(box => {
+    box.classList.toggle('active', box.getAttribute('data-filter') === filterKey);
+  });
+  
+  const statusSel = document.getElementById('statusFilter');
+  if (['all', 'eol', 'eos_soon', 'supported'].includes(filterKey)) {
+    statusSel.value = filterKey;
+  } else if (filterKey === 'diverged') {
+    statusSel.value = 'diverged';
+  }
+  applyFilters();
+}
+
+function applyFilters() {
+  const query = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+  const status = document.getElementById('statusFilter').value;
+  const vendor = document.getElementById('vendorFilter').value;
+  const rows = document.querySelectorAll('.lifecycle-row');
+  let visibleCount = 0;
+
+  rows.forEach(r => {
+    const rSearch = r.getAttribute('data-search').toLowerCase();
+    const rStatus = r.getAttribute('data-status');
+    const rVendor = r.getAttribute('data-vendor');
+    const rFw = r.getAttribute('data-fw');
+
+    const matchesQuery = !query || rSearch.includes(query);
+    const matchesVendor = (vendor === 'all') || (rVendor === vendor);
+
+    let matchesStatus = true;
+    if (status === 'eol') {
+      matchesStatus = (rStatus === 'eol' || rStatus === 'eosec');
+    } else if (status === 'eos_soon') {
+      matchesStatus = (rStatus === 'eos_soon' || rStatus === 'eosw');
+    } else if (status === 'supported') {
+      matchesStatus = (rStatus === 'supported');
+    } else if (status === 'diverged') {
+      matchesStatus = (rFw === 'diverged');
+    }
+
+    const show = matchesQuery && matchesVendor && matchesStatus;
+    r.style.display = show ? '' : 'none';
+    if (show) visibleCount++;
+  });
+
+  document.getElementById('filteredCountLabel').textContent = `Showing ${visibleCount} of ${rows.length} switches`;
+}
+</script>
+{% endblock %}

@@ -104,6 +104,8 @@ def create_app():
 
     from .views import bp
     app.register_blueprint(bp)
+    from .views_lifecycle import bp_lifecycle
+    app.register_blueprint(bp_lifecycle)
 
     @app.before_request
     def guard():

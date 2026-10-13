@@ -4,6 +4,22 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.7.0] - 2026-10-13
+
+### Added
+- **Firmware & EOL / EOS Lifecycle Dashboard** (`/operations/lifecycle`):
+  - Executive lifecycle KPI overview tracking **Active & Supported**, **Approaching EOL (< 12 months)**, and **End-of-Life / Past Support** hardware across the campus.
+  - Built-in hardware lifecycle catalog for **Juniper Networks** (EX2200, EX2300, EX3300, EX4600) and **Cisco Systems** (Catalyst 1300, CBS 250/350, Catalyst 3750/3560, Catalyst 2960).
+  - Tracks key OEM lifecycle milestones:
+    - **End-of-Sale (EOS)**
+    - **End-of-Software-Maintenance (EoSW)**
+    - **End-of-Security-Vulnerability-Support (EoSec)**
+    - **Last-Date-of-Support (EOL / LDOS)**
+  - **Firmware Gold Standard Compliance**: Compares active software build against vendor TAC recommended releases, highlighting divergence and upgrade recommendations.
+  - **Hardware Family Distribution**: Visual breakdown of campus switch generations and operating system fragmentation.
+  - **Audit CSV Export**: One-click download of the full hardware and software lifecycle inventory report for network budgeting and executive presentations.
+  - Integrated into the **Operations** sidebar navigation menu.
+
 ## [1.6.0] - 2026-10-13
 
 ### Added
