@@ -72,45 +72,6 @@
   </div>
 </div>
 
-<!-- Fleet Breakdown Gauges & Recommendations -->
-<div class="grid cols-2" style="margin-bottom:18px;gap:18px">
-  
-  <div class="card" style="margin:0">
-    <div class="card-head">
-      <h3>Hardware Family Lifecycle Distribution</h3>
-    </div>
-    <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
-      {% for fam, count in analysis.family_breakdown.items() %}
-      {% set pct = (count / analysis.kpi.total * 100)|round|int %}
-      <div>
-        <div style="display:flex;justify-content:space-between;font-size:0.88rem;margin-bottom:4px">
-          <span style="font-weight:600">{{ fam }}</span>
-          <span class="muted">{{ count }} switches ({{ pct }}%)</span>
-        </div>
-        <div style="height:6px;background:var(--panel-2);border-radius:3px;overflow:hidden">
-          <div style="height:100%;width:{{ pct }}%;background:{% if '2200' in fam or '3750' in fam or '3300' in fam %}var(--bad){% elif '2300' in fam or '1300' in fam %}var(--ok){% else %}var(--blue){% endif %};border-radius:3px"></div>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-
-  <div class="card" style="margin:0">
-    <div class="card-head">
-      <h3>Firmware &amp; OS Release Standards</h3>
-      <span class="badge blue">{{ analysis.distinct_sw_count }} Active Builds</span>
-    </div>
-    <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
-      {% for sw_label, count in analysis.sw_versions.items() %}
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--panel-2);border-radius:6px;border:1px solid var(--border)">
-        <span style="font-family:var(--font-mono);font-size:0.85rem">{{ sw_label }}</span>
-        <span class="badge" style="background:var(--bg)">{{ count }} device{{ 's' if count > 1 }}</span>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-
-</div>
 
 <!-- Inventory Table Filter Strip -->
 <div class="filter-strip" style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">

@@ -30,25 +30,34 @@
   <div class="stat {{ 'warn' if c.changed_24h else '' }}"><div class="label">Config changes 24h</div><div class="value">{{ c.changed_24h }}</div><div class="hint">{{ c.backups_24h }} backups taken</div></div>
 </div>
 
-{# ── Charts row ───────────────────────────────────────────────────────────── #}
-<div class="grid g3 dash-charts">
-  <div class="card">
-    <h2>Backup &amp; Change Activity <span class="small muted">(last 14 days)</span></h2>
-    <canvas id="activityChart" height="130"></canvas>
+{# ── Charts row (Compact) ──────────────────────────────────────────────────── #}
+<div class="grid g3 dash-charts" style="margin-bottom:14px;gap:14px">
+  <div class="card" style="padding:12px 16px;margin:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <h2 style="font-size:0.88rem;margin:0">Backup &amp; Change Activity <span class="small muted" style="font-size:0.75rem">(last 14 days)</span></h2>
+    </div>
+    <div style="height:90px;position:relative">
+      <canvas id="activityChart"></canvas>
+    </div>
   </div>
-  <div class="card chart-donut-card">
-    <h2>Reachability</h2>
-    <div class="donut-wrap">
-      <canvas id="reachChart"></canvas>
-      <div class="donut-legend">
-        <div class="dl-item"><span class="dl-dot" style="background:var(--ok)"></span>Up <b>{{ c.up }}</b></div>
-        <div class="dl-item"><span class="dl-dot" style="background:var(--warn)"></span>SSH only <b>{{ c.sshdown }}</b></div>
-        <div class="dl-item"><span class="dl-dot" style="background:var(--bad)"></span>Down <b>{{ c.down }}</b></div>
-        <div class="dl-item"><span class="dl-dot" style="background:var(--border)"></span>Unknown <b>{{ reach_data.unknown }}</b></div>
+  <div class="card chart-donut-card" style="padding:12px 16px;margin:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <h2 style="font-size:0.88rem;margin:0">Reachability</h2>
+    </div>
+    <div class="donut-wrap" style="flex-direction:row;gap:12px;align-items:center;justify-content:space-around">
+      <div style="width:78px;height:78px;flex:none;position:relative">
+        <canvas id="reachChart"></canvas>
+      </div>
+      <div class="donut-legend" style="display:flex;flex-direction:column;gap:3px;font-size:0.75rem">
+        <div class="dl-item"><span class="dl-dot" style="background:var(--ok);width:7px;height:7px"></span>Up <b>{{ c.up }}</b></div>
+        <div class="dl-item"><span class="dl-dot" style="background:var(--warn);width:7px;height:7px"></span>SSH only <b>{{ c.sshdown }}</b></div>
+        <div class="dl-item"><span class="dl-dot" style="background:var(--bad);width:7px;height:7px"></span>Down <b>{{ c.down }}</b></div>
+        <div class="dl-item"><span class="dl-dot" style="background:var(--border);width:7px;height:7px"></span>Unknown <b>{{ reach_data.unknown }}</b></div>
       </div>
     </div>
   </div>
 </div>
+
 
 {% if lifecycle %}
 {# ── Lifecycle & Firmware Overview (Compact Widgets) ───────────────────────── #}
@@ -213,17 +222,20 @@
     data: {
       labels,
       datasets: [
-        { label: 'Backups', data: backups, backgroundColor: 'rgba(37,54,108,0.25)', borderColor: '#25366C', borderWidth: 1.5, borderRadius: 4, order: 2 },
-        { label: 'Changes', data: changes, type: 'line', borderColor: '#C3A275', backgroundColor: 'rgba(195,162,117,0.15)', borderWidth: 2, pointRadius: 3, tension: 0.3, fill: true, order: 1 }
+        { label: 'Backups', data: backups, backgroundColor: 'rgba(37,54,108,0.25)', borderColor: '#25366C', borderWidth: 1.5, borderRadius: 3, order: 2 },
+        { label: 'Changes', data: changes, type: 'line', borderColor: '#C3A275', backgroundColor: 'rgba(195,162,117,0.15)', borderWidth: 1.5, pointRadius: 2, tension: 0.3, fill: true, order: 1 }
       ]
     },
     options: {
-      responsive: true, maintainAspectRatio: true,
+      responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { labels: { color: textCol, font: { size: 12 } } }, tooltip: { mode: 'index' } },
+      plugins: {
+        legend: { labels: { color: textCol, boxWidth: 10, font: { size: 10 } } },
+        tooltip: { mode: 'index' }
+      },
       scales: {
-        x: { ticks: { color: textCol, font: { size: 11 } }, grid: { color: 'rgba(128,128,128,0.1)' } },
-        y: { ticks: { color: textCol, font: { size: 11 }, stepSize: 1 }, grid: { color: 'rgba(128,128,128,0.1)' }, beginAtZero: true }
+        x: { ticks: { color: textCol, font: { size: 9 }, maxRotation: 0 }, grid: { color: 'rgba(128,128,128,0.08)' } },
+        y: { ticks: { color: textCol, font: { size: 9 }, stepSize: 20 }, grid: { color: 'rgba(128,128,128,0.08)' }, beginAtZero: true }
       }
     }
   });
@@ -233,8 +245,6 @@
 (function(){
   const d = {{ reach_data | tojson }};
   const canvas = document.getElementById('reachChart');
-  canvas.style.height = '160px';
-  canvas.style.maxWidth = '160px';
   new Chart(canvas, {
     type: 'doughnut',
     data: {
@@ -242,11 +252,11 @@
       datasets: [{
         data: [d.up, d.ssh_only, d.down, d.unknown],
         backgroundColor: ['#12805c', '#8A5A00', '#c0262d', '#ccc'],
-        borderWidth: 0, hoverOffset: 6
+        borderWidth: 0, hoverOffset: 4
       }]
     },
     options: {
-      responsive: true, maintainAspectRatio: true, cutout: '72%',
+      responsive: true, maintainAspectRatio: true, cutout: '74%',
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } } }
     }
   });
