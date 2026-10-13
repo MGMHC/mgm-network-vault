@@ -17,13 +17,23 @@ DEFAULTS = {
     "threads": 12,              # web server worker threads
     "behind_proxy": False,      # true when published through IIS / nginx / a load balancer
     "secure_cookies": False,    # true when users reach the app over HTTPS
+    # Syslog listener settings
+    "syslog_enabled": True,     # Enable syslog listener for event-driven backups
+    "syslog_port": 514,         # UDP syslog port (standard 514)
+    "syslog_debounce_sec": 45,  # Wait N seconds after last commit log before backing up
+    "syslog_log_dir": "D:/NetworkVault/syslog", # Path to save raw syslog daily files
 }
 ENV = {k: f"NETWORK_VAULT_{k.upper()}" for k in DEFAULTS}
 
 _file = {}
 if CONFIG_FILE.exists():
     with open(CONFIG_FILE, "rb") as f:
-        _file = tomllib.load(f).get("server", {})
+        _toml = tomllib.load(f)
+        _file = _toml.get("server", {})
+        # Merge syslog section if present
+        if "syslog" in _toml:
+            for sk, sv in _toml["syslog"].items():
+                _file[f"syslog_{sk}"] = sv
 
 
 def get(key):

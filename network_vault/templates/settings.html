@@ -57,6 +57,25 @@
   <div class="form-grid">
     <div class="field"><label>Keep log entries for (days)</label><input type="number" name="log_retention_days" min="0" value="{{ s.log_retention_days }}"><div class="help">Cleaned daily at 03:30. 0 = forever.</div></div>
   </div>
+
+  <h2 style="margin-top:18px">Event-Driven Vaulting (Syslog Listener)</h2>
+  <div class="form-grid">
+    <div class="field">
+      <label>Status &amp; Port</label>
+      <input type="text" readonly value="{{ 'Enabled (UDP ' ~ syslog.port ~ ')' if syslog.enabled else 'Disabled' }}" style="background:var(--bg)">
+      <div class="help">Configured in <code>config.toml</code> under <code>[syslog]</code>.</div>
+    </div>
+    <div class="field">
+      <label>Debounce Window</label>
+      <input type="text" readonly value="{{ syslog.debounce_sec }} seconds" style="background:var(--bg)">
+      <div class="help">Cooldown time after commit log before taking backup.</div>
+    </div>
+    <div class="field" style="grid-column:1 / -1">
+      <label>Raw Syslog Storage (D: drive)</label>
+      <input type="text" readonly value="{{ syslog.log_dir }}" style="background:var(--bg)">
+      <div class="help">Raw syslog stream saved daily on disk.</div>
+    </div>
+  </div>
   <button class="btn primary">Save settings</button>
 </form>
 {% endblock %}

@@ -183,6 +183,12 @@ def create_app():
             "user_available_sites": user_available_sites,
             "active_site": active_site,
             "current_site_id": current_site_id,
+            "syslog": {
+                "enabled": config.get("syslog_enabled"),
+                "port": config.get("syslog_port"),
+                "debounce_sec": config.get("syslog_debounce_sec"),
+                "log_dir": config.get("syslog_log_dir"),
+            },
         }
 
     return app

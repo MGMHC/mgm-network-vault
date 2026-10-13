@@ -4,6 +4,22 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.6.0] - 2026-10-13
+
+### Added
+- **Syslog-Triggered Instant Backups ("Event-Driven Vaulting")**:
+  - Integrated asynchronous UDP Syslog listener daemon ([syslog_listener.py](file:///c:/MGM/mgm-network-vault/network_vault/syslog_listener.py)) listening on port 514 (configurable).
+  - Automatically intercepts commit and configuration save events in real time from network switches:
+    - **Juniper Junos (EX2200 / EX2300 / EX3300)**: Detects `UI_COMMIT_COMPLETED`, `UI_COMMIT_PROGRESS`, and `UI_COMMIT:`.
+    - **Cisco Catalyst 1300 / CBS / SG**: Detects `COPY - TRAP` (copy running-config to startup-config) and `COPY - FILECPY`.
+    - **Cisco IOS / IOS-XE**: Detects `%SYS-5-CONFIG_I: Configured from console` and `%PARSER-5-CFGLOG_LOGGEDCMD`.
+  - **Debounce / Hold-down Timer**: Configurable cooldown window (default 45s) to coalesce multiple rapid commits during admin maintenance sessions before initiating backup.
+  - **Read-Only Command Exclusion**: Safely ignores inspection commands (e.g. `show system commit`, DOM optics, MAC/ARP live tools) to prevent false-positive backup loops.
+  - **Per-Device Syslog Storage**:
+    - Saves incoming raw syslog streams to dedicated daily files partitioned by device hostname (`syslog-<hostname>-YYYY-MM-DD.log`).
+    - Configured storage path targeted to local storage volume (`D:\NetworkVault\syslog\`).
+  - Added Syslog Listener status and configuration display in the **Settings** view.
+
 ## [1.5.1] - 2026-10-13
 
 ### Fixed

@@ -13,12 +13,14 @@ from waitress import serve
 
 from network_vault import config, create_app
 from network_vault.scheduler import init_scheduler
+from network_vault.syslog_listener import init_syslog_listener
 from network_vault.util import BASE_DIR
 from network_vault.version import __version__
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logging.getLogger("paramiko").setLevel(logging.WARNING)
 logging.getLogger("apscheduler").setLevel(logging.WARNING)
+logging.getLogger("syslog_listener").setLevel(logging.INFO)
 
 app = create_app()
 
@@ -33,6 +35,7 @@ if __name__ == "__main__":
     except OSError:
         pass
     init_scheduler(app)
+    init_syslog_listener(app)
     # 0.0.0.0 means "all network cards" - it is not an address a browser can open, so print real ones
     if host in ("0.0.0.0", ""):
         try:
