@@ -4,7 +4,18 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
-## [1.7.0] - 2026-10-13
+## [1.7.1] - 2026-10-14
+
+### Improved
+- **Main Dashboard Layout & Lifecycle Overview**:
+  - Re-architected dashboard overview section into a unified, responsive 3-column layout matching executive operations view:
+    - **Column 1**: Full-height responsive Backup & Change Activity timeline chart.
+    - **Column 2**: Compact Reachability donut chart stacked above the interactive Hardware Family Lifecycle distribution widget.
+    - **Column 3**: Firmware & OS Standards breakdown showing campus builds and device distribution.
+  - Added clickable redirects on overview cards directly into the full **Lifecycle & EOL** operations dashboard.
+  - Removed redundant duplicate breakdown widgets from the `/operations/lifecycle` page for clean separation of concerns.
+- **UI Aesthetics & Scrollbars**:
+  - Implemented sleek, theme-adaptive custom scrollbars (`5px` width, translucent rounded thumbs) matching both dark and light palettes across all browsers.
 
 ### Added
 - **Firmware & EOL / EOS Lifecycle Dashboard** (`/operations/lifecycle`):
