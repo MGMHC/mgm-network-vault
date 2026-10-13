@@ -8,6 +8,41 @@
   <title>{% block title %}MGM Network Vault{% endblock %} · MGM Network Vault</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v={{ app_version }}">
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+  <style>
+    /* Minimal custom scrollbars matching dark/light theme */
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+    }
+    *::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    *::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    *::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.16);
+      border-radius: 4px;
+    }
+    *::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+    *::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+    @media (prefers-color-scheme: light) {
+      * {
+        scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
+      }
+      *::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.18);
+      }
+      *::-webkit-scrollbar-thumb:hover {
+        background: rgba(0, 0, 0, 0.32);
+      }
+    }
+  </style>
 </head>
 <body>
 {% if current_user %}
