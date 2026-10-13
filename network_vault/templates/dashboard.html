@@ -30,83 +30,92 @@
   <div class="stat {{ 'warn' if c.changed_24h else '' }}"><div class="label">Config changes 24h</div><div class="value">{{ c.changed_24h }}</div><div class="hint">{{ c.backups_24h }} backups taken</div></div>
 </div>
 
-{# ── Charts row (Compact) ──────────────────────────────────────────────────── #}
-<div class="grid g3 dash-charts" style="margin-bottom:14px;gap:14px">
-  <div class="card" style="padding:12px 16px;margin:0">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <h2 style="font-size:0.88rem;margin:0">Backup &amp; Change Activity <span class="small muted" style="font-size:0.75rem">(last 14 days)</span></h2>
+{# ── Unified Charts & Lifecycle Overview Row ───────────────────────────────── #}
+<div class="dash-overview-grid" style="display:grid;grid-template-columns:1.8fr 1fr 1.2fr;gap:14px;margin-bottom:18px;align-items:stretch">
+  
+  {# Column 1: Backup & Change Activity #}
+  <div class="card" style="margin:0;padding:14px 16px;display:flex;flex-direction:column;min-width:0">
+    <div style="margin-bottom:8px">
+      <h2 style="font-size:0.9rem;margin:0">Backup &amp; Change Activity <span class="small muted" style="font-size:0.75rem">(last 14 days)</span></h2>
     </div>
-    <div style="height:90px;position:relative">
+    <div style="flex:1;min-height:160px;position:relative">
       <canvas id="activityChart"></canvas>
     </div>
   </div>
-  <div class="card chart-donut-card" style="padding:12px 16px;margin:0">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-      <h2 style="font-size:0.88rem;margin:0">Reachability</h2>
-    </div>
-    <div class="donut-wrap" style="flex-direction:row;gap:12px;align-items:center;justify-content:space-around">
-      <div style="width:78px;height:78px;flex:none;position:relative">
-        <canvas id="reachChart"></canvas>
+
+  {# Column 2: Reachability Donut + Hardware Family Lifecycle Stack #}
+  <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+    
+    {# Top: Reachability #}
+    <div class="card chart-donut-card" style="margin:0;padding:12px 14px;flex:1">
+      <div style="margin-bottom:6px">
+        <h2 style="font-size:0.85rem;margin:0">Reachability</h2>
       </div>
-      <div class="donut-legend" style="display:flex;flex-direction:column;gap:3px;font-size:0.75rem">
-        <div class="dl-item"><span class="dl-dot" style="background:var(--ok);width:7px;height:7px"></span>Up <b>{{ c.up }}</b></div>
-        <div class="dl-item"><span class="dl-dot" style="background:var(--warn);width:7px;height:7px"></span>SSH only <b>{{ c.sshdown }}</b></div>
-        <div class="dl-item"><span class="dl-dot" style="background:var(--bad);width:7px;height:7px"></span>Down <b>{{ c.down }}</b></div>
-        <div class="dl-item"><span class="dl-dot" style="background:var(--border);width:7px;height:7px"></span>Unknown <b>{{ reach_data.unknown }}</b></div>
+      <div class="donut-wrap" style="flex-direction:row;gap:12px;align-items:center;justify-content:space-around">
+        <div style="width:70px;height:70px;flex:none;position:relative">
+          <canvas id="reachChart"></canvas>
+        </div>
+        <div class="donut-legend" style="display:flex;flex-direction:column;gap:3px;font-size:0.75rem">
+          <div class="dl-item"><span class="dl-dot" style="background:var(--ok);width:7px;height:7px"></span>Up <b>{{ c.up }}</b></div>
+          <div class="dl-item"><span class="dl-dot" style="background:var(--warn);width:7px;height:7px"></span>SSH only <b>{{ c.sshdown }}</b></div>
+          <div class="dl-item"><span class="dl-dot" style="background:var(--bad);width:7px;height:7px"></span>Down <b>{{ c.down }}</b></div>
+          <div class="dl-item"><span class="dl-dot" style="background:var(--border);width:7px;height:7px"></span>Unknown <b>{{ reach_data.unknown }}</b></div>
+        </div>
       </div>
     </div>
+
+    {# Bottom: Hardware Family Lifecycle #}
+    {% if lifecycle %}
+    <a href="{{ url_for('web.lifecycle') }}" class="card hover-card" style="margin:0;padding:10px 14px;text-decoration:none;color:inherit;display:block;transition:border-color .15s,box-shadow .15s;flex:1" title="Open Hardware & Firmware Lifecycle Dashboard">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:5px;font-size:0.8rem;font-weight:700">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>Hardware Family Lifecycle</span>
+        </div>
+        <span class="small muted" style="font-size:0.7rem">&rarr;</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;max-height:85px;overflow-y:auto">
+        {% for fam, count in lifecycle.family_breakdown.items() %}
+        {% set pct = (count / (lifecycle.kpi.total or 1) * 100)|round|int %}
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:0.72rem;line-height:1.1;margin-bottom:2px">
+            <span style="font-weight:600;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fam }}</span>
+            <span class="muted" style="font-variant-numeric:tabular-nums">{{ count }} ({{ pct }}%)</span>
+          </div>
+          <div style="height:3px;background:var(--panel-2);border-radius:2px;overflow:hidden">
+            <div style="height:100%;width:{{ pct }}%;background:{% if '2200' in fam or '3750' in fam or '3300' in fam %}var(--bad){% elif '2300' in fam or '1300' in fam %}var(--ok){% else %}var(--blue){% endif %};border-radius:2px"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </a>
+    {% endif %}
+
   </div>
-</div>
 
-
-{% if lifecycle %}
-{# ── Lifecycle & Firmware Overview (Compact Widgets) ───────────────────────── #}
-<div class="grid g2" style="margin-bottom:18px;gap:14px">
-  <a href="{{ url_for('web.lifecycle') }}" class="card hover-card" style="margin:0;padding:12px 14px;text-decoration:none;color:inherit;display:block;transition:border-color .15s,box-shadow .15s" title="Open Hardware & Firmware Lifecycle Dashboard">
+  {# Column 3: Firmware & OS Standards #}
+  {% if lifecycle %}
+  <a href="{{ url_for('web.lifecycle') }}" class="card hover-card" style="margin:0;padding:14px 16px;text-decoration:none;color:inherit;display:flex;flex-direction:column;transition:border-color .15s,box-shadow .15s;min-width:0" title="Open Firmware Standards in Lifecycle Dashboard">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
       <div style="display:flex;align-items:center;gap:6px;font-size:0.85rem;font-weight:700">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        <span>Hardware Family Lifecycle</span>
-      </div>
-      <span class="small muted" style="font-size:0.75rem;display:inline-flex;align-items:center;gap:3px">
-        Lifecycle &amp; EOL &rarr;
-      </span>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:6px">
-      {% for fam, count in lifecycle.family_breakdown.items() %}
-      {% set pct = (count / (lifecycle.kpi.total or 1) * 100)|round|int %}
-      <div>
-        <div style="display:flex;justify-content:space-between;font-size:0.75rem;line-height:1.2;margin-bottom:2px">
-          <span style="font-weight:600;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fam }}</span>
-          <span class="muted" style="font-variant-numeric:tabular-nums">{{ count }} ({{ pct }}%)</span>
-        </div>
-        <div style="height:4px;background:var(--panel-2);border-radius:2px;overflow:hidden">
-          <div style="height:100%;width:{{ pct }}%;background:{% if '2200' in fam or '3750' in fam or '3300' in fam %}var(--bad){% elif '2300' in fam or '1300' in fam %}var(--ok){% else %}var(--blue){% endif %};border-radius:2px"></div>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-  </a>
-
-  <a href="{{ url_for('web.lifecycle') }}" class="card hover-card" style="margin:0;padding:12px 14px;text-decoration:none;color:inherit;display:block;transition:border-color .15s,box-shadow .15s" title="Open Firmware Standards in Lifecycle Dashboard">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <div style="display:flex;align-items:center;gap:6px;font-size:0.85rem;font-weight:700">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         <span>Firmware &amp; OS Standards</span>
       </div>
       <span class="badge blue" style="font-size:10px;padding:1px 6px">{{ lifecycle.distinct_sw_count }} Builds</span>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(210px, 1fr));gap:5px;max-height:148px;overflow-y:auto;padding-right:2px">
+    <div style="display:flex;flex-direction:column;gap:5px;flex:1;overflow-y:auto;max-height:180px;padding-right:2px">
       {% for sw_label, count in lifecycle.sw_versions.items() %}
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;background:var(--panel-2);border-radius:5px;border:1px solid var(--border);font-size:0.75rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 8px;background:var(--panel-2);border-radius:5px;border:1px solid var(--border);font-size:0.75rem">
         <span style="font-family:var(--mono);font-size:0.72rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:6px" title="{{ sw_label }}">{{ sw_label }}</span>
         <span class="badge" style="background:var(--bg);font-size:10px;padding:1px 5px;flex:none">{{ count }}</span>
       </div>
       {% endfor %}
     </div>
   </a>
+  {% endif %}
+
 </div>
-{% endif %}
+
 
 
 {# ── Level / Group device status ─────────────────────────────────────────────── #}
