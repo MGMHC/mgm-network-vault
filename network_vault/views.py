@@ -980,7 +980,7 @@ def api_device_optics(dev_id):
 # --------------------------------------------------------------------------- lifecycle & EOL
 
 @bp.route("/operations/lifecycle")
-def lifecycle_dashboard():
+def lifecycle():
     q = _site_filter(Device.query.filter(Device.enabled.is_(True)), Device)
     devices = q.all()
     analysis = lifecycle.analyze_device_lifecycle(devices)
