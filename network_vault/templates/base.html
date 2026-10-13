@@ -30,7 +30,7 @@
       <div class="nav-sep">Operations</div>
       <a href="{{ url_for('web.port_locator') }}" class="{{ 'active' if ep == 'web.port_locator' }}">{{ icon('target') }}<span class="nav-label">Port Locator</span></a>
       <a href="{{ url_for('web.optics') }}" class="{{ 'active' if ep == 'web.optics' }}">{{ icon('optic') }}<span class="nav-label">Optical Health</span></a>
-      <a href="{{ url_for('lifecycle.dashboard') }}" class="{{ 'active' if ep.startswith('lifecycle.') }}"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span class="nav-label">Lifecycle &amp; EOL</span></a>
+      <a href="{{ url_for('web.lifecycle') }}" class="{{ 'active' if ep.startswith('web.lifecycle') }}"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span class="nav-label">Lifecycle &amp; EOL</span></a>
       <div class="nav-sep">Admin</div>
       {% if current_user_obj and current_user_obj.is_group_admin %}
       <a href="{{ url_for('web.sites') }}" class="{{ 'active' if ep.startswith('web.site') and ep != 'web.site_switch' }}">{{ icon('building') }}<span class="nav-label">Sites</span></a>

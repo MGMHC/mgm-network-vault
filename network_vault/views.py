@@ -10,7 +10,7 @@ from flask import (Blueprint, Response, abort, current_app, flash, jsonify, redi
                    request, send_file, session, stream_with_context, url_for)
 from sqlalchemy import func, or_
 
-from . import config, engine, gitsync, operations, portable, reach, updater
+from . import config, engine, gitsync, lifecycle, operations, portable, reach, updater
 from .diffing import side_by_side, stats, unified
 from .models import (DEFAULT_SETTINGS, MODELS, PLATFORMS, ROLES, USER_ROLES, Backup, Credential, Device, Job,
                      LogEntry, Schedule, Site, User, db, get_setting, now, set_setting)
@@ -974,6 +974,53 @@ def api_device_optics(dev_id):
         log_event(f"Optical diagnostics failed: {e}", "device", "ERROR", device=d)
         return jsonify(error=f"{type(e).__name__}: {e}"), 500
 
+
+
+
+# --------------------------------------------------------------------------- lifecycle & EOL
+
+@bp.route("/operations/lifecycle")
+def lifecycle_dashboard():
+    q = _site_filter(Device.query.filter(Device.enabled.is_(True)), Device)
+    devices = q.all()
+    analysis = lifecycle.analyze_device_lifecycle(devices)
+    all_sites = Site.query.order_by(Site.code).all()
+    return render_template("lifecycle.html", analysis=analysis, sites=all_sites)
+
+
+@bp.route("/operations/lifecycle/export.csv")
+def lifecycle_export_csv():
+    q = _site_filter(Device.query.filter(Device.enabled.is_(True)), Device)
+    devices = q.all()
+    analysis = lifecycle.analyze_device_lifecycle(devices)
+
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow([
+        "Switch Name", "IP Address", "Site", "Group / Floor", "Role",
+        "Hardware Model", "Detected Model", "Serial Number", "Running Software",
+        "Recommended Software", "Firmware Status", "Lifecycle Status",
+        "End of Sale (EOS)", "End of SW Maintenance (EoSW)", "End of Security Support (EoSec)",
+        "Last Date of Support (EOL)", "Notes"
+    ])
+
+    for it in analysis["items"]:
+        d = it["device"]
+        site_name = d.site.code if d.site else "N/A"
+        entry = it["entry"] or {}
+        w.writerow([
+            d.name, d.host, site_name, d.group, d.role,
+            d.model, it["hw_model"], it["serial"], it["sw_version"],
+            it["recommended_sw"], it["fw_label"], it["status_label"],
+            it["eos_date"], entry.get("eosw_date", "N/A"), it["eosec_date"],
+            it["eol_date"], it["notes"]
+        ])
+
+    return Response(
+        BOM + out.getvalue(),
+        content_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=lifecycle_eol_audit_report.csv"}
+    )
 
 # --------------------------------------------------------------------------- backups
 
