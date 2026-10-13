@@ -981,18 +981,20 @@ def api_device_optics(dev_id):
 
 @bp.route("/operations/lifecycle")
 def lifecycle():
+    from . import lifecycle as lc
     q = _site_filter(Device.query.filter(Device.enabled.is_(True)), Device)
     devices = q.all()
-    analysis = lifecycle.analyze_device_lifecycle(devices)
+    analysis = lc.analyze_device_lifecycle(devices)
     all_sites = Site.query.order_by(Site.code).all()
     return render_template("lifecycle.html", analysis=analysis, sites=all_sites)
 
 
 @bp.route("/operations/lifecycle/export.csv")
 def lifecycle_export_csv():
+    from . import lifecycle as lc
     q = _site_filter(Device.query.filter(Device.enabled.is_(True)), Device)
     devices = q.all()
-    analysis = lifecycle.analyze_device_lifecycle(devices)
+    analysis = lc.analyze_device_lifecycle(devices)
 
     out = io.StringIO()
     w = csv.writer(out)
