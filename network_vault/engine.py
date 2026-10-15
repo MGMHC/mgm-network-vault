@@ -100,22 +100,53 @@ class CiscoC1300SSH(CiscoS300SSH):
 class SonicWallSonicOSSSH(CiscoS300SSH):
     """Driver for SonicWall firewalls running SonicOS Enhanced (NSa, TZ, SuperMassive).
 
-    Handles SonicOS CLI paging disable ('no cli pager'), prompt detection,
+    Handles SonicOS interactive terminal negotiation, in-band secondary password prompts,
+    paging disable ('no cli pager session' on SonicOS 7/8, 'no cli pager' on SonicOS 6),
     and command execution over SSH.
     """
+
+    def establish_connection(self, width: int = 511, height: int = 1000) -> None:
+        super().establish_connection(width=width, height=height)
+        # Check if SonicOS presents an interactive in-band Password: prompt after SSH banner
+        import time
+        time.sleep(0.5)
+        buf = ""
+        start = time.time()
+        while time.time() - start < 4:
+            if self.remote_conn.recv_ready():
+                buf += self.remote_conn.recv(1024).decode(self.encoding, errors="ignore")
+                if "password:" in buf.lower():
+                    break
+            time.sleep(0.1)
+
+        if "password:" in buf.lower():
+            self.remote_conn.send((self.password + "\n").encode(self.encoding))
+            time.sleep(0.5)
+            # Wait for base prompt to appear
+            start = time.time()
+            while time.time() - start < 6:
+                if self.remote_conn.recv_ready():
+                    buf += self.remote_conn.recv(1024).decode(self.encoding, errors="ignore")
+                    if any(p in buf for p in [">", "#"]):
+                        break
+                time.sleep(0.1)
 
     def session_preparation(self) -> None:
         self._test_channel_read(pattern=r"[>#]")
         self.set_base_prompt()
-        self.disable_paging(command="no cli pager")
+        self.disable_paging()
 
-    def disable_paging(self, command: str = "no cli pager", delay_factor: float = 1.0) -> str:
+    def disable_paging(self, command: str = "no cli pager session", delay_factor: float = 1.0) -> str:
         output = ""
-        try:
-            output = self.send_command_timing(command)
-        except Exception:
-            pass
+        for cmd in ("no cli pager session", "no cli pager"):
+            try:
+                output = self.send_command_timing(cmd)
+                if "% Error" not in output:
+                    break
+            except Exception:
+                pass
         return output
+
 
 
 CLASS_MAPPER["cisco_s300"] = CiscoC1300SSH
