@@ -4,6 +4,17 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.8.0] - 2026-10-15
+
+### Added
+- **SonicWall Next-Gen Firewall (SonicOS / NSa) Support**:
+  - Full platform support for **SonicWall Firewalls** (`sonicwall_sonicos`) including the enterprise **SonicWall NSa 4800**.
+  - Built-in `SonicWallSonicOSSSH` driver handling SonicOS terminal negotiation and paging (`no cli pager`).
+  - Automated configuration backup collecting `show current-config` (with fallback to `export current-config cli`).
+  - Fact discovery for SonicWall hardware model (`NSa 4800`), serial number, and firmware version (`SonicOS Enhanced 6.5.x`).
+  - Syslog commit event detection intercepting configuration change alerts in real-time for instant event-driven vaulting.
+  - Added **SonicWall NSa 4800 Series** to the Lifecycle & EOL catalog with milestone dates (EOS: March 2021, EOL: March 2026, Gold Standard: `SonicOS 6.5.4.15-116n`).
+
 ## [1.7.2] - 2026-10-15
 
 ### Fixed

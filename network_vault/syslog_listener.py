@@ -44,7 +44,13 @@ COMMIT_PATTERNS = [
     re.compile(r"COPY\s*-\s*FILECPY.*startup-config", re.IGNORECASE),
     re.compile(r"COPY-I-TRAP", re.IGNORECASE),
     re.compile(r"%CLI-I-CFGLOG", re.IGNORECASE),
+    # 4. SonicWall SonicOS:
+    re.compile(r"Commit changes.*succeeded", re.IGNORECASE),
+    re.compile(r"Configuration change.*succeeded", re.IGNORECASE),
+    re.compile(r"msg=\"Configuration changed\"", re.IGNORECASE),
+    re.compile(r"Configuration\s+updated", re.IGNORECASE),
 ]
+
 
 # Patterns that look like commits but are actually read-only inspections
 EXCLUDE_PATTERNS = [

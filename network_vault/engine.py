@@ -96,21 +96,45 @@ class CiscoC1300SSH(CiscoS300SSH):
         return None
 
 
+class SonicWallSonicOSSSH(CiscoS300SSH):
+    """Driver for SonicWall firewalls running SonicOS Enhanced (NSa, TZ, SuperMassive).
+
+    Handles SonicOS CLI paging disable ('no cli pager'), prompt detection,
+    and command execution over SSH.
+    """
+
+    def session_preparation(self) -> None:
+        self._test_channel_read(pattern=r"[>#]")
+        self.set_base_prompt()
+        self.disable_paging(command="no cli pager")
+
+    def disable_paging(self, command: str = "no cli pager", delay_factor: float = 1.0) -> str:
+        output = ""
+        try:
+            output = self.send_command_timing(command)
+        except Exception:
+            pass
+        return output
+
+
 CLASS_MAPPER["cisco_s300"] = CiscoC1300SSH
+CLASS_MAPPER["sonicwall_sonicos"] = SonicWallSonicOSSSH
 
 NETMIKO_TYPE = {
     "juniper_junos": "juniper_junos",
     "cisco_c1300": "cisco_s300",
     "cisco_s300": "cisco_s300",
     "cisco_ios": "cisco_ios",
+    "sonicwall_sonicos": "sonicwall_sonicos",
 }
 
 # Lines that change without a real config change; ignored for change detection.
 VOLATILE = re.compile(
     r"^(## Last (commit|changed):|! Last configuration change|! NVRAM config last updated|"
     r"! No configuration change since|Building configuration|Current configuration\s*:|"
-    r"! Time:|ntp clock-period)", re.I)
+    r"! Time:|ntp clock-period|.*System Time:.*|.*Up Time:.*)", re.I)
 VC_PROMPT_LINE = re.compile(r"^\{(master|backup|linecard)(:\d+)?\}\s*$", re.I)
+
 
 _device_locks = {}
 _locks_guard = threading.Lock()
@@ -227,6 +251,17 @@ def parse_facts(device, version, inventory):
         m = re.search(r"^Chassis\s+(\S+)", inventory, re.M)
         if m:
             facts["serial"] = m.group(1)
+    elif device.is_sonicwall:
+        # SonicOS: Model: NSA 4800, Firmware Version: SonicOS Enhanced 6.5.4.15-116n, Serial Number: 18B169...
+        m = re.search(r"Model:\s*([^\r\n]+)", version, re.I) or re.search(r"Product:\s*([^\r\n]+)", version, re.I)
+        if m:
+            facts["hw_model"] = m.group(1).strip()
+        m = re.search(r"Firmware Version:\s*([^\r\n]+)", version, re.I) or re.search(r"SonicOS\s+([^\r\n]+)", version, re.I)
+        if m:
+            facts["sw_version"] = m.group(1).strip()
+        m = re.search(r"Serial Number:\s*([A-Fa-f0-9]+)", version, re.I) or re.search(r"Serial Number:\s*([^\r\n]+)", inventory, re.I)
+        if m:
+            facts["serial"] = m.group(1).strip()
     else:
         m = re.search(r"Version:?\s*([0-9][^,\s]*)", version)
         if m:
@@ -238,11 +273,13 @@ def parse_facts(device, version, inventory):
 
 
 def model_family(hw_model):
-    """Map an exact hardware model (ex2300-48p, C1300-24P-4G) to the inventory family."""
+    """Map an exact hardware model (ex2300-48p, C1300-24P-4G, NSa 4800) to the inventory family."""
     h = (hw_model or "").lower()
     for fam in ("ex2200", "ex2300", "ex3300", "c1300"):
         if h.startswith(fam):
             return fam.upper()
+    if "nsa" in h or "sonicwall" in h:
+        return "NSa"
     return "Other" if h else None
 
 
@@ -287,6 +324,21 @@ def collect(device):
                 vc = parse_vc(vc_out)
             m = re.search(r"^\s*0\s+(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d.*)$", commits, re.M)
             last_commit = m.group(1).strip() if m else None
+        elif device.is_sonicwall:
+            # SonicWall SonicOS: disable pager and export current configuration
+            try:
+                config = run(conn, "show current-config")
+            except Exception:
+                config = run(conn, "export current-config cli")
+            try:
+                version = run(conn, "show status")
+            except Exception:
+                version = run(conn, "show version")
+            try:
+                inventory = run(conn, "show system")
+            except Exception:
+                inventory = ""
+            info_parts += [("show status", version), ("show system", inventory)]
         else:
             config = run(conn, "show running-config")
             version = run(conn, "show version")
@@ -327,6 +379,15 @@ def discover_device(device_id, user=None):
                 inventory = run(conn, "show chassis hardware | no-more")
                 vc_out = run(conn, "show virtual-chassis | no-more")
                 vc = parse_vc(vc_out) or None
+            elif device.is_sonicwall:
+                try:
+                    version = run(conn, "show status")
+                except Exception:
+                    version = run(conn, "show version")
+                try:
+                    inventory = run(conn, "show system")
+                except Exception:
+                    inventory = ""
             else:
                 version = run(conn, "show version")
                 try:
@@ -339,6 +400,7 @@ def discover_device(device_id, user=None):
             except Exception:
                 pass
     except Exception as e:  # noqa: BLE001
+
         log_event("Model detection failed - will retry on next backup", "device", "WARN", device,
                   details=f"{type(e).__name__}: {e}", user=actor)
         return False

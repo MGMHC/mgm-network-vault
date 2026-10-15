@@ -109,7 +109,19 @@ LIFECYCLE_CATALOG = [
         "recommended_sw": "15.2(2)E9",
         "notes": "Legacy 2960 access series. Past Last Date of Support (EOL).",
     },
+    {
+        "pattern": re.compile(r"(nsa\s*4800|nsa-4800)", re.I),
+        "vendor": "SonicWall",
+        "family": "SonicWall NSa 4800 Series",
+        "eos_date": "2021-03-31",
+        "eosw_date": "2024-03-31",
+        "eosec_date": "2025-03-31",
+        "eol_date": "2026-03-31",
+        "recommended_sw": "SonicOS 6.5.4.15-116n",
+        "notes": "Gen6 Enterprise Next-Gen Firewall. Approaching End of Support (EOL: March 2026). Migration path: SonicWall NSa 4700 / NSa 5700 (Gen7).",
+    },
 ]
+
 
 
 def match_lifecycle_entry(hw_model: str, model_fallback: str = "") -> Optional[dict]:

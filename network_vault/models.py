@@ -16,10 +16,12 @@ PLATFORMS = {
     "juniper_junos": "Juniper Junos (EX2200 / EX2300 / EX3300)",
     "cisco_c1300": "Cisco Catalyst 1300 / CBS / SG",
     "cisco_ios": "Cisco IOS / IOS-XE",
+    "sonicwall_sonicos": "SonicWall Firewall (SonicOS / NSa)",
 }
 
-MODELS = ["Auto", "EX2200", "EX2300", "EX3300", "C1300", "Other"]  # Auto = detect from the switch
-ROLES = ["access", "distribution", "core"]
+MODELS = ["Auto", "EX2200", "EX2300", "EX3300", "C1300", "NSa", "Other"]  # Auto = detect from device
+ROLES = ["access", "distribution", "core", "firewall"]
+
 
 
 USER_ROLES = ["group-admin", "site-admin", "read-write", "read-only"]
@@ -174,6 +176,10 @@ class Device(db.Model):
     @property
     def is_juniper(self):
         return self.platform.startswith("juniper")
+
+    @property
+    def is_sonicwall(self):
+        return self.platform.startswith("sonicwall")
 
 
 class Backup(db.Model):
