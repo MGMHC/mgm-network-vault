@@ -123,7 +123,8 @@ def _lock_for(device_id):
 
 # --------------------------------------------------------------------------- connection
 
-def connect(device):
+def connect(device, retries=2, backoff_base=3):
+    import time
     from netmiko import ConnectHandler
 
     cred = device.credential
@@ -141,14 +142,40 @@ def connect(device):
     if device.legacy_ssh:
         # Old Junos (EX2200/EX3300 on 12.x) and older Cisco: force classic ssh-rsa signatures
         params["disabled_algorithms"] = {"pubkeys": ["rsa-sha2-256", "rsa-sha2-512"]}
-    conn = ConnectHandler(**params)
-    if device.platform.startswith("cisco") and params["secret"]:
+
+    attempt = 0
+    while True:
         try:
-            if not conn.check_enable_mode():
-                conn.enable()
-        except Exception:
-            pass
-    return conn
+            conn = ConnectHandler(**params)
+            if device.platform.startswith("cisco") and params["secret"]:
+                try:
+                    if not conn.check_enable_mode():
+                        conn.enable()
+                except Exception:
+                    pass
+            return conn
+        except Exception as e:
+            msg = str(e).lower()
+            # Retry transient SSH handshake / banner / connection drops (e.g. switch VTY exhaustion or CPU spike)
+            is_transient = any(needle in msg for needle in (
+                "error reading ssh protocol banner",
+                "eof",
+                "connection reset",
+                "connection closed",
+                "banner_timeout",
+                "tcp connection to device failed",
+            ))
+            if is_transient and attempt < retries:
+                attempt += 1
+                delay = backoff_base * attempt
+                log_event(
+                    f"Transient SSH handshake issue on {device.name} ({e}); retrying in {delay}s (attempt {attempt}/{retries})",
+                    "backup", "WARN", device, commit=True
+                )
+                time.sleep(delay)
+                continue
+            raise
+
 
 
 def run(conn, cmd):

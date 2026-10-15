@@ -4,6 +4,14 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.7.2] - 2026-10-15
+
+### Fixed
+- **Resilient SSH Handshake & Auto-Retry with Backoff**:
+  - Implemented automatic retry mechanism with exponential backoff (`retries=2`, `backoff_base=3s`) for transient SSH connection drops.
+  - Automatically recovers from `SSHException: Error reading SSH protocol banner`, socket EOF resets, and banner timeouts caused by switch VTY session pool exhaustion or temporary CPU spikes (frequent on Cisco Catalyst 1300 / CBS and older switches during bulk schedule runs).
+  - Logs non-fatal warning events during retries while completing backups seamlessly without marking the job as failed.
+
 ## [1.7.1] - 2026-10-14
 
 ### Improved
