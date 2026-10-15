@@ -15,7 +15,8 @@ import paramiko
 from netmiko.cisco.cisco_s300 import CiscoS300SSH
 from netmiko.channel import SSHChannel
 from netmiko.exceptions import NetmikoAuthenticationException
-from netmiko.ssh_dispatcher import CLASS_MAPPER
+from netmiko.ssh_dispatcher import CLASS_MAPPER, platforms
+
 
 
 class CiscoC1300SSH(CiscoS300SSH):
@@ -119,6 +120,8 @@ class SonicWallSonicOSSSH(CiscoS300SSH):
 
 CLASS_MAPPER["cisco_s300"] = CiscoC1300SSH
 CLASS_MAPPER["sonicwall_sonicos"] = SonicWallSonicOSSSH
+if "sonicwall_sonicos" not in platforms:
+    platforms.append("sonicwall_sonicos")
 
 NETMIKO_TYPE = {
     "juniper_junos": "juniper_junos",
@@ -127,6 +130,7 @@ NETMIKO_TYPE = {
     "cisco_ios": "cisco_ios",
     "sonicwall_sonicos": "sonicwall_sonicos",
 }
+
 
 # Lines that change without a real config change; ignored for change detection.
 VOLATILE = re.compile(
@@ -629,12 +633,17 @@ def live_command(device, kind, a=None, b=None):
         if kind == "macs":
             if device.is_juniper:
                 return "MAC Address Table", run(conn, "show ethernet-switching table | no-more")
+            if device.is_sonicwall:
+                return "ARP / MAC Table", run(conn, "show arp-cache")
             return "MAC Address Table", run(conn, "show mac address-table")
         if kind == "arp":
             if device.is_juniper:
                 return "ARP Table", run(conn, "show arp no-resolve | no-more")
+            if device.is_sonicwall:
+                return "ARP Table", run(conn, "show arp-cache")
             return "ARP Table", run(conn, "show ip arp")
         raise ValueError("Unsupported tool for this platform")
+
     finally:
         try:
             conn.disconnect()
