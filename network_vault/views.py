@@ -409,6 +409,29 @@ def account():
                 db.session.commit()
                 log_event(f"User '{u.username}' deleted", "auth")
                 flash("User deleted", "ok")
+        elif action == "resetpassword":
+            if not me.is_admin:
+                abort(403, "Admin access required.")
+            u = db.session.get(User, int(request.form.get("id", 0)))
+            new_pw = request.form.get("password", "").strip()
+            require_change = request.form.get("must_change") == "1"
+            if not u:
+                flash("User not found", "error")
+            elif not new_pw or len(new_pw) < 8:
+                flash("Password must be at least 8 characters", "error")
+            else:
+                if not me.is_group_admin:
+                    if u.is_group_admin:
+                        abort(403, "Site administrators cannot reset passwords for group administrators.")
+                    u_sites = set(u.allowed_site_ids or ([u.site_id] if u.site_id else []))
+                    my_sites = set(me.allowed_site_ids or ([me.site_id] if me.site_id else []))
+                    if not u_sites.intersection(my_sites) and not (u.site_id in my_sites):
+                        abort(403, "Cannot reset password for users outside your assigned site(s).")
+                u.set_password(new_pw)
+                u.must_change = require_change
+                db.session.commit()
+                log_event(f"Password for user '{u.username}' reset by '{me.username}'", "auth")
+                flash(f"Password for '{u.username}' successfully reset" + (" (must change on next login)" if require_change else ""), "ok")
         return redirect(url_for("web.account"))
     
     users = User.query.order_by(User.username).all()

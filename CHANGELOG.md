@@ -4,6 +4,20 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.9.1] - 2026-10-17
+
+### Added
+- **User Page Redesign & Site-Admin Password Reset**:
+  - Implemented an administrative option for **Site Administrators** (and Group Admins) to reset passwords for other users within their assigned campus sites (`action="resetpassword"`).
+  - Built-in secure password generator with one-click clipboard copy and automated `must_change` flag forcing a permanent password update on next login.
+  - Strict security boundaries: Site Admins cannot reset passwords for Group Admins or users outside their assigned campuses.
+  - Complete modern redesign of the User & Access Management page:
+    - Real-time search filter across usernames, roles, and campus codes.
+    - User stats ribbon summarizing total users, group admins, site admins, and operators.
+    - Redesigned user directory table with role-colored avatars, campus badges, and streamlined actions.
+    - Dedicated profile card with live password strength indicator and show/hide password toggles.
+    - Polished modals for user password resets and role/site editing.
+
 ## [1.9.0] - 2026-10-17
 
 ### Added
