@@ -287,8 +287,8 @@
             </div>
 
             <div class="field">
-              <label>Corporate Email <span class="muted small">(for password reset)</span></label>
-              <input type="email" name="email" id="newEmailInput" placeholder="user@mgmhealthcare.in">
+              <label>Corporate Email <span class="muted small">(optional)</span></label>
+              <input type="email" name="email" id="newEmailInput" placeholder="user@mgmhealthcare.in" autocomplete="off" spellcheck="false">
             </div>
 
             <div class="field">
@@ -454,8 +454,8 @@
         </div>
 
         <div class="field" style="margin-top:14px">
-          <label>Corporate Email Address</label>
-          <input type="email" name="email" id="editEmailInput" placeholder="user@mgmhealthcare.in">
+          <label>Corporate Email <span class="muted small">(optional)</span></label>
+          <input type="email" name="email" id="editEmailInput" placeholder="user@mgmhealthcare.in" autocomplete="off" spellcheck="false">
           <div class="help">Used for self-service password recovery and system notifications.</div>
         </div>
 
@@ -957,6 +957,35 @@
   gap: 8px;
   font-size: 13px;
   cursor: pointer;
+}
+
+/* Minimal theme-matching inputs for Add User & Modal */
+.add-user-form input,
+.add-user-form select,
+.user-modal-body input,
+.user-modal-body select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8.5px 12px;
+  font-size: 13.5px;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+.add-user-form input:focus,
+.add-user-form select:focus,
+.user-modal-body input:focus,
+.user-modal-body select:focus {
+  outline: none;
+  background: var(--panel);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.add-user-form input::placeholder,
+.user-modal-body input::placeholder {
+  color: var(--muted);
+  opacity: 0.6;
+  font-size: 13px;
 }
 </style>
 

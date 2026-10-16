@@ -192,9 +192,9 @@ form.inline { display: inline; }
 label { display: block; font-weight: 600; font-size: 12.5px; margin-bottom: 4px; }
 .field { margin-bottom: 14px; }
 .field .help { color: var(--muted); font-size: 12px; margin-top: 3px; }
-input[type=text], input[type=password], input[type=number], input[type=date], input[type=time], input[type=search], select, textarea {
-  width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; }
-input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+input[type=text], input[type=password], input[type=email], input[type=number], input[type=date], input[type=time], input[type=search], select, textarea {
+  width: 100%; padding: 8px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; transition: border-color .15s ease, box-shadow .15s ease; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 textarea { min-height: 70px; }
 .check { display: flex; gap: 8px; align-items: center; font-weight: 500; font-size: 13.5px; margin-bottom: 8px; }
 .check input { width: 16px; height: 16px; min-width: 16px; flex-shrink: 0; }

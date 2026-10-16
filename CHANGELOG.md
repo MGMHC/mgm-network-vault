@@ -4,6 +4,14 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.10.2] - 2026-10-17
+
+### Fixed
+- **Email Input Field Styling & Theme Consistency**:
+  - Added `input[type=email]` to the core stylesheet (`app.css`) form control rules, resolving an issue where email inputs defaulted to unstyled white browser backgrounds.
+  - Styled corporate email inputs in both the **Add New User** form and **Edit Access** modal with sleek, minimal theme-matching background (`var(--bg)`), subtle borders (`var(--border)`), and soft gold accent focus rings.
+  - Simplified and refined field labels and helper captions.
+
 ## [1.10.1] - 2026-10-17
 
 ### Changed
