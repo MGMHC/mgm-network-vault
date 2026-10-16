@@ -270,6 +270,7 @@ DEFAULT_SETTINGS = {
     "smtp_encryption": "starttls",   # starttls | ssl | plain
     "smtp_user": "donotreply@mgmhealthcare.in",
     "smtp_pass_enc": "",
+    "smtp_from_name": "MGM Networkvault",
     "smtp_from": "donotreply@mgmhealthcare.in",
     "app_url": "",                  # external base URL (e.g. https://networkvault.mgmhealthcare.in)
 }

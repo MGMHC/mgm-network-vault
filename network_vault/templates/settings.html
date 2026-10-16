@@ -101,6 +101,11 @@
       </select>
     </div>
     <div class="field">
+      <label>Sender Display Name</label>
+      <input type="text" name="smtp_from_name" value="{{ s.smtp_from_name }}" placeholder="MGM Networkvault">
+      <div class="help">Display name shown to recipients (e.g. <code>MGM Networkvault</code>).</div>
+    </div>
+    <div class="field">
       <label>Sender Address (From)</label>
       <input type="text" name="smtp_from" value="{{ s.smtp_from }}" placeholder="donotreply@mgmhealthcare.in">
     </div>

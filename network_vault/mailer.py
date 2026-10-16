@@ -4,6 +4,7 @@ import smtplib
 import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr, parseaddr
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -23,6 +24,7 @@ def get_smtp_config():
         "encryption": (get_setting("smtp_encryption") or "starttls").lower(),
         "user": get_setting("smtp_user") or "",
         "password": decrypt(pass_enc) if pass_enc else "",
+        "from_name": get_setting("smtp_from_name") or "MGM Networkvault",
         "from_addr": get_setting("smtp_from") or "donotreply@mgmhealthcare.in",
         "app_url": (get_setting("app_url") or "").rstrip("/"),
     }
@@ -38,9 +40,14 @@ def send_email(to_email: str, subject: str, html_body: str, text_body: str = Non
     if not to_email:
         return False, "Recipient email address is required."
 
+    # Parse and construct RFC 5322 compliant sender header with display name
+    name, addr = parseaddr(cfg["from_addr"])
+    display_name = cfg.get("from_name") or name or "MGM Networkvault"
+    sender_email = addr or cfg["from_addr"]
+
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = cfg["from_addr"]
+    msg["From"] = formataddr((display_name, sender_email))
     msg["To"] = to_email
 
     if not text_body:
@@ -124,47 +131,58 @@ def send_password_reset_email(user: User, base_url: str) -> tuple[bool, str | No
 <html>
 <head>
   <meta charset="utf-8">
-  <style>
-    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background-color: #f6f4ef; margin: 0; padding: 24px; color: #1b2547; }}
-    .email-container {{ max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e6e0d4; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }}
-    .email-header {{ background: #25366C; padding: 24px 30px; text-align: center; }}
-    .email-header h1 {{ margin: 0; color: #ffffff; font-size: 20px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }}
-    .email-header p {{ margin: 4px 0 0; color: #d9b98a; font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }}
-    .email-body {{ padding: 32px 30px; }}
-    .email-body h2 {{ margin: 0 0 16px; font-size: 18px; color: #1b2547; }}
-    .email-body p {{ margin: 0 0 16px; font-size: 14px; line-height: 1.6; color: #4a5568; }}
-    .btn-wrap {{ text-align: center; margin: 28px 0; }}
-    .btn {{ display: inline-block; background: #25366C; color: #ffffff !important; padding: 13px 28px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 700; letter-spacing: 0.02em; box-shadow: 0 2px 6px rgba(37,54,108,0.25); }}
-    .btn:hover {{ background: #1C2A55; }}
-    .alert-box {{ background: #fdfaf3; border: 1px solid #e9dfcf; border-radius: 8px; padding: 14px; margin: 20px 0; font-size: 13px; color: #7c6031; }}
-    .url-fallback {{ word-break: break-all; font-family: ui-monospace, monospace; font-size: 12px; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0; color: #334155; }}
-    .email-footer {{ background: #faf8f4; border-top: 1px solid #e6e0d4; padding: 18px 30px; text-align: center; font-size: 12px; color: #737373; }}
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Password Reset Request</title>
 </head>
-<body>
-  <div class="email-container">
-    <div class="email-header">
-      <h1>MGM Healthcare</h1>
-      <p>Network Vault · Security Service</p>
-    </div>
-    <div class="email-body">
-      <h2>Password Reset Request</h2>
-      <p>Hello <b>{user.username}</b>,</p>
-      <p>We received a request to reset your password for your <b>MGM Network Vault</b> account. Click the button below to choose a new password:</p>
-      <div class="btn-wrap">
-        <a href="{reset_url}" target="_blank" class="btn">Reset My Password</a>
-      </div>
-      <div class="alert-box">
-        <strong>Security Notice:</strong> This link is valid for <strong>15 minutes</strong> and can only be used once. If you did not request this password reset, you can safely ignore this email — your account remains secure.
-      </div>
-      <p style="font-size:12px;color:#718096;margin-bottom:6px;">If the button above does not work, copy and paste this link into your browser:</p>
-      <div class="url-fallback">{reset_url}</div>
-    </div>
-    <div class="email-footer">
-      MGM Network Vault · Network Infrastructure & Security Team<br>
-      This is an automated system email. Please do not reply directly.
-    </div>
-  </div>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f6fa; margin: 0; padding: 24px 12px; color: #1b2547; -webkit-font-smoothing: antialiased;">
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.06);">
+    <!-- Header -->
+    <tr>
+      <td style="background-color: #25366C; padding: 26px 30px; text-align: center;">
+        <h1 style="margin: 0; color: #ffffff; font-size: 20px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;">MGM Healthcare</h1>
+        <p style="margin: 6px 0 0; color: #e5c494; font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;">Network Vault · Security Service</p>
+      </td>
+    </tr>
+    <!-- Content -->
+    <tr>
+      <td style="padding: 32px 30px;">
+        <h2 style="margin: 0 0 16px; font-size: 18px; color: #1b2547; font-weight: 700;">Password Reset Request</h2>
+        <p style="margin: 0 0 16px; font-size: 15px; line-height: 1.6; color: #374151;">Hello <b>{user.username}</b>,</p>
+        <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.6; color: #374151;">We received a request to reset your password for your <b>MGM Network Vault</b> account. Click the button below to choose a new password:</p>
+        
+        <!-- Button -->
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 28px 0;">
+          <tr>
+            <td align="center">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" bgcolor="#25366C" style="border-radius: 8px;">
+                    <a href="{reset_url}" target="_blank" style="display: inline-block; padding: 14px 32px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; color: #ffffff !important; text-decoration: none; font-weight: 700; letter-spacing: 0.02em; border-radius: 8px; background-color: #25366C; border: 1px solid #25366C;">Reset My Password</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Security Alert Box -->
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 20px; background-color: #fef8ee; border: 1px solid #f2dfba; border-radius: 8px;">
+          <tr>
+            <td style="padding: 14px 16px; font-size: 13px; color: #875a1b; line-height: 1.5;">
+              <strong style="color: #6d440c;">Security Notice:</strong> This link is valid for <strong>15 minutes</strong> and can only be used once. If you did not request this password reset, you can safely ignore this email — your account remains secure.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+      <td style="background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 20px 30px; text-align: center; font-size: 12px; color: #6b7280; line-height: 1.6;">
+        <b>MGM Network Vault</b> · Network Infrastructure &amp; Security Team<br>
+        This is an automated system email. Please do not reply directly.
+      </td>
+    </tr>
+  </table>
 </body>
 </html>"""
 

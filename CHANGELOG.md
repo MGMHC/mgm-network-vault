@@ -4,6 +4,15 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.10.1] - 2026-10-17
+
+### Changed
+- **Branded Sender & Streamlined Password Reset Email**:
+  - Configured outbound sender display name to **`MGM Networkvault`** (`MGM Networkvault <donotreply@mgmhealthcare.in>`) with RFC 5322 formatted address headers.
+  - Added configurable **Sender Display Name** (`smtp_from_name`) field in **Settings** (`/settings`).
+  - Removed the fallback raw URL paragraph ("If the button above does not work...") from password reset emails for a cleaner, modern appearance.
+  - Upgraded reset email styling to bulletproof table and inline CSS buttons, ensuring consistent navy `#25366C` branding across web and desktop email clients.
+
 ## [1.10.0] - 2026-10-17
 
 ### Added
