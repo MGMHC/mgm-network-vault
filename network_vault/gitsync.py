@@ -245,7 +245,7 @@ Configuration backups of MGM Healthcare network switches, maintained automatical
 
 | Path | Content |
 |---|---|
-| `devices/<switch>/config.conf` | Running configuration (Junos hierarchical / Cisco running-config) |
+| `devices/<switch>/config.conf` | Running configuration (Junos hierarchical / Cisco running-config / SonicWall CLI) |
 | `devices/<switch>/config.set` | Junos `display set` format - best for reading diffs |
 | `devices/<switch>/info.txt` | Software version, hardware, Virtual Chassis members, commit history |
 

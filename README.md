@@ -1,15 +1,18 @@
-# MGM Network Vault — switch configuration backup manager
+# MGM Network Vault — switch & firewall configuration backup manager
 
-Web app for backing up Juniper EX (EX2200 / EX2300 / EX3300, including Virtual Chassis) and Cisco
-(Catalyst 1300 / CBS / IOS) switch configurations.
+Web app for backing up Juniper EX (EX2200 / EX2300 / EX3300, including Virtual Chassis), Cisco
+(Catalyst 1300 / CBS / IOS), and SonicWall (SonicOS / NSa) network configurations with multi-site campus isolation, hardware lifecycle tracking, and automated GitHub sync.
 
 ## Features
 
 | Area | What it does |
 |---|---|
+| **Multi-site & Campus Isolation** | Dedicated site contexts (`MGMHC`, `MGM-Malar`, `MGM-CORP`, etc.) with campus filtering, transferrable credential profiles across sites, and isolated per-site Git backup branches. |
+| **Hardware & Firmware Lifecycle** | Comprehensive lifecycle catalog for Juniper, Cisco, and SonicWall: milestone tracking (End of Sale, End of Support, End of Life), campus OS build distribution, Gold Standard firmware baseline audit, and fleet health score. |
+| **SonicWall Next-Gen Firewalls** | Native SonicOS driver support (NSa 4800, etc.) with automated configuration collection, hardware/firmware fact discovery, and syslog commit event triggers. |
 | **On-demand backup** | One switch, selected switches, or all switches, run in parallel with a live progress toast. |
 | **Scheduled backup** | Hourly, daily, weekly, monthly or custom cron. Targets can be all devices, a group, a role (core/access), a platform or a hand-picked list. *Run now* button on each schedule. |
-| **Change detection** | Every backup is hashed (timestamps and other lines that change on their own are ignored). Changed backups are flagged with +/− line counts and the Junos commit that caused them (`show system commit`). |
+| **Change detection** | Every backup is hashed (timestamps and other lines that change on their own are ignored). Changed backups are flagged with +/− line counts and the commit that caused them. |
 | **Compare** | Side-by-side or unified diff of any two backups, including from different switches. For Junos you can diff the `display set` format, which is much easier to read. Diffs can be downloaded as `.diff` files. |
 | **Live tools** | Junos: commit history and `show system rollback N compare M`. Cisco: unsaved changes (startup vs running). Both: VC/stack status and an SSH login test. |
 | **Virtual Chassis** | On every backup, VC members are parsed (serial, model, role, Prsnt/NotPrsnt). If a member drops out you get a dashboard alert and a WARN log. |
@@ -17,7 +20,7 @@ Web app for backing up Juniper EX (EX2200 / EX2300 / EX3300, including Virtual C
 | **Downloads** | Each backup has a `.conf` file, a `.set` file (Junos) and a `.info.txt` file (version, chassis hardware, commit history, VC). You can also download a ZIP of selected backups or of the latest backup of every switch. |
 | **Logs** | Every action is logged with user, device, level and category. You can filter, search and export to CSV, and purge or auto-expire old entries. |
 | **Retention** | Keep N backups per device and/or N days. You can *Pin* a backup to keep it forever. The newest backup is never deleted. Optionally skip storing configs that haven't changed. |
-| **GitHub sync** | Every backup is mirrored to a private GitHub repository: one commit per configuration change (dated with the backup time), a `backup/YYYY-MM-DD_HHMMSS` tag per run that changed something, and existing backups imported as history on first sync. Secrets are masked in the GitHub copy by default. If GitHub is unreachable, pushes are retried every 15 minutes. See [GitHub sync](#github-sync). |
+| **GitHub sync** | Every site's backups are mirrored to its own dedicated branch on GitHub (`MGMHC`, `MGM-Malar`, `MGM-CORP`, etc.): one commit per configuration change (dated with the backup time), a `backup/YYYY-MM-DD_HHMMSS` tag per run that changed something, and existing backups imported as history on first sync. Unassigned devices use the fallback default branch. Secrets are masked in the GitHub copy by default. If GitHub is unreachable, pushes are retried every 15 minutes. See [GitHub sync](#github-sync). |
 | **Security** | Login is required, with a forced password change on first login and CSRF protection. Device passwords are encrypted at rest (Fernet), and you can add multiple users. |
 
 ## Quick start (this PC)
@@ -48,10 +51,12 @@ set system login class NETWORK-VAULT permissions [ view view-configuration ]
 set system login user netvault class NETWORK-VAULT authentication plain-text-password
 ```
 
-**Cisco C1300:** `show running-config` needs level 15.
+**Cisco (Catalyst / CBS / C1300):** `show running-config` needs level 15.
 ```
 username netvault privilege 15 password <password>
 ```
+
+**SonicWall (SonicOS / NSa):** Read-only non-config administrator user or standard administrator.
 
 ## GitHub sync
 
@@ -60,16 +65,20 @@ username netvault privilege 15 password <password>
    **Contents: Read and write**, and set an expiry date. Put a reminder in your calendar to renew it.
 3. In the app, go to **GitHub sync**, paste the HTTPS address and the token, tick *Sync backups to GitHub*, and click **Save & sync**.
 
-The first sync replays all stored backups, oldest first, so the repository starts with their full history.
-After that, each backup that changes a switch's config becomes one commit and is pushed when the backup run ends.
+### Per-Site Branch Architecture
+Every site/campus automatically commits and pushes configuration backups to its own dedicated branch on GitHub:
+* `MGMHC` → branch `MGMHC`
+* `MGM-Malar` → branch `MGM-Malar`
+* `MGM-CORP` → branch `MGM-CORP`
+* Devices not assigned to a site push to the default branch (e.g. `main`)
 
-Repository layout: `devices/<switch>/config.conf`, `config.set` (Junos) and `info.txt`. Use the folder's *History*
-on GitHub, or `git log -p devices/<switch>`, to see every version. Because GitHub keeps all history, it also works as a
-long-term archive for versions that local retention has already deleted.
+Each site operates with an isolated local working copy in `data/git-repos/<site_code>/` protected by fine-grained per-site thread locks. This completely eliminates branch-switching race conditions and lock contention during concurrent scheduled backups across multiple campuses.
 
-Masking (on by default) replaces password hashes, SNMP communities and RADIUS/TACACS keys with `<masked>` in the
-GitHub copy only. Local backups stay complete and restorable. Git for Windows must be installed on the server.
-The token is stored encrypted, and Windows' Git credential manager is bypassed so no login pop-ups block scheduled runs.
+The first sync replays all stored backups per site, oldest first, so every branch starts with its full historical timeline. After that, each backup that changes a switch or firewall's config becomes one commit on its site branch and is pushed when the backup run ends.
+
+Repository layout per branch: `devices/<device>/config.conf`, `config.set` (Junos) and `info.txt`. Use the folder's *History* on GitHub, or `git log -p devices/<device>`, to see every version. Direct links on each device's detail page take you straight to its file history on its respective site branch.
+
+Masking (on by default) replaces password hashes, SNMP communities and RADIUS/TACACS keys with `<masked>` in the GitHub copy only. Local backups stay complete and restorable. Git for Windows must be installed on the server. The token is stored encrypted, and Windows' Git credential manager is bypassed so no login pop-ups block scheduled runs.
 
 ## Hosting on a server
 
@@ -157,5 +166,8 @@ On Docker, re-run `docker compose ... up -d --build`. Take an export first.
 ## Notes
 
 - `paramiko` is pinned below 4.0 on purpose. Paramiko 4 removed `ssh-rsa` and SHA-1 key exchange, and older Junos on EX2200/EX3300 still needs them.
-- Cisco C1300 uses Netmiko's `cisco_s300` driver. Classic Catalyst IOS switches use `cisco_ios`.
+- Cisco Catalyst 1300 / CBS / SG switches use Netmiko's `cisco_s300` driver with auto in-band authentication. Classic Catalyst switches (such as C1000 and 2960-S) use native `cisco_ios`.
+- SonicWall Firewalls (SonicOS / NSa) use `sonicwall_sonicos` with automatic terminal paging management and real-time syslog commit detection.
+- Credential profiles can be freely edited and assigned or transferred across campus sites (`/credentials`).
+- Backups are isolated per site on GitHub: each site (`MGMHC`, `MGM-Malar`, `MGM-CORP`, etc.) maintains its own independent branch.
 - Core switches are just devices with role **core**. Use them as a schedule target to back them up more often.
