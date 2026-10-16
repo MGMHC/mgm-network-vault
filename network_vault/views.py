@@ -124,7 +124,7 @@ def gh_commit(sha):
 
 @bp.app_context_processor
 def _gh_helpers():
-    return {"gh_device_url": lambda name: gitsync.device_url(name) if gitsync.is_enabled() else None}
+    return {"gh_device_url": lambda dev_or_name: gitsync.device_url(dev_or_name) if gitsync.is_enabled() else None}
 
 
 @bp.app_template_filter("size")
@@ -1366,9 +1366,18 @@ def github():
     except gitsync.GitError as e:
         commits, tags, pending, local_error = [], [], 0, str(e)
     s = {k: gitsync.setting(k) for k in gitsync.GIT_DEFAULTS if k != "git_token_enc"}
+    # Build per-site branch info for the UI
+    base = gitsync.web_url()
+    site_branches = []
+    for sc in sorted(gitsync._all_initialized_sites()):
+        site_branches.append({
+            "code": sc,
+            "branch_url": f"{base}/tree/{sc}" if base else None,
+        })
     return render_template("github.html", s=s, has_token=bool(gitsync.setting("git_token_enc")),
                            commits=commits, tags=tags, pending=pending, local_error=local_error,
-                           progress=gitsync.progress, web_url=gitsync.web_url())
+                           progress=gitsync.progress, web_url=gitsync.web_url(),
+                           site_branches=site_branches)
 
 
 @bp.route("/api/github/progress")

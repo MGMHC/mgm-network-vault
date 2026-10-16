@@ -25,7 +25,16 @@
     <dl class="kv">
       <dt>Sync</dt><dd>{% if s.git_enabled == '1' and s.git_url %}<span class="badge ok">enabled</span>{% else %}<span class="badge">off</span>{% endif %}</dd>
       <dt>Repository</dt><dd class="mono">{{ s.git_url or '—' }}</dd>
-      <dt>Branch</dt><dd class="mono">{{ s.git_branch }}</dd>
+      <dt>Branches</dt><dd>
+        {% if site_branches %}
+          {% for sb in site_branches %}
+            {% if sb.branch_url %}<a href="{{ sb.branch_url }}" target="_blank" rel="noopener" class="mono">{{ sb.code }}</a>{% else %}<span class="mono">{{ sb.code }}</span>{% endif %}{% if not loop.last %}, {% endif %}
+          {% endfor %}
+          <span class="small muted">(one branch per site)</span>
+        {% else %}
+          <span class="muted small">No branches initialized yet — click Sync now</span>
+        {% endif %}
+      </dd>
       <dt>Last push</dt><dd>{{ s.git_last_push or 'never' }}</dd>
       <dt>Waiting to push</dt><dd>{% if pending %}<span class="badge warn">{{ pending }} commit(s)</span> <span class="muted small">retried every 15 min</span>{% else %}<span class="badge ok">up to date</span>{% endif %}</dd>
       <dt>Secrets</dt><dd>{{ 'masked in the GitHub copy' if s.git_redact == '1' else 'pushed as-is (not masked)' }}</dd>
@@ -52,7 +61,7 @@
     <div class="field"><label>Repository address (HTTPS)</label>
       <input type="text" name="git_url" value="{{ s.git_url }}" placeholder="https://github.com/your-org/switch-configs.git"></div>
     <div class="form-grid">
-      <div class="field"><label>Branch</label><input type="text" name="git_branch" value="{{ s.git_branch }}"></div>
+      <div class="field"><label>Default branch <span class="muted small">(fallback for devices without a site)</span></label><input type="text" name="git_branch" value="{{ s.git_branch }}"></div>
       <div class="field"><label>Access token {{ '(saved - leave blank to keep)' if has_token }}</label>
         <input type="password" name="git_token" placeholder="{{ '••••••••' if has_token else 'github_pat_…' }}" autocomplete="new-password"></div>
       <div class="field"><label>Commit author name</label><input type="text" name="git_author_name" value="{{ s.git_author_name }}"></div>

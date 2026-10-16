@@ -4,6 +4,18 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.9.0] - 2026-10-17
+
+### Added
+- **Per-Site Git Branch Backup Isolation**:
+  - Configured each site (`MGMHC`, `MGM-Malar`, `MGM-CORP`, etc.) to automatically push configuration backups to its own dedicated branch on GitHub.
+  - Multi-working-copy repository architecture (`data/git-repos/<site_code>/`) eliminating git lock contention and branch-switching race conditions during concurrent backup runs.
+  - Granular per-site locking ensuring multi-threaded backup engines can write and commit configs across multiple sites in parallel.
+  - Direct branch links in the UI:
+    - **GitHub Status** page displays all initialized site branches with clickable links to their respective branch tree on GitHub.
+    - **Device Detail** page links directly to the device's configuration history on its specific site branch.
+  - Historical replay migrated all existing database backups into their corresponding site branches, deduplicated and pushed upstream with zero pending commits.
+
 ## [1.8.2] - 2026-10-16
 
 ### Added

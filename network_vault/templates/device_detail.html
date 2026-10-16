@@ -82,7 +82,7 @@
     <div class="actions">
       <button class="btn sm" onclick="compareSelected()">{{ icon('diff') }}Compare selected</button>
       <button class="btn sm" onclick="zipSelected()">{{ icon('download') }}ZIP selected</button>
-      {% if gh_device_url(d.name) %}<a class="btn sm" href="{{ gh_device_url(d.name) }}" target="_blank" rel="noopener">{{ icon('git') }}History on GitHub</a>{% endif %}
+      {% if gh_device_url(d) %}<a class="btn sm" href="{{ gh_device_url(d) }}" target="_blank" rel="noopener">{{ icon('git') }}History on GitHub</a>{% endif %}
     </div>
   </div>
   <div class="table-wrap"><table>
