@@ -10,12 +10,12 @@ from flask import (Blueprint, Response, abort, current_app, flash, jsonify, redi
                    request, send_file, session, stream_with_context, url_for)
 from sqlalchemy import func, or_
 
-from . import config, engine, gitsync, lifecycle, operations, portable, reach, updater
+from . import config, engine, gitsync, lifecycle, mailer, operations, portable, reach, updater
 from .diffing import side_by_side, stats, unified
 from .models import (DEFAULT_SETTINGS, MODELS, PLATFORMS, ROLES, USER_ROLES, Backup, Credential, Device, Job,
                      LogEntry, Schedule, Site, User, db, get_setting, now, set_setting)
 from .scheduler import make_trigger, next_run, resolve_targets, run_schedule, sync_schedules
-from .util import BACKUP_DIR, BASE_DIR, encrypt, log_event, read_backup_file, safe_name
+from .util import BACKUP_DIR, BASE_DIR, decrypt, encrypt, log_event, read_backup_file, safe_name
 from .version import __version__
 
 bp = Blueprint("web", __name__)
@@ -170,6 +170,76 @@ def logout():
     log_event("User logged out", "auth")
     session.clear()
     return redirect(url_for("web.login"))
+
+
+@bp.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        ident = request.form.get("identity", "").strip()
+        if not ident:
+            flash("Please enter your username or registered email address.", "error")
+            return render_template("forgot_password.html")
+
+        # Case-insensitive lookup by username or email
+        u = User.query.filter(
+            or_(
+                func.lower(User.username) == ident.lower(),
+                func.lower(User.email) == ident.lower()
+            )
+        ).first()
+
+        if u and u.email:
+            base_url = get_setting("app_url") or request.host_url.rstrip("/")
+            ok, err = mailer.send_password_reset_email(u, base_url)
+            if ok:
+                log_event(f"Password reset link emailed to '{u.email}' for user '{u.username}'", "auth",
+                          user=u.username, details=request.remote_addr)
+            else:
+                log_event(f"Failed to send password reset email to '{u.email}': {err}", "auth", "WARN",
+                          user=u.username, details=request.remote_addr)
+        else:
+            log_event(f"Password reset requested for unknown or email-less identity '{ident}'", "auth", "WARN",
+                      user="-", details=request.remote_addr)
+
+        # Uniform security message to prevent user enumeration
+        flash("If an account matching that username or email exists, a password reset link has been sent to the registered email address. Please check your inbox.", "ok")
+        return redirect(url_for("web.login"))
+
+    return render_template("forgot_password.html")
+
+
+@bp.route("/reset-password", methods=["GET", "POST"])
+def reset_password():
+    token = request.args.get("token") or request.form.get("token", "")
+    if not token:
+        flash("Password reset link is invalid or missing.", "error")
+        return redirect(url_for("web.forgot_password"))
+
+    user, err = mailer.verify_reset_token(token)
+    if not user:
+        flash(err or "Password reset link is invalid or has expired.", "error")
+        return redirect(url_for("web.forgot_password"))
+
+    if request.method == "POST":
+        pw = request.form.get("password", "")
+        confirm = request.form.get("confirm", "")
+        if len(pw) < 8:
+            flash("New password must be at least 8 characters long.", "error")
+            return render_template("reset_password.html", user=user, token=token)
+        if pw != confirm:
+            flash("Passwords do not match. Please re-enter.", "error")
+            return render_template("reset_password.html", user=user, token=token)
+
+        user.set_password(pw)
+        user.must_change = False
+        db.session.commit()
+        log_event(f"Password successfully reset via email link for '{user.username}'", "auth",
+                  user=user.username, details=request.remote_addr)
+        flash("Your password has been successfully reset! Please sign in with your new password.", "ok")
+        return redirect(url_for("web.login"))
+
+    return render_template("reset_password.html", user=user, token=token)
+
 
 
 def _site_filter(query, model=Device):
@@ -349,8 +419,9 @@ def account():
             elif User.query.filter_by(username=name).first():
                 flash("User already exists", "error")
             else:
+                email = request.form.get("email", "").strip() or None
                 primary_site = selected_site_ids[0] if selected_site_ids else None
-                u = User(username=name, must_change=True, role=role, site_id=primary_site)
+                u = User(username=name, email=email, must_change=True, role=role, site_id=primary_site)
                 u.set_password(pw)
                 if selected_site_ids and role != "group-admin":
                     u.assigned_sites = Site.query.filter(Site.id.in_(selected_site_ids)).all()
@@ -372,6 +443,8 @@ def account():
                         abort(403, "Cannot modify users outside your assigned site(s).")
                 
                 u.role = new_role
+                if "email" in request.form:
+                    u.email = request.form.get("email", "").strip() or None
                 if me.is_group_admin:
                     if new_role == "group-admin":
                         u.site_id = None
@@ -1591,7 +1664,13 @@ def settings():
         for k in DEFAULT_SETTINGS:
             if k == "skip_unchanged":
                 set_setting(k, "1" if _bool(k) else "0")
-            elif request.form.get(k, "").strip().isdigit():
+            elif k == "smtp_enabled":
+                set_setting(k, "1" if request.form.get("smtp_enabled") == "1" else "0")
+            elif k == "smtp_pass_enc":
+                new_pw = request.form.get("smtp_password", "").strip()
+                if new_pw:
+                    set_setting("smtp_pass_enc", encrypt(new_pw))
+            elif k in request.form:
                 set_setting(k, request.form[k].strip())
         db.session.commit()
         sync_schedules()
@@ -1599,8 +1678,29 @@ def settings():
         flash("Settings saved", "ok")
         return redirect(url_for("web.settings"))
     usage = sum(p.stat().st_size for p in BACKUP_DIR.rglob("*") if p.is_file())
-    return render_template("settings.html", s={k: get_setting(k) for k in DEFAULT_SETTINGS},
+    s = {k: get_setting(k) for k in DEFAULT_SETTINGS}
+    has_smtp_password = bool(get_setting("smtp_pass_enc"))
+    return render_template("settings.html", s=s, has_smtp_password=has_smtp_password,
                            backup_dir=BACKUP_DIR, usage=usage, is_git=updater.is_git_installation())
+
+
+@bp.route("/settings/test-email", methods=["POST"])
+@require_admin
+def settings_test_email():
+    target = request.form.get("test_email", "").strip() or get_setting("smtp_from") or "donotreply@mgmhealthcare.in"
+    ok, err = mailer.send_email(
+        target,
+        "MGM Network Vault - SMTP Test Message",
+        f"<p>This is a test email confirming that outbound email delivery through <b>{get_setting('smtp_host')}</b> is functioning properly.</p>",
+        "This is a test email confirming that outbound email delivery is functioning properly."
+    )
+    if ok:
+        log_event(f"Test email sent successfully to '{target}'", "system")
+        flash(f"Test email successfully sent to {target}!", "ok")
+    else:
+        log_event(f"Failed to send test email to '{target}': {err}", "system", "WARN")
+        flash(f"Failed to send test email: {err}", "error")
+    return redirect(url_for("web.settings"))
 
 
 @bp.route("/api/update/check", methods=["POST"])

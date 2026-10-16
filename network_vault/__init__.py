@@ -10,7 +10,10 @@ from .models import Site, User, db
 from .util import BASE_DIR, FLASK_SECRET, RESTORED, log_event
 from .version import __version__
 
-PUBLIC_ENDPOINTS = {"web.login", "web.logout", "web.devices_template", "static"}
+PUBLIC_ENDPOINTS = {
+    "web.login", "web.logout", "web.forgot_password", "web.reset_password",
+    "web.devices_template", "static"
+}
 
 
 def _add_missing_columns():

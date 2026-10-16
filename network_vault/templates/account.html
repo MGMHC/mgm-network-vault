@@ -184,6 +184,9 @@
                         <span class="badge ok small you-pill">You</span>
                         {% endif %}
                       </div>
+                      {% if u.email %}
+                      <div class="small muted" style="font-size:11.5px;color:var(--muted)">{{ u.email }}</div>
+                      {% endif %}
                       {% if u.must_change %}
                       <span class="badge warn small" title="User must set a new password on their next login">
                         Must change password
@@ -232,7 +235,7 @@
                     {% if me.is_admin and u.username != me.username %}
                       {% if me.is_group_admin or not u.is_group_admin %}
                       <button type="button" class="btn sm action-btn" 
-                              onclick="openEditUserModal({{ u.id }}, '{{ u.username }}', '{{ u.role }}', [{% for s in u.assigned_sites %}{{ s.id }}{% if not loop.last %},{% endif %}{% endfor %}])"
+                              onclick="openEditUserModal({{ u.id }}, '{{ u.username }}', '{{ u.email or '' }}', '{{ u.role }}', [{% for s in u.assigned_sites %}{{ s.id }}{% if not loop.last %},{% endif %}{% endfor %}])"
                               title="Edit role and sites for {{ u.username }}">
                         {{ icon('gear') }} Edit
                       </button>
@@ -277,10 +280,15 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="action" value="adduser">
 
-          <div class="form-grid g3">
+          <div class="form-grid g4">
             <div class="field">
               <label>Username <span class="req">*</span></label>
               <input type="text" name="username" id="newUsernameInput" required placeholder="e.g. jsmith or admin-corp">
+            </div>
+
+            <div class="field">
+              <label>Corporate Email <span class="muted small">(for password reset)</span></label>
+              <input type="email" name="email" id="newEmailInput" placeholder="user@mgmhealthcare.in">
             </div>
 
             <div class="field">
@@ -443,6 +451,12 @@
             {% endif %}
             {% endfor %}
           </select>
+        </div>
+
+        <div class="field" style="margin-top:14px">
+          <label>Corporate Email Address</label>
+          <input type="email" name="email" id="editEmailInput" placeholder="user@mgmhealthcare.in">
+          <div class="help">Used for self-service password recovery and system notifications.</div>
         </div>
 
         {% if me.is_group_admin %}
@@ -1068,10 +1082,13 @@ function closeResetModalOnBackdrop(e) {
 }
 
 // Edit User Modal
-function openEditUserModal(userId, username, role, assignedSiteIds) {
+function openEditUserModal(userId, username, email, role, assignedSiteIds) {
   document.getElementById('editUserId').value = userId;
   document.getElementById('editModalTitle').textContent = 'Edit Access · ' + username;
   
+  var emailInp = document.getElementById('editEmailInput');
+  if (emailInp) emailInp.value = email || '';
+
   var roleSel = document.getElementById('editRoleSelect');
   if (roleSel) {
     roleSel.value = role;

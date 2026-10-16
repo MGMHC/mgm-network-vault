@@ -11,8 +11,14 @@
     {% with msgs = get_flashed_messages(with_categories=true) %}{% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}{% endwith %}
     <form method="post">
       <div class="field"><label>Username</label><input type="text" name="username" autofocus required autocomplete="username"></div>
-      <div class="field"><label>Password</label><input type="password" name="password" required autocomplete="current-password"></div>
-      <button class="btn primary" style="width:100%;justify-content:center">Sign in</button>
+      <div class="field">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <label style="margin:0">Password</label>
+          <a href="{{ url_for('web.forgot_password') }}" class="small" style="color:var(--accent);font-weight:600">Forgot password?</a>
+        </div>
+        <input type="password" name="password" required autocomplete="current-password" style="margin-top:6px">
+      </div>
+      <button class="btn primary" style="width:100%;justify-content:center;margin-top:8px">Sign in</button>
     </form>
   </div>
 </div>

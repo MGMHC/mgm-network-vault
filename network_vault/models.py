@@ -50,6 +50,7 @@ class Site(db.Model):
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), unique=True, nullable=False)
+    email = db.Column(db.String(128), nullable=True)
     password_hash = db.Column(db.String(256), nullable=False)
     must_change = db.Column(db.Boolean, default=False)
     role = db.Column(db.String(24), default="group-admin")  # group-admin | site-admin | read-write | read-only
@@ -262,6 +263,15 @@ DEFAULT_SETTINGS = {
     "max_workers": "8",             # parallel SSH sessions
     "ssh_timeout": "30",
     "read_timeout": "180",
+    # SMTP / Password Reset
+    "smtp_enabled": "1",
+    "smtp_host": "smtp.office365.com",
+    "smtp_port": "587",
+    "smtp_encryption": "starttls",   # starttls | ssl | plain
+    "smtp_user": "donotreply@mgmhealthcare.in",
+    "smtp_pass_enc": "",
+    "smtp_from": "donotreply@mgmhealthcare.in",
+    "app_url": "",                  # external base URL (e.g. https://networkvault.mgmhealthcare.in)
 }
 
 

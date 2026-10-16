@@ -4,6 +4,20 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.10.0] - 2026-10-17
+
+### Added
+- **Self-Service "Forgot Password" with Outlook / Microsoft 365 Email Reset Links**:
+  - Added a **"Forgot password?"** self-service recovery link directly on the sign-in screen (`/forgot-password`).
+  - Users can request a reset link by providing either their username or registered corporate email address.
+  - Generates secure, cryptographically signed, time-limited reset tokens (valid for 15 minutes) using `itsdangerous`.
+  - Tokens are bound to the user's password hash suffix, automatically invalidating existing links once a password is changed.
+  - Native **Outlook / Office 365 SMTP** integration (`smtp.office365.com:587` with STARTTLS) via `network_vault/mailer.py`.
+  - Dispatches branded, responsive HTML reset emails with one-click "Reset My Password" buttons and fallback URLs.
+  - Dedicated **Email Notifications & Password Reset (SMTP)** panel in **Settings** (`/settings`) with encrypted credential storage at rest and a live **"Send Test Email"** tool.
+  - Extended user management (`/account`) with registered corporate email fields on user creation and profile editing forms.
+  - Anti-enumeration protection ensuring uniform feedback messages regardless of whether an identity exists.
+
 ## [1.9.1] - 2026-10-17
 
 ### Added

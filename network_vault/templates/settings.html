@@ -76,7 +76,61 @@
       <div class="help">Raw syslog stream saved daily on disk.</div>
     </div>
   </div>
-  <button class="btn primary">Save settings</button>
+  <h2 style="margin-top:22px">Email Notifications &amp; Password Reset (SMTP)</h2>
+  <label class="check" style="margin-bottom:12px">
+    <input type="checkbox" name="smtp_enabled" value="1" {{ 'checked' if s.smtp_enabled == '1' }}>
+    <b>Enable Outbound Email Service</b> (required for self-service "Forgot Password" reset links)
+  </label>
+  <div class="form-grid">
+    <div class="field">
+      <label>SMTP Host</label>
+      <input type="text" name="smtp_host" value="{{ s.smtp_host }}" placeholder="smtp.office365.com">
+      <div class="help">e.g. <code>smtp.office365.com</code> or internal relay.</div>
+    </div>
+    <div class="field">
+      <label>SMTP Port</label>
+      <input type="number" name="smtp_port" value="{{ s.smtp_port }}" placeholder="587">
+      <div class="help">587 for Office 365 (STARTTLS), 465 for SSL, 25 for open relay.</div>
+    </div>
+    <div class="field">
+      <label>Encryption</label>
+      <select name="smtp_encryption">
+        <option value="starttls" {% if s.smtp_encryption == 'starttls' %}selected{% endif %}>STARTTLS (Port 587 - Recommended for Outlook/Office 365)</option>
+        <option value="ssl" {% if s.smtp_encryption == 'ssl' %}selected{% endif %}>SSL / TLS (Port 465)</option>
+        <option value="plain" {% if s.smtp_encryption == 'plain' %}selected{% endif %}>None / Plain (Port 25 internal relay)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Sender Address (From)</label>
+      <input type="text" name="smtp_from" value="{{ s.smtp_from }}" placeholder="donotreply@mgmhealthcare.in">
+    </div>
+    <div class="field">
+      <label>SMTP Username</label>
+      <input type="text" name="smtp_user" value="{{ s.smtp_user }}" placeholder="donotreply@mgmhealthcare.in">
+    </div>
+    <div class="field">
+      <label>SMTP Password {{ '(saved - leave blank to keep)' if has_smtp_password }}</label>
+      <input type="password" name="smtp_password" placeholder="{{ '••••••••' if has_smtp_password else 'Enter SMTP password' }}" autocomplete="new-password">
+    </div>
+    <div class="field" style="grid-column:1 / -1">
+      <label>Application Public Web URL</label>
+      <input type="text" name="app_url" value="{{ s.app_url }}" placeholder="https://networkvault.mgmhealthcare.in">
+      <div class="help">Base address included in password reset emails. Leave blank to auto-detect from browser requests.</div>
+    </div>
+  </div>
+
+  <button class="btn primary" style="margin-top:16px">Save settings</button>
+</form>
+
+<!-- Test SMTP Connection Card -->
+<form class="card" method="post" action="{{ url_for('web.settings_test_email') }}" style="margin-top:18px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <h2>Test Outbound Email Delivery</h2>
+  <p class="muted small" style="margin:0 0 12px">Send an immediate test email through your configured Outlook / SMTP server to verify connectivity.</p>
+  <div style="display:flex;gap:10px;align-items:center;max-width:540px">
+    <input type="email" name="test_email" value="{{ s.smtp_from or 'donotreply@mgmhealthcare.in' }}" required placeholder="recipient@mgmhealthcare.in" style="flex:1">
+    <button class="btn">{{ icon('key') }} Send Test Email</button>
+  </div>
 </form>
 {% endblock %}
 
