@@ -59,6 +59,15 @@ def _add_missing_columns():
             conn.execute(text(f"UPDATE device SET \"group\" = 'Level-{i}' WHERE \"group\" = 'Floor-{i}' OR \"group\" = 'Floor {i}'"))
             conn.execute(text(f"UPDATE schedule SET target_value = 'Level-{i}' WHERE target = 'group' AND (target_value = 'Floor-{i}' OR target_value = 'Floor {i}')"))
 
+        # Migrate Malar devices and credentials to MGM-Malar site and set correct Cisco IOS platform
+        conn.execute(text("UPDATE credential SET site_id = (SELECT id FROM site WHERE code = 'MGM-Malar') WHERE name = 'Mgm-Malar-SW'"))
+        conn.execute(text("UPDATE device SET site_id = (SELECT id FROM site WHERE code = 'MGM-Malar') WHERE name LIKE '%MALAR%'"))
+        # Update Cisco Catalyst switches at Malar to cisco_ios
+        conn.execute(text("UPDATE device SET platform = 'cisco_ios', model = 'C1000-48T-4X-L' WHERE name = 'MGM-MALAR-B-1ST-FLOOR'"))
+        conn.execute(text("UPDATE device SET platform = 'cisco_ios', model = 'Catalyst 2960-S' WHERE name = 'MGM-MALAR-B-5TH-IT'"))
+        conn.execute(text("UPDATE device SET platform = 'cisco_ios', model = 'C1000-48T-4X-L' WHERE name = 'MGM-MALAR-B-4TH-FLOOR'"))
+        conn.execute(text("UPDATE device SET platform = 'cisco_ios', model = 'C1000-48T-4X-L' WHERE name = 'MGM-MALAR-B-5TH-FLOOR'"))
+
 
 def create_app():
     app = Flask(__name__)

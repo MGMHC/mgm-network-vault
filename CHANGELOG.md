@@ -4,6 +4,19 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.8.2] - 2026-10-16
+
+### Added
+- **Editable & Transferrable Credential Profiles Across Sites**:
+  - Added an interactive **Site** selector to credential profile creation and edit forms (`/credentials`).
+  - Administrators can now freely transfer credential profiles between sites (e.g., reassigning shared campus credentials like `Mgm-Malar-SW` to `MGM-Malar`).
+  - Device edit forms now automatically offer credential profiles belonging to the target device's site or the current site context.
+
+### Fixed
+- **Malar Switch Platform & Driver Configuration**:
+  - Corrected `MGM-MALAR-B-1ST-FLOOR`, `MGM-MALAR-B-5TH-IT`, `MGM-MALAR-B-4TH-FLOOR`, and `MGM-MALAR-B-5TH-FLOOR` from mismatched `juniper_junos` / `cisco_c1300` to native **`cisco_ios`** with their detected hardware models (**Cisco Catalyst C1000** and **Catalyst 2960-S**).
+  - Resolved `ReadTimeout: Pattern not detected: 'Screen width set to' in output` caused by sending Junos terminal commands to Cisco switches.
+
 ## [1.8.1] - 2026-10-16
 
 ### Fixed

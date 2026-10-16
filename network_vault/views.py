@@ -588,7 +588,10 @@ def device_edit(dev_id=None):
     g_q = _site_filter(db.session.query(Device.group).distinct(), Device)
     groups = sorted((g for (g,) in g_q if g), key=_group_sort_key)
     
-    cred_q = _site_filter(Credential.query, Credential)
+    if d.site_id:
+        cred_q = Credential.query.filter(Credential.site_id == d.site_id)
+    else:
+        cred_q = _site_filter(Credential.query, Credential)
     creds = cred_q.order_by(Credential.name).all()
 
     return render_template("device_form.html", d=d, creds=creds,
@@ -1509,11 +1512,19 @@ def credentials():
             db.session.rollback()
             flash("Name, username and password are required", "error")
         else:
-            if not cid:
+            # Handle site transfer / assignment
+            candidate_sid = request.form.get("site_id")
+            if candidate_sid and candidate_sid.isdigit():
+                target_sid = int(candidate_sid)
+                if u.has_site_access(target_sid):
+                    c.site_id = target_sid
+            elif not cid:
                 c.site_id = site_id or (u.allowed_site_ids[0] if (u and u.allowed_site_ids) else None)
                 if not c.site_id:
                     first_s = Site.query.order_by(Site.id).first()
                     c.site_id = first_s.id if first_s else None
+
+            if not cid:
                 db.session.add(c)
             db.session.commit()
             log_event(f"Credential profile '{c.name}' saved", "system")
@@ -1521,7 +1532,8 @@ def credentials():
         return redirect(url_for("web.credentials"))
     q_creds = _site_filter(Credential.query, Credential)
     return render_template("credentials.html", creds=q_creds.order_by(Credential.name).all(),
-                           edit=db.session.get(Credential, int(request.args.get("edit", 0) or 0)))
+                           edit=db.session.get(Credential, int(request.args.get("edit", 0) or 0)),
+                           sites=Site.query.order_by(Site.code).all())
 
 
 @bp.route("/credentials/<int:cid>/delete", methods=["POST"])
