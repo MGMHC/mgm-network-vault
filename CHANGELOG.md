@@ -4,6 +4,15 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.8.1] - 2026-10-16
+
+### Fixed
+- **Cisco Switch SSH Transport & VTY Session Teardown**:
+  - Fixed a connection leak in the `CiscoC1300SSH` driver where in-band authenticated SSH sessions (`_establish_inband_connection`) did not attach the underlying `paramiko.Transport` to `remote_conn_pre`. This caused sessions on Cisco C1300 / CBS / SG switches to remain lingering on the switch until its internal 10-minute timeout expired.
+  - Implemented explicit `disconnect()` override ensuring the underlying Paramiko transport is terminated on teardown, preventing switch VTY session exhaustion (`Server reached maximum number of simultaneous connections`).
+- **Clear Switch VTY Exhaustion Diagnostics**:
+  - Enhanced connection error handling to detect when a Cisco switch closes the TCP connection due to full VTY slots (`Server reached maximum number of simultaneous connections`), reporting a clear, actionable message to administrators instead of the generic `Error reading SSH protocol banner`.
+
 ## [1.8.0] - 2026-10-15
 
 ### Added

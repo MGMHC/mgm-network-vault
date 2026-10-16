@@ -49,9 +49,14 @@ class CiscoC1300SSH(CiscoS300SSH):
             pass
 
         if not t.is_authenticated():
+            t.close()
             raise NetmikoAuthenticationException(
                 f"Failed to authenticate to {self.host}:{self.port} (neither password nor in-band allowed)"
             )
+
+        # Attach transport to SSHClient wrapper so Netmiko / Paramiko cleanup tears it down cleanly
+        if self.remote_conn_pre:
+            self.remote_conn_pre._transport = t
 
         self.remote_conn = t.open_session()
         self.remote_conn.get_pty(term="vt100", width=width, height=height)
@@ -95,6 +100,17 @@ class CiscoC1300SSH(CiscoS300SSH):
 
         self.channel = SSHChannel(conn=self.remote_conn, encoding=self.encoding)
         return None
+
+    def disconnect(self) -> None:
+        """Gracefully exit and ensure Paramiko transport is terminated to free VTY lines."""
+        try:
+            super().disconnect()
+        finally:
+            if self.remote_conn_pre and hasattr(self.remote_conn_pre, "_transport") and self.remote_conn_pre._transport:
+                try:
+                    self.remote_conn_pre._transport.close()
+                except Exception:
+                    pass
 
 
 class SonicWallSonicOSSSH(CiscoS300SSH):
@@ -233,6 +249,31 @@ def connect(device, retries=2, backoff_base=3):
                 )
                 time.sleep(delay)
                 continue
+
+            # If banner failed, check if switch sent a clear text disconnect message (e.g. VTY line limit reached)
+            if "error reading ssh protocol banner" in msg:
+                import socket
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(2.0)
+                    s.connect((device.host, device.port or 22))
+                    raw_banner = s.recv(512).decode("ascii", errors="ignore").strip()
+                    s.close()
+                    if "maximum number of simultaneous connections" in raw_banner.lower():
+                        raise RuntimeError(
+                            f"Switch VTY line exhaustion on {device.name} ({device.host}): "
+                            f"Server reached maximum number of simultaneous connections. "
+                            f"Clear idle SSH sessions on switch via console/web or reduce exec-timeout."
+                        ) from e
+                    elif raw_banner and not raw_banner.startswith("SSH-"):
+                        raise RuntimeError(
+                            f"SSH protocol banner rejected by {device.name} ({device.host}): {raw_banner}"
+                        ) from e
+                except RuntimeError:
+                    raise
+                except Exception:
+                    pass
+
             raise
 
 
