@@ -4,6 +4,43 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.11.0] - 2026-10-18
+
+### Added
+- **VLAN Matrix & Dormant / Unused Port Auditing**:
+  - Dedicated network operations audit suite (`/operations/vlan-audit`) analyzing cross-switch VLAN allocations, port capacity utilization, and reclamation of dormant / unused switchports.
+  - **Port Capacity & Dormant Interface Inventory**:
+    - Complete switchport catalog across all campus switches (3,400+ ports) with instant filtering by site scope, specific switch, port mode (Access vs Trunk), operational status (Connected vs Dormant vs Admin Down), and real-time search.
+    - Badging for Access vs Trunk modes, VLAN IDs with primary network names, admin status (UP vs DOWN), operational link status, and uplink vs access drop roles.
+  - **VLAN Matrix & Cross-Switch Grid**:
+    - Interactive matrix displaying campus-wide VLAN definitions across all switches.
+    - Automated detection of cross-switch VLAN naming conflicts and inconsistencies.
+    - Visual indicators for switches where a VLAN is deployed as Access, Trunk, or both.
+  - **Switch Utilization Overview**:
+    - High-level capacity breakdown per switch: total configured ports, active/connected ports, dormant ports, disabled ports, and visual capacity utilization progress bars.
+  - **Live Hardware Interrogation (SSH Stream)**:
+    - Real-time parallel SSH link-state probe (`/api/operations/vlan-audit/stream`) testing hardware operational link states directly on physical switches.
+    - Streaming progress bar, live metrics counter, and terminal log console with auto-scroll and copy-to-clipboard support.
+    - Top-aligned console modal with auto-scroll to top upon launching live audits.
+    - Persistent cache (`data/live_ports_cache.json`) saving live hardware link states on disk so results persist across browser reloads.
+  - **CSV Inventory Export**:
+    - One-click CSV export (`/operations/vlan-audit/export.csv`) of complete campus switchport inventory with site, role, interface, description, mode, VLAN assignment, and operational status.
+
+### Fixed
+- **JunOS Aggregated Ethernet (LAG) & ELS Trunking**:
+  - Implemented LAG bundle tracking (`802.3ad ae<id>`) resolving physical member ports to their parent bundle's trunk mode and VLAN tags.
+  - Added support for JunOS Enhanced Layer 2 Software (ELS) `interface-mode trunk` syntax alongside legacy `port-mode`.
+  - Added intelligent uplink keyword detection (`uplink`, `trunk`, `sw-to-sw`, `dist`, `core`) guaranteeing uplinks are recognized as Trunk mode.
+- **Cisco C1300 / CBS & IOS Multi-format Live Port Parsing**:
+  - Resolved an issue where Cisco C1300 / CBS switches reported all ports as connected due to `Up` / `Down` state token formatting.
+  - Standardized interface normalization (`Gi1`, `Te1`, `Po1`) and case-insensitive resolution across live probe and backup configurations.
+  - Corrected offline baseline calculation to keep unlabeled access drops marked as dormant rather than assuming active connectivity.
+
+### Infrastructure
+- **IIS HTTP/2, Dynamic Compression, & Caching**:
+  - Enabled HTTP/2 and HTTP/3 support, dynamic GZip compression, and static asset caching via reverse proxy `web.config`.
+  - Added self-elevating service restart utility (`restart_vault.bat`).
+
 ## [1.10.2] - 2026-10-17
 
 ### Fixed

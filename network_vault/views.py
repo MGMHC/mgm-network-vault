@@ -1079,8 +1079,105 @@ def api_device_optics(dev_id):
 
 
 
+# --------------------------------------------------------------------------- VLAN Matrix & Dormant / Unused Port Auditing
+
+@bp.route("/operations/vlan-audit")
+def vlan_audit():
+    u = _current_user()
+    devs = _site_filter(Device.query, Device).order_by(Device.name).all()
+    user_sites_list = Site.query.order_by(Site.code).all() if (u and u.is_group_admin) else (u.assigned_sites if u else [])
+    active_site_id = _active_site_id()
+    return render_template("vlan_audit.html", devices=devs, sites=user_sites_list, active_site_id=active_site_id)
+
+
+@bp.route("/api/operations/vlan-audit/data")
+def api_vlan_audit_data():
+    """Return VLAN Matrix & Port Audit aggregated from Vault backups."""
+    u = _current_user()
+    data = request.args
+    site_id = data.get("site_id")
+    if site_id and site_id != "all":
+        try:
+            sid = int(site_id)
+            if u and not u.has_site_access(sid):
+                abort(403, "Access to specified site is restricted.")
+        except (ValueError, TypeError):
+            site_id = None
+    app = current_app._get_current_object()
+    result = operations.get_vlan_port_audit(app, site_id)
+    return jsonify(result)
+
+
+@bp.route("/api/operations/vlan-audit/stream", methods=["POST"])
+def api_vlan_audit_stream():
+    """Probe live operational port status (connected vs dormant vs disabled) in parallel over SSH."""
+    u = _current_user()
+    data = request.get_json(silent=True) or {}
+    q_devs = _site_filter(Device.query, Device)
+    site_id = data.get("site_id")
+    if site_id and site_id != "all":
+        try:
+            sid = int(site_id)
+            if u and not u.has_site_access(sid):
+                abort(403, "Access to specified site is restricted.")
+            q_devs = q_devs.filter(Device.site_id == sid)
+        except (ValueError, TypeError):
+            pass
+
+    device_ids = data.get("device_ids")
+    if device_ids and isinstance(device_ids, list):
+        q_devs = q_devs.filter(Device.id.in_([int(i) for i in device_ids if str(i).isdigit()]))
+
+    devs = q_devs.filter_by(enabled=True).all()
+    dev_ids = [d.id for d in devs if d.credential_id]
+    app = current_app._get_current_object()
+    log_event(f"Live port audit started ({len(dev_ids)} switches)", "device", user=session.get("user"))
+    return Response(
+        stream_with_context(operations.stream_live_port_audit(app, dev_ids)),
+        mimetype="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@bp.route("/operations/vlan-audit/export.csv")
+def vlan_audit_export_csv():
+    """Export complete switchport inventory & VLAN assignments as CSV."""
+    u = _current_user()
+    site_id = request.args.get("site_id")
+    if site_id and site_id != "all":
+        try:
+            sid = int(site_id)
+            if u and not u.has_site_access(sid):
+                abort(403, "Access to specified site is restricted.")
+        except (ValueError, TypeError):
+            site_id = None
+    app = current_app._get_current_object()
+    data = operations.get_vlan_port_audit(app, site_id)
+
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow([
+        "Switch Name", "Switch IP", "Site", "Role", "Interface", "Description",
+        "Mode", "VLAN ID", "VLAN Name", "Admin Status", "Oper Status", "Is Uplink"
+    ])
+    for p in data.get("ports", []):
+        w.writerow([
+            p.get("switch_name"), p.get("switch_ip"), p.get("site_code"), p.get("switch_role"),
+            p.get("port"), p.get("description"), p.get("mode"), p.get("vlan_id") or "Trunk",
+            p.get("vlan_name"), p.get("admin_status"), p.get("oper_status"),
+            "Yes" if p.get("is_uplink") else "No"
+        ])
+
+    filename = f"vlan_port_audit_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        out.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 
 # --------------------------------------------------------------------------- lifecycle & EOL
+
 
 @bp.route("/operations/lifecycle")
 def lifecycle():

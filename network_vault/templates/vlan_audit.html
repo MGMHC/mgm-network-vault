@@ -1,0 +1,1148 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}VLAN Matrix &amp; Dormant Port Auditing{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1>
+      <span class="title-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+        </svg>
+      </span>
+      VLAN Matrix &amp; Dormant / Unused Port Auditing
+    </h1>
+    <div class="sub">Cross-switch VLAN allocations, naming consistency, port capacity utilization, and dormant interface reclamation.</div>
+  </div>
+  <div class="actions">
+    <a id="exportBtn" href="/operations/vlan-audit/export.csv" class="btn" title="Download complete port and VLAN inventory as CSV">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Export CSV
+    </a>
+    <button id="scanBtn" class="btn primary" onclick="startLiveProbe()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      Probe Live Link States
+    </button>
+  </div>
+</div>
+
+<!-- Campus Capacity KPI Summary Strip -->
+<div class="card vlan-summary-card">
+  <div class="vlan-summary-strip">
+    <div class="vlan-kpi-item">
+      <div class="vlan-kpi-icon" style="background:rgba(59,130,246,0.12);color:var(--accent,#3b82f6);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      </div>
+      <div class="vlan-kpi-content">
+        <div class="vlan-kpi-val"><span id="kpiTotalPorts">0</span></div>
+        <div class="vlan-kpi-label">Total Switchports</div>
+      </div>
+    </div>
+
+    <div class="vlan-kpi-item">
+      <div class="vlan-kpi-icon" style="background:rgba(16,185,129,0.12);color:var(--ok,#10b981);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="vlan-kpi-content">
+        <div class="vlan-kpi-val" style="color:var(--ok,#10b981);"><span id="kpiActivePorts">0</span></div>
+        <div class="vlan-kpi-label">Active / Provisioned</div>
+      </div>
+    </div>
+
+    <div class="vlan-kpi-item">
+      <div class="vlan-kpi-icon" style="background:rgba(245,158,11,0.12);color:#f59e0b;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      </div>
+      <div class="vlan-kpi-content">
+        <div class="vlan-kpi-val" style="color:#f59e0b;"><span id="kpiDormantPorts">0</span></div>
+        <div class="vlan-kpi-label">Dormant (Unused)</div>
+      </div>
+    </div>
+
+    <div class="vlan-kpi-item">
+      <div class="vlan-kpi-icon" style="background:rgba(100,116,139,0.12);color:var(--muted,#64748b);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+      </div>
+      <div class="vlan-kpi-content">
+        <div class="vlan-kpi-val"><span id="kpiDisabledPorts">0</span></div>
+        <div class="vlan-kpi-label">Admin Disabled</div>
+      </div>
+    </div>
+
+    <div class="vlan-kpi-item">
+      <div class="vlan-kpi-icon" style="background:rgba(139,92,246,0.12);color:#8b5cf6;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+      </div>
+      <div class="vlan-kpi-content">
+        <div class="vlan-kpi-val"><span id="kpiTotalVlans">0</span></div>
+        <div class="vlan-kpi-label">Campus VLANs</div>
+      </div>
+    </div>
+
+    <div class="vlan-kpi-item" id="kpiMismatchBox">
+      <div class="vlan-kpi-icon" style="background:rgba(239,68,68,0.12);color:var(--bad,#ef4444);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="vlan-kpi-content">
+        <div class="vlan-kpi-val" style="color:var(--bad,#ef4444);"><span id="kpiVlanMismatches">0</span></div>
+        <div class="vlan-kpi-label">Name Conflicts</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Navigation Tabs -->
+<div class="audit-tabs-bar">
+  <button class="audit-tab-btn active" id="tabBtnPorts" onclick="switchTab('ports')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+    Port Capacity &amp; Dormant Interface Audit (<span id="tabCountPorts">0</span>)
+  </button>
+  <button class="audit-tab-btn" id="tabBtnMatrix" onclick="switchTab('matrix')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+    VLAN Matrix &amp; Cross-Switch Grid (<span id="tabCountVlans">0</span>)
+  </button>
+  <button class="audit-tab-btn" id="tabBtnSwitches" onclick="switchTab('switches')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+    Switch Utilization Overview (<span id="tabCountSwitches">0</span>)
+  </button>
+</div>
+
+<!-- ========================================================================= TAB 1: Ports Audit -->
+<div id="tabContentPorts" class="tab-pane active">
+  <!-- Controls Bar -->
+  <div class="card audit-controls-card">
+    <div class="audit-controls-row">
+      <div class="audit-control-group">
+        <label for="siteFilter">Site Scope</label>
+        <select id="siteFilter" onchange="onSiteFilterChange()">
+          <option value="all">All Sites</option>
+          {% for s in sites %}
+          <option value="{{ s.id }}" {% if active_site_id == s.id|string %}selected{% endif %}>{{ s.code }} · {{ s.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="audit-control-group">
+        <label for="switchFilter">Switch</label>
+        <select id="switchFilter" onchange="applyPortFilters()">
+          <option value="all">All Switches</option>
+        </select>
+      </div>
+
+      <div class="audit-control-group">
+        <label for="modeFilter">Port Mode</label>
+        <select id="modeFilter" onchange="applyPortFilters()">
+          <option value="all">All Modes (Access &amp; Trunk)</option>
+          <option value="access">Access Ports Only</option>
+          <option value="trunk">Trunk / Uplink Only</option>
+        </select>
+      </div>
+
+      <div class="audit-control-group">
+        <label for="statusFilter">Status</label>
+        <select id="statusFilter" onchange="applyPortFilters()">
+          <option value="all">All Statuses</option>
+          <option value="connected">Connected / Active</option>
+          <option value="dormant">Dormant / Unused</option>
+          <option value="disabled">Admin Disabled</option>
+        </select>
+      </div>
+
+      <div class="audit-control-group search-group" style="flex:1;min-width:220px;">
+        <label for="portSearch">Search Ports</label>
+        <input type="search" id="portSearch" placeholder="Filter by port, description, VLAN, switch..." oninput="applyPortFilters()">
+      </div>
+
+      <div class="audit-control-group" style="align-self:flex-end;">
+        <button class="btn sm" onclick="resetPortFilters()">Reset Filters</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detailed Switchport Audit Table -->
+  <div class="card flush">
+    <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div>
+        <h2 style="margin:0;">Switchport Inventory &amp; Capacity Audit (<span id="visiblePortsCount">0</span>)</h2>
+        <span class="muted small">Configured interfaces, VLAN memberships, patch tags, and live operational status</span>
+      </div>
+      <div id="liveBadgeStatus" style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;">
+        <span class="status-indicator-dot" style="background:#10b981;"></span>
+        <span>Source: <b>Vault Configuration Backups</b></span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Switch</th>
+            <th>Interface</th>
+            <th>Description / Patch Tag</th>
+            <th>Mode</th>
+            <th>VLAN Membership</th>
+            <th>Admin Status</th>
+            <th>Operational Status</th>
+            <th>Role</th>
+          </tr>
+        </thead>
+        <tbody id="portsTableBody">
+          <tr><td colspan="8" class="empty">Loading switchport audit data…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================================================= TAB 2: VLAN Matrix Grid -->
+<div id="tabContentMatrix" class="tab-pane" style="display:none;">
+  <!-- Inconsistency Banner -->
+  <div id="mismatchBanner" class="card" style="display:none;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);margin-bottom:16px;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="font-size:24px;color:var(--bad);">⚠️</div>
+      <div>
+        <h3 style="margin:0 0 4px 0;color:var(--bad);font-size:14px;">VLAN Naming Inconsistencies Detected Across Campus</h3>
+        <p class="muted small" style="margin:0;">
+          The switches below have conflicting names assigned to the same VLAN ID. Consistent VLAN naming is required to avoid configuration drift and routing errors.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- VLAN Directory & Matrix Table -->
+  <div class="card flush">
+    <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div>
+        <h2 style="margin:0;">VLAN Directory &amp; Campus Distribution (<span id="visibleVlansCount">0</span>)</h2>
+        <span class="muted small">Configured VLANs, access port counts, and switch trunk distribution</span>
+      </div>
+      <div>
+        <input type="search" id="vlanSearch" placeholder="Filter VLAN ID or name..." oninput="applyVlanFilters()" style="padding:6px 10px;font-size:13px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--fg);">
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:90px;">VLAN ID</th>
+            <th>Canonical Name</th>
+            <th>Observed Names Across Switches</th>
+            <th class="num">Access Ports</th>
+            <th class="num">Trunk Switches</th>
+            <th class="num">Total Switches</th>
+            <th>Status / Consistency</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="vlansTableBody">
+          <tr><td colspan="8" class="empty">Loading VLAN matrix…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Cross-Switch Matrix Grid View -->
+  <div class="card flush" style="margin-top:20px;">
+    <div class="card-head">
+      <h2 style="margin:0;">Cross-Switch VLAN Matrix Grid</h2>
+      <span class="muted small">Interactive map showing which VLANs exist on which campus switches</span>
+    </div>
+    <div class="table-wrap matrix-grid-wrap">
+      <table class="matrix-grid-table">
+        <thead id="matrixHead"></thead>
+        <tbody id="matrixBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================================================= TAB 3: Switch Summaries -->
+<div id="tabContentSwitches" class="tab-pane" style="display:none;">
+  <div class="card flush">
+    <div class="card-head">
+      <h2 style="margin:0;">Campus Switch Port Utilization &amp; Capacity</h2>
+      <span class="muted small">Per-switch port capacity, active utilization rate, and reclaimable dormant ports</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Switch</th>
+            <th>Model / Role</th>
+            <th>Site</th>
+            <th class="num">Total Ports</th>
+            <th class="num">Active / Connected</th>
+            <th class="num">Dormant (Unused)</th>
+            <th class="num">Disabled</th>
+            <th style="min-width:180px;">Utilization Rate</th>
+            <th>Last Backup Config</th>
+          </tr>
+        </thead>
+        <tbody id="switchesTableBody">
+          <tr><td colspan="9" class="empty">Loading switch summaries…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Live Port State Probe Progress Modal -->
+<div id="probeProgressModal" class="op-modal-backdrop" style="display: none;">
+  <div class="op-modal" role="dialog" aria-modal="true" aria-labelledby="probeModalTitle">
+    <div class="op-modal-header" onclick="restoreProbeModal(event)">
+      <div>
+        <h3 id="probeModalTitle" class="op-modal-title">
+          <span style="color:#10b981;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          </span>
+          Probing Live Switch Port Operational Status
+        </h3>
+        <div class="op-modal-sub">Parallel SSH interrogation checking link states (connected vs dormant vs disabled)</div>
+      </div>
+      <div class="op-modal-header-actions" onclick="event.stopPropagation()">
+        <button type="button" class="op-modal-btn" id="probeMinimizeBtn" onclick="toggleProbeMinimize(event)" title="Minimize scan (run in background)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button type="button" class="op-modal-close" onclick="closeProbeModal()" title="Close">&times;</button>
+      </div>
+    </div>
+
+    <!-- Progress Bar & KPIs -->
+    <div class="op-progress-section" onclick="restoreProbeModal(event)">
+      <div class="op-progress-info">
+        <span id="probeModalStatusText" class="op-progress-status">Connecting to campus switches…</span>
+        <span id="probeModalPercent" class="op-progress-percent">0%</span>
+      </div>
+      <div class="op-progress-bar">
+        <div id="probeModalBarFill" class="op-progress-fill" style="width:0%;"></div>
+      </div>
+      <div class="op-progress-stats">
+        <span>Switches Probed: <b id="modalStatSwitches">0 / 0</b></span>
+        <span>Connected: <b id="modalStatConnected" style="color:var(--ok);">0</b></span>
+        <span>Dormant (Unused): <b id="modalStatDormant" style="color:#f59e0b;">0</b></span>
+      </div>
+    </div>
+
+    <!-- Live Terminal Logs -->
+    <div class="op-terminal">
+      <div class="op-terminal-header">
+        <span class="op-terminal-title">Live Port Audit Stream</span>
+        <div class="op-terminal-actions">
+          <label class="op-terminal-scroll-toggle">
+            <input type="checkbox" id="probeAutoScroll" checked> Auto-scroll
+          </label>
+          <button type="button" class="btn sm" onclick="copyProbeLogs()">Copy Logs</button>
+        </div>
+      </div>
+      <div id="probeTerminalLogs" class="op-terminal-body"></div>
+    </div>
+
+    <div class="op-modal-footer">
+      <button type="button" id="probeCancelBtn" class="btn" onclick="abortProbe()">Cancel Audit</button>
+      <button type="button" id="probeDoneBtn" class="btn primary" onclick="closeProbeModal()" disabled>Done</button>
+    </div>
+  </div>
+</div>
+
+<style>
+/* VLAN Audit Styling - Pop up at the top of the page */
+.op-modal-backdrop {
+  align-items: flex-start !important;
+  padding: 24px 16px 20px !important;
+  overflow-y: auto !important;
+}
+.op-modal-backdrop.minimized {
+  align-items: flex-end !important;
+}
+.op-modal {
+  margin-top: 8px;
+}
+.vlan-summary-card {
+  margin-bottom: 16px;
+  padding: 12px 18px;
+}
+.vlan-summary-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: center;
+}
+.vlan-kpi-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 140px;
+}
+.vlan-kpi-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.vlan-kpi-val {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.vlan-kpi-label {
+  font-size: 11px;
+  color: var(--muted, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.audit-tabs-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border, rgba(255,255,255,0.08));
+  padding-bottom: 2px;
+}
+.audit-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--muted, #94a3b8);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  transition: all 0.15s;
+}
+.audit-tab-btn:hover {
+  color: var(--fg, #f8fafc);
+  background: rgba(255,255,255,0.03);
+}
+.audit-tab-btn.active {
+  color: var(--accent, #3b82f6);
+  border-bottom: 2px solid var(--accent, #3b82f6);
+  background: rgba(59,130,246,0.08);
+}
+.audit-controls-card {
+  margin-bottom: 16px;
+  padding: 14px 18px;
+}
+.audit-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+}
+.audit-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.audit-control-group label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted, #94a3b8);
+}
+.audit-control-group select,
+.audit-control-group input {
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 6px;
+  border: 1px solid var(--border, #334155);
+  background: var(--card, #1e293b);
+  color: var(--fg, #f8fafc);
+  min-width: 140px;
+}
+.status-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.badge-dormant {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.badge-connected {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.badge-disabled {
+  background: rgba(100, 116, 139, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.badge-trunk {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.badge-access {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.capacity-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+}
+.capacity-fill {
+  height: 100%;
+  transition: width 0.3s;
+}
+
+/* Cross switch matrix grid styles */
+.matrix-grid-wrap {
+  max-height: 550px;
+  overflow: auto;
+}
+.matrix-grid-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+}
+.matrix-grid-table th,
+.matrix-grid-table td {
+  padding: 8px 10px;
+  text-align: center;
+  border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
+  border-right: 1px solid var(--border, rgba(255,255,255,0.06));
+  white-space: nowrap;
+}
+.matrix-grid-table th:first-child,
+.matrix-grid-table td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--card, #1e293b);
+  z-index: 2;
+  text-align: left;
+  font-weight: 700;
+}
+.matrix-grid-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--card, #1e293b);
+  z-index: 3;
+}
+.matrix-grid-table thead th:first-child {
+  z-index: 4;
+}
+.cell-access {
+  background: rgba(59, 130, 246, 0.18);
+  color: #60a5fa;
+  font-weight: 700;
+  border-radius: 4px;
+}
+.cell-trunk {
+  background: rgba(139, 92, 246, 0.18);
+  color: #c084fc;
+  font-weight: 700;
+  border-radius: 4px;
+}
+.cell-both {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  font-weight: 700;
+  border-radius: 4px;
+}
+.cell-empty {
+  color: rgba(255, 255, 255, 0.15);
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// State
+let _auditData = null;
+let _filteredPorts = [];
+let _filteredVlans = [];
+let _liveProbeCtrl = null;
+let _probeLogs = [];
+let _liveStatusMap = {}; // "devId:port" -> "connected"|"dormant"|"disabled"
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadAuditData();
+});
+
+function switchTab(tabName) {
+  ['ports', 'matrix', 'switches'].forEach(t => {
+    const btn = document.getElementById(`tabBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
+    const pane = document.getElementById(`tabContent${t.charAt(0).toUpperCase() + t.slice(1)}`);
+    if (t === tabName) {
+      btn.classList.add('active');
+      pane.style.display = 'block';
+    } else {
+      btn.classList.remove('active');
+      pane.style.display = 'none';
+    }
+  });
+}
+
+async function loadAuditData() {
+  const siteId = document.getElementById('siteFilter').value;
+  document.getElementById('exportBtn').href = `/operations/vlan-audit/export.csv?site_id=${encodeURIComponent(siteId)}`;
+
+  try {
+    const res = await fetch(`/api/operations/vlan-audit/data?site_id=${encodeURIComponent(siteId)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    _auditData = await res.json();
+
+    updateKpis();
+    populateSwitchFilter();
+    applyPortFilters();
+    applyVlanFilters();
+    renderSwitchSummaries();
+    renderMatrixGrid();
+  } catch (err) {
+    console.error('Failed to load VLAN audit data:', err);
+    toast(`Failed to load audit data: ${err.message}`, 'bad');
+  }
+}
+
+function onSiteFilterChange() {
+  loadAuditData();
+}
+
+function updateKpis() {
+  if (!_auditData || !_auditData.kpis) return;
+  const k = _auditData.kpis;
+  document.getElementById('kpiTotalPorts').textContent = k.total_ports.toLocaleString();
+  document.getElementById('kpiActivePorts').textContent = `${k.active_ports.toLocaleString()} (${k.utilization_pct}%)`;
+  document.getElementById('kpiDormantPorts').textContent = k.dormant_ports.toLocaleString();
+  document.getElementById('kpiDisabledPorts').textContent = k.disabled_ports.toLocaleString();
+  document.getElementById('kpiTotalVlans').textContent = k.total_vlans;
+  document.getElementById('kpiVlanMismatches').textContent = k.vlan_mismatches;
+
+  document.getElementById('tabCountPorts').textContent = k.total_ports.toLocaleString();
+  document.getElementById('tabCountVlans').textContent = k.total_vlans;
+  document.getElementById('tabCountSwitches').textContent = k.total_switches;
+
+  if (k.vlan_mismatches > 0) {
+    document.getElementById('mismatchBanner').style.display = 'block';
+  } else {
+    document.getElementById('mismatchBanner').style.display = 'none';
+  }
+}
+
+function populateSwitchFilter() {
+  const select = document.getElementById('switchFilter');
+  const currentVal = select.value;
+  select.innerHTML = '<option value="all">All Switches</option>';
+
+  if (!_auditData || !_auditData.switch_summaries) return;
+  _auditData.switch_summaries.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = `${s.name} (${s.site_code}) · ${s.total_ports} ports`;
+    select.appendChild(opt);
+  });
+  select.value = currentVal || 'all';
+}
+
+// ----------------------------------------------------------------------------- Ports Tab
+function applyPortFilters() {
+  if (!_auditData || !_auditData.ports) return;
+
+  const swId = document.getElementById('switchFilter').value;
+  const mode = document.getElementById('modeFilter').value;
+  const status = document.getElementById('statusFilter').value;
+  const q = (document.getElementById('portSearch').value || '').toLowerCase().trim();
+
+  _filteredPorts = _auditData.ports.filter(p => {
+    if (swId !== 'all' && String(p.switch_id) !== swId) return false;
+    if (mode !== 'all' && p.mode !== mode) return false;
+
+    // Check live probed status or backup status
+    const liveKey = `${p.switch_id}:${p.port}`;
+    const effectiveStatus = _liveStatusMap[liveKey] || _liveStatusMap[liveKey.toLowerCase()] || p.oper_status;
+
+    if (status !== 'all' && effectiveStatus !== status) return false;
+
+    if (q) {
+      const matchP = (p.port || '').toLowerCase().includes(q);
+      const matchD = (p.description || '').toLowerCase().includes(q);
+      const matchSw = (p.switch_name || '').toLowerCase().includes(q);
+      const matchVName = (p.vlan_name || '').toLowerCase().includes(q);
+      const matchVId = String(p.vlan_id || '').includes(q);
+      if (!matchP && !matchD && !matchSw && !matchVName && !matchVId) return false;
+    }
+    return true;
+  });
+
+  renderPortsTable();
+}
+
+function resetPortFilters() {
+  document.getElementById('switchFilter').value = 'all';
+  document.getElementById('modeFilter').value = 'all';
+  document.getElementById('statusFilter').value = 'all';
+  document.getElementById('portSearch').value = '';
+  applyPortFilters();
+}
+
+function renderPortsTable() {
+  const tbody = document.getElementById('portsTableBody');
+  document.getElementById('visiblePortsCount').textContent = _filteredPorts.length.toLocaleString();
+  tbody.innerHTML = '';
+
+  if (_filteredPorts.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">No switchports match the selected criteria.</td></tr>';
+    return;
+  }
+
+  // Render first 250 items for speed, with notice if more
+  const displaySlice = _filteredPorts.slice(0, 300);
+
+  displaySlice.forEach(p => {
+    const tr = document.createElement('tr');
+
+    const liveKey = `${p.switch_id}:${p.port}`;
+    const effectiveStatus = _liveStatusMap[liveKey] || _liveStatusMap[liveKey.toLowerCase()] || p.oper_status;
+
+    let statusBadge = '<span class="badge-dormant">Dormant / Unused</span>';
+    if (effectiveStatus === 'connected') {
+      statusBadge = '<span class="badge-connected">● Connected</span>';
+    } else if (effectiveStatus === 'disabled' || p.admin_status === 'disabled') {
+      statusBadge = '<span class="badge-disabled">Admin Down</span>';
+    }
+
+    const modeBadge = p.mode === 'trunk' 
+      ? '<span class="badge-trunk">Trunk</span>' 
+      : '<span class="badge-access">Access</span>';
+
+    const vlanDisplay = p.vlan_id 
+      ? `<b style="color:var(--accent);">VLAN ${p.vlan_id}</b> <span class="muted small">(${escapeHtml(p.vlan_name)})</span>` 
+      : `<span class="muted small">${escapeHtml(p.vlan_name || '—')}</span>`;
+
+    tr.innerHTML = `
+      <td>
+        <a href="/devices/${p.switch_id}"><b>${escapeHtml(p.switch_name)}</b></a>
+        <div class="muted small mono">${escapeHtml(p.switch_ip)} · ${escapeHtml(p.site_code)}</div>
+      </td>
+      <td class="mono font-bold" style="color:var(--accent);">${escapeHtml(p.port)}</td>
+      <td>
+        ${p.description ? `<span>${escapeHtml(p.description)}</span>` : '<span class="muted">—</span>'}
+      </td>
+      <td>${modeBadge}</td>
+      <td>${vlanDisplay}</td>
+      <td>
+        <span class="badge ${p.admin_status === 'up' ? 'ok' : 'bad'}">${p.admin_status.toUpperCase()}</span>
+      </td>
+      <td>${statusBadge}</td>
+      <td>
+        ${p.is_uplink ? '<span class="badge warn" style="font-size:10px;">Uplink</span>' : '<span class="muted small">Access Drop</span>'}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  if (_filteredPorts.length > 300) {
+    const noticeTr = document.createElement('tr');
+    noticeTr.innerHTML = `<td colspan="8" style="text-align:center;padding:12px;background:rgba(255,255,255,0.02);color:var(--muted);font-size:12px;">
+      Showing first 300 of ${_filteredPorts.length.toLocaleString()} matching switchports. Use filters or Export CSV for full list.
+    </td>`;
+    tbody.appendChild(noticeTr);
+  }
+}
+
+// ----------------------------------------------------------------------------- VLAN Tab
+function applyVlanFilters() {
+  if (!_auditData || !_auditData.vlan_matrix) return;
+  const q = (document.getElementById('vlanSearch').value || '').toLowerCase().trim();
+
+  _filteredVlans = _auditData.vlan_matrix.filter(v => {
+    if (q) {
+      const matchId = String(v.vlan_id).includes(q);
+      const matchName = (v.primary_name || '').toLowerCase().includes(q);
+      const matchAll = (v.all_names || []).some(n => n.toLowerCase().includes(q));
+      if (!matchId && !matchName && !matchAll) return false;
+    }
+    return true;
+  });
+
+  renderVlansTable();
+}
+
+function renderVlansTable() {
+  const tbody = document.getElementById('vlansTableBody');
+  document.getElementById('visibleVlansCount').textContent = _filteredVlans.length;
+  tbody.innerHTML = '';
+
+  if (_filteredVlans.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">No VLANs match the search query.</td></tr>';
+    return;
+  }
+
+  _filteredVlans.forEach(v => {
+    const tr = document.createElement('tr');
+
+    let conflictHtml = '<span class="badge ok">Consistent</span>';
+    if (v.has_mismatch) {
+      conflictHtml = `<span class="badge bad" title="Multiple names: ${v.all_names.join(', ')}">⚠️ Naming Conflict (${v.all_names.length} names)</span>`;
+    }
+
+    tr.innerHTML = `
+      <td><span class="badge primary font-bold mono" style="font-size:13px;">${v.vlan_id}</span></td>
+      <td><b>${escapeHtml(v.primary_name)}</b></td>
+      <td class="small muted mono">${escapeHtml(v.all_names.join(', '))}</td>
+      <td class="num font-bold" style="color:var(--accent);">${v.total_access_ports.toLocaleString()}</td>
+      <td class="num">${v.total_trunk_switches} switches</td>
+      <td class="num">${v.total_switches} switches</td>
+      <td>${conflictHtml}</td>
+      <td>
+        <button class="btn sm" onclick="filterPortsByVlan(${v.vlan_id})">View Ports ↗</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function filterPortsByVlan(vlanId) {
+  switchTab('ports');
+  document.getElementById('portSearch').value = `VLAN ${vlanId}`;
+  applyPortFilters();
+}
+
+// ----------------------------------------------------------------------------- Matrix Grid
+function renderMatrixGrid() {
+  if (!_auditData || !_auditData.vlan_matrix || !_auditData.switch_summaries) return;
+
+  const thead = document.getElementById('matrixHead');
+  const tbody = document.getElementById('matrixBody');
+
+  const switches = _auditData.switch_summaries;
+  const vlans = _auditData.vlan_matrix;
+
+  // Header
+  let headHtml = '<tr><th style="min-width:180px;">VLAN (ID · Name)</th>';
+  switches.forEach(s => {
+    headHtml += `<th title="${escapeHtml(s.name)} (${s.site_code})">${escapeHtml(s.name)}<br><span class="muted small" style="font-weight:normal;">${escapeHtml(s.site_code)}</span></th>`;
+  });
+  headHtml += '</tr>';
+  thead.innerHTML = headHtml;
+
+  // Body rows
+  tbody.innerHTML = '';
+  vlans.forEach(v => {
+    const tr = document.createElement('tr');
+    let rowHtml = `<td><b>${v.vlan_id}</b> · ${escapeHtml(v.primary_name)}</td>`;
+
+    const swMap = {};
+    (v.switches || []).forEach(item => {
+      swMap[item.switch_id] = item;
+    });
+
+    switches.forEach(s => {
+      const entry = swMap[s.id];
+      if (!entry) {
+        rowHtml += '<td class="cell-empty">—</td>';
+      } else if (entry.access_count > 0 && entry.is_trunk) {
+        rowHtml += `<td class="cell-both" title="${entry.access_count} access ports + trunk">A(${entry.access_count})+T</td>`;
+      } else if (entry.access_count > 0) {
+        rowHtml += `<td class="cell-access" title="${entry.access_count} access ports">A(${entry.access_count})</td>`;
+      } else if (entry.is_trunk) {
+        rowHtml += '<td class="cell-trunk" title="Configured on trunk">Trunk</td>';
+      } else {
+        rowHtml += '<td class="cell-access">Defined</td>';
+      }
+    });
+
+    tr.innerHTML = rowHtml;
+    tbody.appendChild(tr);
+  });
+}
+
+// ----------------------------------------------------------------------------- Switch Summaries Tab
+function renderSwitchSummaries() {
+  const tbody = document.getElementById('switchesTableBody');
+  if (!_auditData || !_auditData.switch_summaries) return;
+
+  tbody.innerHTML = '';
+  _auditData.switch_summaries.forEach(s => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <a href="/devices/${s.id}"><b>${escapeHtml(s.name)}</b></a>
+        <div class="muted small mono">${escapeHtml(s.host)}</div>
+      </td>
+      <td>${escapeHtml(s.model)} <span class="badge" style="font-size:10px;">${escapeHtml(s.role)}</span></td>
+      <td>${escapeHtml(s.site_code)}</td>
+      <td class="num font-bold">${s.total_ports}</td>
+      <td class="num font-bold" style="color:var(--ok);">${s.active_ports}</td>
+      <td class="num font-bold" style="color:#f59e0b;">${s.dormant_ports}</td>
+      <td class="num">${s.disabled_ports}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="capacity-bar">
+            <div class="capacity-fill" style="width:${s.utilization_pct}%;background:var(--ok);"></div>
+            <div class="capacity-fill" style="width:${100 - s.utilization_pct}%;background:rgba(245, 158, 11, 0.4);"></div>
+          </div>
+          <span class="mono small font-bold" style="min-width:44px;">${s.utilization_pct}%</span>
+        </div>
+      </td>
+      <td class="muted small">${escapeHtml(s.backup_date)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ----------------------------------------------------------------------------- Live Port State Probe Modal
+function appendProbeLog(timeStr, level, msg) {
+  const term = document.getElementById('probeTerminalLogs');
+  if (!term) return;
+  const line = document.createElement('div');
+  line.className = 'op-log-line';
+  
+  const time = timeStr || new Date().toTimeString().slice(0, 8);
+  const lvl = (level || 'info').toLowerCase();
+  
+  line.innerHTML = `
+    <span class="op-log-time">${escapeHtml(time)}</span>
+    <span class="op-log-badge ${lvl}">${escapeHtml(lvl.toUpperCase())}</span>
+    <span class="op-log-msg">${escapeHtml(msg)}</span>
+  `;
+  term.appendChild(line);
+  _probeLogs.push(`[${time}] [${lvl.toUpperCase()}] ${msg}`);
+
+  if (document.getElementById('probeAutoScroll')?.checked) {
+    term.scrollTop = term.scrollHeight;
+  }
+}
+
+function copyProbeLogs() {
+  const text = _probeLogs.join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    toast('Audit logs copied to clipboard', 'ok');
+  }).catch(() => {
+    toast('Failed to copy logs', 'bad');
+  });
+}
+
+function toggleProbeMinimize(e) {
+  if (e) e.stopPropagation();
+  const modal = document.getElementById('probeProgressModal');
+  const isMin = modal.classList.toggle('minimized');
+  const btn = document.getElementById('probeMinimizeBtn');
+  if (isMin) {
+    btn.title = "Maximize / Restore console";
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`;
+  } else {
+    btn.title = "Minimize scan (run in background)";
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15"><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+  }
+}
+
+function restoreProbeModal(e) {
+  const modal = document.getElementById('probeProgressModal');
+  if (modal.classList.contains('minimized')) {
+    if (e) e.stopPropagation();
+    toggleProbeMinimize();
+  }
+}
+
+function closeProbeModal() {
+  const modal = document.getElementById('probeProgressModal');
+  modal.classList.remove('minimized');
+  modal.style.display = 'none';
+  const btn = document.getElementById('probeMinimizeBtn');
+  if (btn) {
+    btn.title = "Minimize scan (run in background)";
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15"><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+  }
+}
+
+function abortProbe() {
+  if (_liveProbeCtrl) {
+    _liveProbeCtrl.abort();
+    appendProbeLog(null, 'warn', 'Live port audit aborted by user.');
+    document.getElementById('probeCancelBtn').disabled = true;
+    document.getElementById('probeDoneBtn').disabled = false;
+  }
+}
+
+async function startLiveProbe() {
+  const siteId = document.getElementById('siteFilter').value;
+  const btn = document.getElementById('scanBtn');
+
+  // Open modal
+  const modal = document.getElementById('probeProgressModal');
+  modal.classList.remove('minimized');
+  const term = document.getElementById('probeTerminalLogs');
+  const statusText = document.getElementById('probeModalStatusText');
+  const barFill = document.getElementById('probeModalBarFill');
+  const percentText = document.getElementById('probeModalPercent');
+  const doneBtn = document.getElementById('probeDoneBtn');
+  const cancelBtn = document.getElementById('probeCancelBtn');
+
+  modal.style.display = 'flex';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  term.innerHTML = '';
+  _probeLogs = [];
+  statusText.textContent = 'Connecting to campus switches…';
+  barFill.style.width = '0%';
+  percentText.textContent = '0%';
+  doneBtn.disabled = true;
+  cancelBtn.disabled = false;
+  btn.disabled = true;
+
+  document.getElementById('modalStatSwitches').textContent = '0 / 0';
+  document.getElementById('modalStatConnected').textContent = '0';
+  document.getElementById('modalStatDormant').textContent = '0';
+
+  _liveProbeCtrl = new AbortController();
+
+  let totalConnected = 0;
+  let totalDormant = 0;
+
+  try {
+    const res = await fetch('/api/operations/vlan-audit/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': CSRF,
+      },
+      body: JSON.stringify({ site_id: siteId }),
+      signal: _liveProbeCtrl.signal,
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: Failed to start live port probe`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let totalSwitches = 0;
+    let completedSwitches = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let evt = null;
+        try { evt = JSON.parse(line); } catch (e) { continue; }
+
+        if (evt.type === 'start') {
+          totalSwitches = evt.total || 0;
+          document.getElementById('modalStatSwitches').textContent = `0 / ${totalSwitches}`;
+          appendProbeLog(evt.ts, 'info', `Starting live port audit across ${totalSwitches} switches...`);
+        } else if (evt.type === 'log') {
+          appendProbeLog(evt.ts, evt.level || 'info', evt.msg);
+        } else if (evt.type === 'device') {
+          completedSwitches++;
+          const pct = totalSwitches > 0 ? Math.round((completedSwitches / totalSwitches) * 100) : 100;
+          barFill.style.width = `${pct}%`;
+          percentText.textContent = `${pct}%`;
+          statusText.textContent = `Probed ${completedSwitches} of ${totalSwitches}: ${evt.device_name}`;
+          document.getElementById('modalStatSwitches').textContent = `${completedSwitches} / ${totalSwitches}`;
+
+          if (evt.status === 'ok') {
+            const conn = evt.connected_count || 0;
+            const dorm = evt.dormant_count || 0;
+            totalConnected += conn;
+            totalDormant += dorm;
+            document.getElementById('modalStatConnected').textContent = totalConnected;
+            document.getElementById('modalStatDormant').textContent = totalDormant;
+
+            // Merge live port map into client state
+            if (evt.ports) {
+              Object.entries(evt.ports).forEach(([pname, pinfo]) => {
+                _liveStatusMap[`${evt.device_id}:${pname}`] = pinfo.status;
+                _liveStatusMap[`${evt.device_id}:${pname}`.toLowerCase()] = pinfo.status;
+              });
+            }
+
+            // Update this switch in client-side switch summaries
+            if (_auditData && _auditData.switch_summaries) {
+              const sw = _auditData.switch_summaries.find(s => s.id === evt.device_id || s.name === evt.device_name);
+              if (sw) {
+                sw.active_ports = conn;
+                sw.dormant_ports = dorm;
+                sw.utilization_pct = sw.total_ports > 0 ? Math.round((conn / sw.total_ports) * 1000) / 10 : 0;
+              }
+            }
+
+            appendProbeLog(evt.ts, 'ok', `${evt.device_name}: ${conn} connected, ${dorm} dormant / unused`);
+          } else {
+            appendProbeLog(evt.ts, 'warn', `${evt.device_name}: ${evt.error || 'Probe failed'}`);
+          }
+        } else if (evt.type === 'done') {
+          barFill.style.width = '100%';
+          percentText.textContent = '100%';
+          statusText.textContent = 'Live port audit completed!';
+          appendProbeLog(evt.ts, 'ok', `Audit complete. Found ${totalConnected} connected ports, ${totalDormant} dormant ports.`);
+          doneBtn.disabled = false;
+          cancelBtn.disabled = true;
+          toast(`Live audit complete: ${totalConnected} connected, ${totalDormant} dormant`, 'ok');
+
+          // Update UI live badge and re-render
+          document.getElementById('liveBadgeStatus').innerHTML = `
+            <span class="status-indicator-dot" style="background:#10b981;"></span>
+            <span>Source: <b>Live Hardware Interrogation</b></span>
+          `;
+          const totalPorts = _auditData?.kpis?.total_ports || (totalConnected + totalDormant);
+          const utilPct = totalPorts > 0 ? Math.round((totalConnected / totalPorts) * 1000) / 10 : 0;
+          document.getElementById('kpiActivePorts').textContent = `${totalConnected.toLocaleString()} (${utilPct}%)`;
+          document.getElementById('kpiDormantPorts').textContent = totalDormant.toLocaleString();
+
+          if (_auditData && _auditData.kpis) {
+            _auditData.kpis.active_ports = totalConnected;
+            _auditData.kpis.dormant_ports = totalDormant;
+            _auditData.kpis.utilization_pct = utilPct;
+          }
+
+          applyPortFilters();
+          renderSwitchSummaries();
+        }
+      }
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      appendProbeLog(null, 'bad', `Error: ${err.message}`);
+      statusText.textContent = `Audit failed: ${err.message}`;
+      toast(`Probe error: ${err.message}`, 'bad');
+    }
+    doneBtn.disabled = false;
+    cancelBtn.disabled = true;
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+{% endblock %}
