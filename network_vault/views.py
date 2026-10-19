@@ -156,6 +156,8 @@ def login():
             session.permanent = True
             session["user"] = u.username
             session["must_change"] = bool(u.must_change)
+            u.last_login_at = now()
+            db.session.commit()
             log_event("User logged in", "auth", user=u.username, details=request.remote_addr)
             nxt = request.args.get("next") or ""
             return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("web.dashboard"))

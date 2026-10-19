@@ -94,6 +94,16 @@
               {% endif %}
             </span>
           </div>
+          <div class="meta-row" style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05)">
+            <span class="meta-label">Last Login</span>
+            <span class="meta-val" style="font-family:var(--mono);font-size:11.5px;color:var(--text)">
+              {% if me.last_login_at %}
+                <span title="{{ me.last_login_at|dt }}">{{ me.last_login_at|ago }}</span>
+              {% else %}
+                <span class="muted">Never</span>
+              {% endif %}
+            </span>
+          </div>
         </div>
 
         <hr class="card-divider">
@@ -165,6 +175,7 @@
                 <th>User</th>
                 <th>Role</th>
                 <th>Campus / Sites</th>
+                <th>Last Login</th>
                 <th style="text-align:right">Actions</th>
               </tr>
             </thead>
@@ -216,6 +227,20 @@
                     {% else %}
                     <span class="badge muted small">None</span>
                     {% endif %}
+                  {% endif %}
+                </td>
+
+                <!-- Last Login Cell -->
+                <td class="last-login-col">
+                  {% if u.last_login_at %}
+                  <div class="last-login-main" title="{{ u.last_login_at|dt }}">
+                    <span class="login-dt-text">{{ u.last_login_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                    <span class="login-ago-badge">{{ u.last_login_at|ago }}</span>
+                  </div>
+                  {% else %}
+                  <span class="muted small" style="font-size:12px;display:inline-flex;align-items:center;gap:4px">
+                    <span class="dot" style="background:var(--border);width:5px;height:5px"></span> Never
+                  </span>
                   {% endif %}
                 </td>
 
@@ -800,6 +825,24 @@
 .action-btn {
   padding: 4px 9px;
   font-size: 12px;
+}
+.last-login-col {
+  white-space: nowrap;
+}
+.last-login-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.login-dt-text {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.login-ago-badge {
+  font-size: 11px;
+  color: var(--muted);
 }
 .reset-pw-btn {
   background: var(--gold-soft);

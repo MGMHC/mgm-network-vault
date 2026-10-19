@@ -29,6 +29,18 @@ def _add_missing_columns():
                     conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {ddl}'))
         # Backfill: any user with NULL or old 'admin' role gets 'group-admin'
         conn.execute(text("UPDATE \"user\" SET role = 'group-admin' WHERE role IS NULL OR role = '' OR role = 'admin'"))
+        # Backfill: populate user.last_login_at from the latest auth login log_entry if empty
+        conn.execute(text("""
+            UPDATE "user"
+            SET last_login_at = (
+                SELECT max(ts)
+                FROM log_entry
+                WHERE log_entry.category = 'auth'
+                  AND log_entry.message = 'User logged in'
+                  AND log_entry.user = "user".username
+            )
+            WHERE last_login_at IS NULL
+        """))
 
     # Seed default sites if none exist
     default_sites = [

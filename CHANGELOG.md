@@ -4,6 +4,15 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.11.1] - 2026-10-19
+
+### Added
+- **User Last Login Tracking & Directory Display**:
+  - Added `last_login_at` timestamp tracking to the `User` model, automatically recorded upon every successful authentication.
+  - Added **Last Login** column to the User Directory table in **Users & Access Management** (`/account`), showing both formatted timestamp (`YYYY-MM-DD HH:MM`) and human-readable relative time (e.g. `2h ago`, `3d ago`, or `Never`).
+  - Added **Last Login** display row in the current user's profile card for fast personal session tracking.
+  - Automatic database schema migration with historical backfill populating initial login timestamps from existing `auth` audit logs.
+
 ## [1.11.0] - 2026-10-18
 
 ### Added

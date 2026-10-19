@@ -55,6 +55,7 @@ class User(db.Model):
     must_change = db.Column(db.Boolean, default=False)
     role = db.Column(db.String(24), default="group-admin")  # group-admin | site-admin | read-write | read-only
     site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=True)  # primary / fallback site
+    last_login_at = db.Column(db.DateTime, nullable=True)
 
     assigned_sites = db.relationship(
         "Site",
