@@ -3,7 +3,7 @@ import secrets
 from datetime import timedelta
 
 from flask import Flask, abort, redirect, request, session, url_for
-from sqlalchemy import event
+from sqlalchemy import event, pool
 
 from . import config
 from .models import Site, User, db
@@ -89,7 +89,10 @@ def create_app():
     app.config.update(
         SECRET_KEY=FLASK_SECRET,
         SQLALCHEMY_DATABASE_URI=f"sqlite:///{(BASE_DIR / 'network_vault.db').as_posix()}",
-        SQLALCHEMY_ENGINE_OPTIONS={"connect_args": {"timeout": 30, "check_same_thread": False}},
+        SQLALCHEMY_ENGINE_OPTIONS={
+            "poolclass": pool.NullPool,
+            "connect_args": {"timeout": 30, "check_same_thread": False}
+        },
         PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",

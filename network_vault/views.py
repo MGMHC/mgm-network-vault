@@ -1080,8 +1080,63 @@ def api_device_optics(dev_id):
         return jsonify(error=f"{type(e).__name__}: {e}"), 500
 
 
+# --------------------------------------------------------------------------- Hardware Health (CPU, Memory, Temperature)
+
+@bp.route("/operations/health")
+def health():
+    u = _current_user()
+    devs = _site_filter(Device.query, Device).order_by(Device.name).all()
+    user_sites_list = Site.query.order_by(Site.code).all() if (u and u.is_group_admin) else (u.assigned_sites if u else [])
+    return render_template("health.html", devices=devs, sites=user_sites_list)
+
+
+@bp.route("/api/operations/health/stream", methods=["POST"])
+def api_health_stream():
+    u = _current_user()
+    data = request.get_json(silent=True) or {}
+    q_devs = _site_filter(Device.query, Device)
+    site_id = data.get("site_id")
+    if site_id and site_id != "all":
+        try:
+            sid = int(site_id)
+            if u and not u.has_site_access(sid):
+                abort(403, "Access to specified site is restricted.")
+            q_devs = q_devs.filter(Device.site_id == sid)
+        except (ValueError, TypeError):
+            pass
+
+    device_ids = data.get("device_ids")
+    if device_ids and isinstance(device_ids, list):
+        q_devs = q_devs.filter(Device.id.in_([int(i) for i in device_ids if str(i).isdigit()]))
+
+    devs = q_devs.filter_by(enabled=True).all()
+    dev_ids = [d.id for d in devs if d.credential_id]
+    app = current_app._get_current_object()
+    log_event(f"Hardware health streaming scan started ({len(dev_ids)} switches)", "device", user=session.get("user"))
+    return Response(
+        stream_with_context(operations.stream_scan_health(app, dev_ids)),
+        mimetype="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
+
+
+@bp.route("/api/devices/<int:dev_id>/health")
+def api_device_health(dev_id):
+    d = db.get_or_404(Device, dev_id)
+    u = _current_user()
+    if not u.has_site_access(d.site_id):
+        abort(403, "Cannot inspect hardware health on devices from another site.")
+    try:
+        health_data = operations.query_device_health(d)
+        log_event(f"Single-device hardware health inspected: {d.name}", "device", device=d)
+        return jsonify(health_data)
+    except Exception as e:
+        log_event(f"Hardware health check failed for {d.name}: {e}", "device", "ERROR", device=d)
+        return jsonify(error=f"{type(e).__name__}: {e}"), 500
+
 
 # --------------------------------------------------------------------------- VLAN Matrix & Dormant / Unused Port Auditing
+
 
 @bp.route("/operations/vlan-audit")
 def vlan_audit():
@@ -1189,6 +1244,149 @@ def lifecycle():
     analysis = lc.analyze_device_lifecycle(devices)
     all_sites = Site.query.order_by(Site.code).all()
     return render_template("lifecycle.html", analysis=analysis, sites=all_sites)
+
+
+@bp.route("/api/operations/lifecycle/fetch", methods=["POST"])
+def api_lifecycle_fetch_all():
+    """
+    Live streaming discovery job: connects to switches, queries hardware model, serial, and running OS,
+    and returns real-time progress.
+    """
+    u = _current_user()
+    data = request.get_json(silent=True) or {}
+    q_devs = _site_filter(Device.query, Device)
+    site_id = data.get("site_id")
+    if site_id and site_id != "all":
+        try:
+            sid = int(site_id)
+            if u and not u.has_site_access(sid):
+                abort(403, "Access to specified site is restricted.")
+            q_devs = q_devs.filter(Device.site_id == sid)
+        except (ValueError, TypeError):
+            pass
+
+    devs = q_devs.filter(Device.enabled.is_(True), Device.credential_id.isnot(None)).all()
+    dev_ids = [d.id for d in devs]
+    app = current_app._get_current_object()
+
+    def stream_discover():
+        import json as _json
+        import queue
+        from concurrent.futures import ThreadPoolExecutor
+
+        q = queue.Queue()
+        total = len(dev_ids)
+        q.put({"type": "init", "total": total, "msg": f"Starting live inventory and firmware fetch across {total} switches..."})
+
+        if not dev_ids:
+            q.put({"type": "complete", "msg": "No switches available with credentials in this scope."})
+            q.put(None)
+            while True:
+                item = q.get()
+                if item is None:
+                    break
+                yield _json.dumps(item) + "\n"
+            return
+
+        done_cnt = 0
+        from threading import Lock
+        lock = Lock()
+
+        def worker(did):
+            nonlocal done_cnt
+            dev_name = ""
+            with app.app_context():
+                d = db.session.get(Device, did)
+                if not d:
+                    return
+                dev_name = d.name
+
+            q.put({"type": "log", "level": "info", "msg": f"[{dev_name}] Connecting over SSH to discover hardware inventory & firmware..."})
+            ok = False
+            try:
+                with app.app_context():
+                    ok = engine.discover_device(did, user=session.get("user"))
+            except Exception as e:
+                q.put({"type": "log", "level": "error", "msg": f"[{dev_name}] SSH discovery error: {e}"})
+
+            with lock:
+                done_cnt += 1
+                cur_done = done_cnt
+
+            pct = int((cur_done / total) * 100)
+            if ok:
+                with app.app_context():
+                    d = db.session.get(Device, did)
+                    q.put({
+                        "type": "device",
+                        "device_id": did,
+                        "device_name": dev_name,
+                        "hw_model": d.hw_model,
+                        "serial": d.serial,
+                        "sw_version": d.sw_version,
+                        "percent": pct,
+                        "done": cur_done,
+                        "total": total
+                    })
+                    q.put({"type": "log", "level": "ok", "msg": f"[{dev_name}] Detected: Model {d.hw_model or 'Unknown'} | SN {d.serial or 'N/A'} | OS {d.sw_version or 'N/A'}"})
+            else:
+                q.put({
+                    "type": "progress",
+                    "percent": pct,
+                    "done": cur_done,
+                    "total": total
+                })
+
+        def run_all():
+            try:
+                workers = min(total, max(2, get_int("max_workers") if app else 4))
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    list(pool.map(worker, dev_ids))
+                q.put({"type": "complete", "msg": "Live discovery finished across switches."})
+            except Exception as e:
+                q.put({"type": "log", "level": "error", "msg": f"Discovery failure: {e}"})
+                q.put({"type": "complete", "msg": "Finished with errors."})
+            finally:
+                q.put(None)
+
+        import threading
+        threading.Thread(target=run_all, daemon=True).start()
+        while True:
+            item = q.get()
+            if item is None:
+                break
+            yield _json.dumps(item) + "\n"
+
+    log_event(f"Started live hardware & firmware discovery fetch across {len(dev_ids)} switches", "device", user=session.get("user"))
+    return Response(
+        stream_with_context(stream_discover()),
+        mimetype="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
+
+
+@bp.route("/api/devices/<int:dev_id>/discover", methods=["POST"])
+def api_device_discover(dev_id):
+    d = db.get_or_404(Device, dev_id)
+    u = _current_user()
+    if not u.has_site_access(d.site_id):
+        abort(403, "Cannot discover device from another site.")
+    try:
+        ok = engine.discover_device(dev_id, user=session.get("user"))
+        if ok:
+            db.session.refresh(d)
+            log_event(f"Live hardware discovery succeeded for {d.name}", "device", device=d)
+            return jsonify(
+                ok=True,
+                hw_model=d.hw_model,
+                serial=d.serial,
+                sw_version=d.sw_version
+            )
+        else:
+            return jsonify(ok=False, error="Device discovery failed or switch unreachable"), 500
+    except Exception as e:
+        log_event(f"Discovery error for {d.name}: {e}", "device", "ERROR", device=d)
+        return jsonify(ok=False, error=str(e)), 500
 
 
 @bp.route("/operations/lifecycle/export.csv")

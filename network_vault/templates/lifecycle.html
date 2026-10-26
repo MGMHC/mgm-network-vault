@@ -9,6 +9,9 @@
     <div class="sub">End-of-Sale (EOS), End-of-Software-Maintenance (EoSW), and End-of-Life (EOL) compliance audit for campus switch infrastructure.</div>
   </div>
   <div class="actions">
+    <button class="btn primary" id="fetchLifecycleBtn" onclick="startLifecycleFetchAll()">
+      {{ icon('refresh') }} Fetch Live Inventory &amp; EOL
+    </button>
     <a href="{{ url_for('web.lifecycle_export_csv') }}" class="btn">
       {{ icon('download') }} Export Lifecycle Audit (CSV)
     </a>
@@ -188,15 +191,72 @@
         </td>
 
         <td>
-          <a href="{{ url_for('web.device_detail', dev_id=it.device.id) }}" class="btn sm" title="View switch details and backups">
-            View
-          </a>
+          <div style="display:flex;gap:4px;align-items:center;">
+            <button class="btn sm" id="fetch-btn-{{ it.device.id }}" onclick="fetchSingleSwitch({{ it.device.id }})" title="Fetch live inventory &amp; firmware over SSH">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+              Fetch
+            </button>
+            <a href="{{ url_for('web.device_detail', dev_id=it.device.id) }}" class="btn sm" title="View switch details and backups">
+              View
+            </a>
+          </div>
         </td>
 
       </tr>
       {% endfor %}
     </tbody>
   </table>
+</div>
+
+<!-- Live Scanning Progress Modal -->
+<div id="lifecycleProgressModal" class="op-modal-backdrop" style="display:none;">
+  <div class="op-modal" role="dialog" aria-modal="true" aria-labelledby="lcModalTitle">
+    <div class="op-modal-header" onclick="restoreLcModal(event)">
+      <div>
+        <h3 id="lcModalTitle" class="op-modal-title">
+          <span style="color:var(--mgm-gold);">{{ icon('refresh') }}</span>
+          Fetching Live Switch Inventory &amp; EOL Lifecycle
+        </h3>
+        <div class="op-modal-sub">Live SSH model, serial number, and firmware detection across campus switches</div>
+      </div>
+      <div class="op-modal-header-actions" onclick="event.stopPropagation()">
+        <button type="button" class="op-modal-btn" id="lcMinimizeBtn" onclick="toggleLcMinimize(event)" title="Minimize (run in background)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button type="button" class="op-modal-close" onclick="closeLcModal()" title="Close">&times;</button>
+      </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="op-progress-section" onclick="restoreLcModal(event)">
+      <div class="op-progress-info">
+        <span id="lcStatusText" class="font-bold">Connecting to switches…</span>
+        <span id="lcPercentText" class="mono font-bold" style="color:var(--accent);">0%</span>
+      </div>
+      <div class="op-progress-bar">
+        <div id="lcBarFill" class="op-progress-fill" style="width: 0%;"></div>
+      </div>
+    </div>
+
+    <!-- Live Terminal Console -->
+    <div class="op-terminal">
+      <div class="op-terminal-header">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="color:#38bdf8;">●</span>
+          <span>Live Switch SSH Inventory Stream</span>
+        </div>
+      </div>
+      <div id="lcTerminalLogs" class="op-terminal-logs"></div>
+    </div>
+
+    <!-- Footer -->
+    <div class="op-modal-footer">
+      <div></div>
+      <div>
+        <button id="lcDoneBtn" class="btn primary" onclick="reloadPageAfterFetch()" disabled>Reload &amp; Update Lifecycle Table</button>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
@@ -305,5 +365,179 @@ function applyFilters() {
 
   document.getElementById('filteredCountLabel').textContent = `Showing ${visibleCount} of ${rows.length} switches`;
 }
+
+// --------------------------------------------------------------------------- Live Fetch Operations
+
+function appendLcLog(level, msg) {
+  const term = document.getElementById('lcTerminalLogs');
+  if (!term) return;
+  const line = document.createElement('div');
+  line.className = 'op-log-line';
+  const time = new Date().toTimeString().slice(0, 8);
+  const lvl = (level || 'info').toLowerCase();
+  line.innerHTML = `
+    <span class="op-log-time">${escapeHtml(time)}</span>
+    <span class="op-log-badge ${lvl}">${escapeHtml(lvl.toUpperCase())}</span>
+    <span class="op-log-msg">${escapeHtml(msg)}</span>
+  `;
+  term.appendChild(line);
+  term.scrollTop = term.scrollHeight;
+}
+
+function toggleLcMinimize(e) {
+  if (e) e.stopPropagation();
+  const modal = document.getElementById('lifecycleProgressModal');
+  const isMin = modal.classList.toggle('minimized');
+  const btn = document.getElementById('lcMinimizeBtn');
+  if (isMin) {
+    btn.title = "Maximize / Restore console";
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`;
+  } else {
+    btn.title = "Minimize (run in background)";
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+  }
+}
+
+function restoreLcModal(e) {
+  const modal = document.getElementById('lifecycleProgressModal');
+  if (modal.classList.contains('minimized')) {
+    modal.classList.remove('minimized');
+  }
+}
+
+function closeLcModal() {
+  const modal = document.getElementById('lifecycleProgressModal');
+  modal.classList.remove('minimized');
+  modal.style.display = 'none';
+}
+
+function reloadPageAfterFetch() {
+  window.location.reload();
+}
+
+async function fetchSingleSwitch(devId) {
+  const btn = document.getElementById(`fetch-btn-${devId}`);
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spin-icon" style="display:inline-block;width:11px;height:11px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;"></span> Fetching…`;
+  }
+
+  try {
+    const res = await fetch(`/api/devices/${devId}/discover`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": typeof CSRF !== "undefined" ? CSRF : (document.querySelector('meta[name="csrf"]')?.content || "")
+      }
+    });
+    const data = await res.json();
+    if (data.ok) {
+      // Reload page to reflect newly detected hardware model and EOL dates
+      window.location.reload();
+    } else {
+      alert("Discovery failed: " + (data.error || "Unknown error"));
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> Fetch`;
+      }
+    }
+  } catch (err) {
+    alert("Fetch error: " + err);
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> Fetch`;
+    }
+  }
+}
+
+async function startLifecycleFetchAll() {
+  const modal = document.getElementById('lifecycleProgressModal');
+  modal.classList.remove('minimized');
+  modal.style.display = 'flex';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  const statusText = document.getElementById('lcStatusText');
+  const percentText = document.getElementById('lcPercentText');
+  const barFill = document.getElementById('lcBarFill');
+  const termLogs = document.getElementById('lcTerminalLogs');
+  const doneBtn = document.getElementById('lcDoneBtn');
+  const fetchBtn = document.getElementById('fetchLifecycleBtn');
+
+  fetchBtn.disabled = true;
+  doneBtn.disabled = true;
+  termLogs.innerHTML = "";
+  barFill.style.width = "0%";
+  percentText.textContent = "0%";
+  statusText.textContent = "Connecting to switches in parallel…";
+
+  try {
+    const res = await fetch("/api/operations/lifecycle/fetch", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": typeof CSRF !== "undefined" ? CSRF : (document.querySelector('meta[name="csrf"]')?.content || "")
+      },
+      body: JSON.stringify({})
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: Failed to start live inventory fetch`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let ev = null;
+        try { ev = JSON.parse(line); } catch (e) { continue; }
+
+        if (ev.type === "init") {
+          appendLcLog("info", ev.msg);
+        } else if (ev.type === "log") {
+          appendLcLog(ev.level || "info", ev.msg);
+        } else if (ev.type === "device" || ev.type === "progress") {
+          const pct = ev.percent || 0;
+          barFill.style.width = `${pct}%`;
+          percentText.textContent = `${pct}%`;
+          statusText.textContent = `Queried switch ${ev.done} of ${ev.total}…`;
+        } else if (ev.type === "complete") {
+          barFill.style.width = "100%";
+          percentText.textContent = "100%";
+          statusText.textContent = "✅ Live discovery complete! Click below to update the table.";
+          appendLcLog("ok", ev.msg);
+        }
+      }
+    }
+
+    doneBtn.disabled = false;
+  } catch (err) {
+    appendLcLog("error", "Fetch failed: " + err.message);
+    statusText.textContent = "Discovery failed: " + err.message;
+    doneBtn.disabled = false;
+  } finally {
+    fetchBtn.disabled = false;
+  }
+}
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 </script>
 {% endblock %}
+

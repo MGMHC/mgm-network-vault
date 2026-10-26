@@ -1233,5 +1233,31 @@ h2 svg {
   background: var(--danger);
 }
 
+/* --------------------------------------------------------------------------- Hardware Health Monitoring Dashboard */
+.health-meter-bg {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 3px;
+}
+.health-meter-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.35s ease, background-color 0.3s ease;
+}
+.health-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.bg-ok { background: var(--ok); box-shadow: 0 0 6px rgba(16, 185, 129, 0.4); }
+.bg-warn { background: var(--warn); box-shadow: 0 0 6px rgba(245, 158, 11, 0.4); }
+.bg-bad { background: var(--bad); box-shadow: 0 0 6px rgba(239, 68, 68, 0.4); }
+.bg-muted { background: var(--muted); }
+
+
 
 

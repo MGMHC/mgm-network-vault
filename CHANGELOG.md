@@ -4,6 +4,32 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.12.0] - 2026-10-26
+
+### Added
+- **Fleet Hardware Health & Telemetry Dashboard (`/operations/health`)**:
+  - Live hardware monitoring suite tracking CPU utilization, memory pressure, chassis/CPU thermal sensors, and fan / power supply environmental metrics across campus infrastructure.
+  - Multi-platform hardware support across Juniper Junos (`show chassis routing-engine`, `show chassis environment`), Cisco IOS (`show processes cpu`, `show processes memory`, `show env all`), Cisco Catalyst 1300 / CBS (`show cpu utilization`, `show environment all`), and SonicWall SonicOS (`show status`).
+  - **Live SSH Scanning Engine (`/api/operations/health/stream`)**: Parallel multi-threaded interrogation with Server-Sent Events (SSE) streaming progress bar, stats counter, and live terminal console.
+  - **Single Switch Health Check (`/api/devices/<id>/health`)**: On-demand single switch check button in the table for immediate diagnostics.
+  - **KPI Summary Strip**: Interactive top cards for Monitored Switches, Normal/Healthy, Warning/Elevated, and Critical/Fault with one-click filtering.
+  - **Interactive Sorting**: Bi-directional sortable column headers (`▲` / `▼`) for Switch Hostname, Campus Site, CPU Utilization, Memory Usage, and Temperature.
+  - Sidebar navigation link with activity/pulse icon under Operations.
+
+- **Lifecycle & EOL Live Inventory Fetch & Extended Catalog**:
+  - Added **`Fetch Live Inventory & EOL`** live scan (`/api/operations/lifecycle/fetch`) and individual **`Fetch`** buttons per switch (`/api/devices/<id>/discover`), polling `show version` & `show inventory` live over SSH to detect exact hardware PID, serial number, and running software.
+  - Added official Cisco EOS & EOL milestones for:
+    - **Cisco Catalyst 1000 Series** (`C1000-24T-4X-L`, `C1000-48T-4X-L`): End-of-Sale 2025-04-30, Last Date of Support (EOL) 2030-04-30, Recommended Release `15.2(7)E3k`.
+    - **Cisco Catalyst 9300 Series** (`C9300-24T`): Active flagship enterprise campus switch, Recommended Release `17.9.4a`.
+
+### Fixed
+- **SQLAlchemy QueuePool Limit Exhaustion**:
+  - Configured `poolclass: pool.NullPool` in `SQLALCHEMY_ENGINE_OPTIONS` for SQLite, resolving connection pool exhaustion (`QueuePool limit of size 5 overflow 10 reached`) during concurrent background tasks.
+- **Port Locator ARP Discovery Optimization**:
+  - Streamlined Step 1 of Port Locator to query only actual Core & Distribution switches (`MGM-CSW`, `MALAR-CSW`, `DIST-EX3300-VC`) instead of scanning all 68 edge switches, drastically accelerating ARP lookup.
+- **CSRF Token Handling in SSE Streams**:
+  - Included `X-CSRF-Token` headers on all streaming POST requests across Hardware Health and Lifecycle Fetch endpoints.
+
 ## [1.11.1] - 2026-10-19
 
 ### Added

@@ -1,0 +1,794 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Hardware Health Monitoring (CPU, Memory, Temperature){% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1>
+      <span class="title-icon">
+        <svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      </span>
+      Fleet Hardware Health &amp; Telemetry
+    </h1>
+    <div class="sub">Live CPU utilization, memory pressure, thermal sensors, and fan / power supply environmental metrics across campus infrastructure.</div>
+  </div>
+  <div class="actions">
+    <button id="scanHealthBtn" class="btn primary" onclick="startFleetHealthScan()">
+      {{ icon('refresh') }} Scan Fleet Health Now
+    </button>
+  </div>
+</div>
+
+<!-- Health Summary KPI Box -->
+<div class="card optics-summary-card">
+  <div class="optics-summary-strip">
+    <div class="optics-kpi-item optics-kpi-total active" data-filter="all" onclick="selectHealthFilter('all')" title="Filter: All Monitored Devices">
+      <div class="optics-kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      </div>
+      <div class="optics-kpi-content">
+        <div class="optics-kpi-val"><span id="kpiTotal">0</span></div>
+        <div class="optics-kpi-label">Monitored Switches</div>
+      </div>
+    </div>
+
+    <div class="optics-kpi-item optics-kpi-ok" data-filter="ok" onclick="selectHealthFilter('ok')" title="Filter: Optimal / Normal State Only">
+      <div class="optics-kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="optics-kpi-content">
+        <div class="optics-kpi-val"><span id="kpiOk" style="color:var(--ok);">0</span></div>
+        <div class="optics-kpi-label">Normal &amp; Healthy</div>
+      </div>
+    </div>
+
+    <div class="optics-kpi-item optics-kpi-warn" data-filter="warn" onclick="selectHealthFilter('warn')" title="Filter: Elevated CPU / Memory or Thermal Warnings">
+      <div class="optics-kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="optics-kpi-content">
+        <div class="optics-kpi-val"><span id="kpiWarn" style="color:var(--warn);">0</span></div>
+        <div class="optics-kpi-label">Warning / Elevated</div>
+      </div>
+    </div>
+
+    <div class="optics-kpi-item optics-kpi-bad" data-filter="bad" onclick="selectHealthFilter('bad')" title="Filter: Critical Thermal / High Load / Hardware Fault">
+      <div class="optics-kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      </div>
+      <div class="optics-kpi-content">
+        <div class="optics-kpi-val"><span id="kpiBad" style="color:var(--bad);">0</span></div>
+        <div class="optics-kpi-label">Critical / Fault / Offline</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Controls Bar -->
+<div class="card" style="margin-bottom: 20px;">
+  <div class="locator-search-grid" style="align-items: center;">
+    <div class="form-group" style="flex: 1; min-width: 200px;">
+      <label for="healthSiteFilter" style="display:block;margin-bottom:6px;font-weight:600;">Campus Site</label>
+      <select id="healthSiteFilter" class="input-lg" style="width:100%;" onchange="renderHealthTable()">
+        {% if current_user_obj.is_group_admin %}
+        <option value="all">All Sites (Group View)</option>
+        {% else %}
+        <option value="all">All My Sites</option>
+        {% endif %}
+        {% for s in (all_sites if current_user_obj.is_group_admin else user_available_sites) %}
+        <option value="{{ s.id }}" {% if current_site_id == s.id %}selected{% endif %}>{{ s.code }} · {{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-group" style="flex: 1; min-width: 200px;">
+      <label for="healthStatusFilter" style="display:block;margin-bottom:6px;font-weight:600;">Health Status</label>
+      <select id="healthStatusFilter" class="input-lg" style="width:100%;" onchange="renderHealthTable()">
+        <option value="all">All Statuses</option>
+        <option value="attention">Needs Attention (Warn + Bad + Offline)</option>
+        <option value="ok">Healthy Only (Normal)</option>
+        <option value="warn">Warning / Elevated Only</option>
+        <option value="bad">Critical Only</option>
+        <option value="high_cpu">High CPU (&ge; 75%)</option>
+        <option value="high_temp">Thermal Warning / Warm</option>
+      </select>
+    </div>
+
+    <div class="form-group" style="flex: 2; min-width: 240px;">
+      <label for="healthSearch" style="display:block;margin-bottom:6px;font-weight:600;">Search Switch or IP</label>
+      <input type="text" id="healthSearch" class="input-lg" placeholder="Filter by switch hostname, IP, platform..." oninput="renderHealthTable()" style="width:100%;">
+    </div>
+  </div>
+</div>
+
+<!-- Telemetry Data Table Card -->
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <h3 style="margin:0;font-size:16px;">Switch Hardware Telemetry</h3>
+      <span id="filteredCountBadge" class="badge muted">0 switches shown</span>
+    </div>
+    <div style="font-size:12px;color:var(--muted);" id="lastPolledTime">
+      Not yet scanned this session
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table" id="healthTable">
+      <thead>
+        <tr>
+          <th style="width:24%;cursor:pointer;user-select:none;" onclick="sortByColumn('name')" title="Click to sort by Switch / Host">
+            <span style="display:inline-flex;align-items:center;gap:6px;">
+              <span>Switch / Host</span>
+              <span id="sort-icon-name" class="sort-indicator">↕</span>
+            </span>
+          </th>
+          <th style="width:14%;cursor:pointer;user-select:none;" onclick="sortByColumn('site')" title="Click to sort by Campus Site">
+            <span style="display:inline-flex;align-items:center;gap:6px;">
+              <span>Campus Site</span>
+              <span id="sort-icon-site" class="sort-indicator">↕</span>
+            </span>
+          </th>
+          <th style="width:17%;cursor:pointer;user-select:none;" onclick="sortByColumn('cpu')" title="Click to sort by CPU Utilization">
+            <span style="display:inline-flex;align-items:center;gap:6px;">
+              <span>CPU Utilization</span>
+              <span id="sort-icon-cpu" class="sort-indicator">↕</span>
+            </span>
+          </th>
+          <th style="width:17%;cursor:pointer;user-select:none;" onclick="sortByColumn('mem')" title="Click to sort by Memory Usage">
+            <span style="display:inline-flex;align-items:center;gap:6px;">
+              <span>Memory Usage</span>
+              <span id="sort-icon-mem" class="sort-indicator">↕</span>
+            </span>
+          </th>
+          <th style="width:14%;cursor:pointer;user-select:none;" onclick="sortByColumn('temp')" title="Click to sort by Temperature">
+            <span style="display:inline-flex;align-items:center;gap:6px;">
+              <span>Temperature</span>
+              <span id="sort-icon-temp" class="sort-indicator">↕</span>
+            </span>
+          </th>
+          <th style="width:14%;text-align:right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="healthTableBody">
+        <!-- Rendered via JS -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Fixed Floating Modal Window with Consistent CSS -->
+<div id="healthScanModal" class="op-modal-backdrop" style="display:none;">
+  <div class="op-modal" role="dialog" aria-modal="true" aria-labelledby="healthModalTitle">
+    <div class="op-modal-header" onclick="restoreHealthModal(event)">
+      <div>
+        <h3 id="healthModalTitle" class="op-modal-title">
+          <span style="color:var(--mgm-gold);">
+            <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          </span>
+          Scanning Fleet Hardware Health (CPU, Mem, Temp)
+        </h3>
+        <div class="op-modal-sub">Live SSH hardware telemetry stream across campus switches</div>
+      </div>
+      <div class="op-modal-header-actions" onclick="event.stopPropagation()">
+        <button type="button" class="op-modal-btn" id="healthMinimizeBtn" onclick="toggleHealthMinimize(event)" title="Minimize scan (run in background)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button type="button" class="op-modal-close" id="healthCloseHeaderBtn" onclick="closeHealthModal()" title="Close">&times;</button>
+      </div>
+    </div>
+
+    <!-- Progress Bar & KPIs -->
+    <div class="op-progress-section" onclick="restoreHealthModal(event)">
+      <div class="op-progress-info">
+        <span id="healthModalStatusText" class="font-bold">Initializing scan…</span>
+        <span id="healthModalPercent" class="mono font-bold" style="color:var(--accent);">0%</span>
+      </div>
+      <div class="op-progress-bar">
+        <div id="healthModalBarFill" class="op-progress-fill" style="width: 0%;"></div>
+      </div>
+      <div class="op-progress-stats">
+        <div class="op-stat-pill">Switches Polled: <b id="healthStatSwitches">0 / 0</b></div>
+        <div class="op-stat-pill">Optimal: <b id="healthStatOk" style="color:var(--ok);">0</b></div>
+        <div class="op-stat-pill">Warnings: <b id="healthStatWarn" style="color:var(--warn);">0</b></div>
+        <div class="op-stat-pill">Critical / Error: <b id="healthStatBad" style="color:var(--bad);">0</b></div>
+      </div>
+    </div>
+
+    <!-- Live Terminal Console -->
+    <div class="op-terminal">
+      <div class="op-terminal-header">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="color:#38bdf8;">●</span>
+          <span>Live Switch SSH Telemetry Stream</span>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center;">
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;">
+            <input type="checkbox" id="healthAutoScroll" checked> Auto-Scroll
+          </label>
+          <button class="btn sm" onclick="copyHealthLogs()" style="padding:2px 8px;font-size:11px;">Copy Logs</button>
+        </div>
+      </div>
+      <div id="healthTerminalLogs" class="op-terminal-logs"></div>
+    </div>
+
+    <!-- Modal Footer -->
+    <div class="op-modal-footer">
+      <div>
+        <button id="healthCancelBtn" class="btn bad sm" onclick="abortHealthScan()">Cancel Scan</button>
+      </div>
+      <div>
+        <button id="healthDoneBtn" class="btn primary" onclick="closeHealthModal()" disabled>Close &amp; View Results</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Initial raw switches loaded from template
+const INITIAL_DEVICES = [
+  {% for d in devices %}
+  {
+    id: {{ d.id }},
+    name: {{ d.name|tojson }},
+    host: {{ d.host|tojson }},
+    platform: {{ d.platform|tojson }},
+    site_id: {{ d.site_id or 'null' }},
+    site_name: {{ (d.site.name if d.site else '—')|tojson }},
+    site_code: {{ (d.site.code if d.site else '—')|tojson }},
+    cpu_pct: null,
+    mem_pct: null,
+    temp_c: null,
+    temp_status: "unknown",
+    fans_status: "unknown",
+    psu_status: "unknown",
+    overall_status: "pending",
+    reasons: [],
+    last_polled: null,
+    error: null
+  },
+  {% endfor %}
+];
+
+let fleetDevices = JSON.parse(JSON.stringify(INITIAL_DEVICES));
+let activeKpiFilter = "all";
+let isScanning = false;
+let healthAbortCtrl = null;
+let healthLogs = [];
+
+// Sorting state
+let currentSortColumn = "name";
+let currentSortDirection = "asc"; // "asc" or "desc"
+
+document.addEventListener("DOMContentLoaded", () => {
+  renderHealthTable();
+  updateKpiCounts();
+  updateSortIndicators();
+});
+
+function sortByColumn(col) {
+  if (currentSortColumn === col) {
+    // Toggle direction: asc -> desc -> asc
+    currentSortDirection = currentSortDirection === "asc" ? "desc" : "asc";
+  } else {
+    currentSortColumn = col;
+    // Sensible defaults: highest usage/temp first for metrics, A-Z for names
+    currentSortDirection = (col === "cpu" || col === "mem" || col === "temp") ? "desc" : "asc";
+  }
+  updateSortIndicators();
+  renderHealthTable();
+}
+
+function updateSortIndicators() {
+  const cols = ["name", "site", "cpu", "mem", "temp"];
+  cols.forEach(c => {
+    const el = document.getElementById(`sort-icon-${c}`);
+    if (!el) return;
+    if (c === currentSortColumn) {
+      el.textContent = currentSortDirection === "asc" ? "▲" : "▼";
+      el.style.color = "var(--mgm-gold)";
+      el.style.opacity = "1";
+    } else {
+      el.textContent = "↕";
+      el.style.color = "var(--muted)";
+      el.style.opacity = "0.4";
+    }
+  });
+}
+
+function selectHealthFilter(filterKey) {
+  activeKpiFilter = filterKey;
+  document.querySelectorAll(".optics-kpi-item").forEach(el => {
+    el.classList.toggle("active", el.dataset.filter === filterKey);
+  });
+  renderHealthTable();
+}
+
+function updateKpiCounts() {
+  const total = fleetDevices.length;
+  let ok = 0;
+  let warn = 0;
+  let bad = 0;
+
+  fleetDevices.forEach(d => {
+    if (d.overall_status === "ok") ok++;
+    else if (d.overall_status === "warn") warn++;
+    else if (d.overall_status === "bad" || d.overall_status === "error") bad++;
+  });
+
+  document.getElementById("kpiTotal").textContent = total;
+  document.getElementById("kpiOk").textContent = ok;
+  document.getElementById("kpiWarn").textContent = warn;
+  document.getElementById("kpiBad").textContent = bad;
+}
+
+function renderHealthTable() {
+  const siteFilter = document.getElementById("healthSiteFilter").value;
+  const statusFilter = document.getElementById("healthStatusFilter").value;
+  const search = (document.getElementById("healthSearch").value || "").trim().toLowerCase();
+
+  const tbody = document.getElementById("healthTableBody");
+  tbody.innerHTML = "";
+
+  const filtered = fleetDevices.filter(d => {
+    // Site filter
+    if (siteFilter !== "all" && String(d.site_id) !== siteFilter) {
+      return false;
+    }
+    // Search text
+    if (search) {
+      const match = d.name.toLowerCase().includes(search) ||
+                    d.host.toLowerCase().includes(search) ||
+                    (d.platform || "").toLowerCase().includes(search) ||
+                    (d.site_name || "").toLowerCase().includes(search) ||
+                    (d.site_code || "").toLowerCase().includes(search);
+      if (!match) return false;
+    }
+    // KPI tab filter
+    if (activeKpiFilter === "ok" && d.overall_status !== "ok") return false;
+    if (activeKpiFilter === "warn" && d.overall_status !== "warn") return false;
+    if (activeKpiFilter === "bad" && d.overall_status !== "bad" && d.overall_status !== "error") return false;
+
+    // Dropdown status filter
+    if (statusFilter === "attention") {
+      return d.overall_status === "warn" || d.overall_status === "bad" || d.overall_status === "error";
+    }
+    if (statusFilter === "ok") return d.overall_status === "ok";
+    if (statusFilter === "warn") return d.overall_status === "warn";
+    if (statusFilter === "bad") return d.overall_status === "bad" || d.overall_status === "error";
+    if (statusFilter === "high_cpu") return d.cpu_pct !== null && d.cpu_pct >= 75;
+    if (statusFilter === "high_temp") return d.temp_status === "warn" || d.temp_status === "bad" || (d.temp_c && d.temp_c >= 50);
+
+    return true;
+  });
+
+  // Apply column sorting
+  filtered.sort((a, b) => {
+    let valA, valB;
+    if (currentSortColumn === "name") {
+      valA = (a.name || "").toLowerCase();
+      valB = (b.name || "").toLowerCase();
+      return currentSortDirection === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    } else if (currentSortColumn === "site") {
+      valA = ((a.site_code || "") + " " + (a.site_name || "")).toLowerCase();
+      valB = ((b.site_code || "") + " " + (b.site_name || "")).toLowerCase();
+      return currentSortDirection === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    } else if (currentSortColumn === "cpu") {
+      valA = a.cpu_pct !== null && a.cpu_pct !== undefined ? a.cpu_pct : -1;
+      valB = b.cpu_pct !== null && b.cpu_pct !== undefined ? b.cpu_pct : -1;
+      return currentSortDirection === "asc" ? (valA - valB) : (valB - valA);
+    } else if (currentSortColumn === "mem") {
+      valA = a.mem_pct !== null && a.mem_pct !== undefined ? a.mem_pct : -1;
+      valB = b.mem_pct !== null && b.mem_pct !== undefined ? b.mem_pct : -1;
+      return currentSortDirection === "asc" ? (valA - valB) : (valB - valA);
+    } else if (currentSortColumn === "temp") {
+      // Prioritize numeric Celsius degrees, fallback to status severity
+      const severityMap = { "bad": 100, "warn": 70, "ok": 30, "unknown": -1 };
+      valA = a.temp_c !== null && a.temp_c !== undefined ? a.temp_c : (severityMap[a.temp_status] || -1);
+      valB = b.temp_c !== null && b.temp_c !== undefined ? b.temp_c : (severityMap[b.temp_status] || -1);
+      return currentSortDirection === "asc" ? (valA - valB) : (valB - valA);
+    }
+    return 0;
+  });
+
+  document.getElementById("filteredCountBadge").textContent = `${filtered.length} of ${fleetDevices.length} switches`;
+
+  if (filtered.length === 0) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="6" style="text-align:center;padding:36px;color:var(--muted);">No switches matching current filter criteria.</td>`;
+    tbody.appendChild(tr);
+    return;
+  }
+
+  filtered.forEach(d => {
+    const tr = document.createElement("tr");
+    tr.id = `dev-row-${d.id}`;
+
+    // Host & Name column
+    const statusDotClass = d.overall_status === "ok" ? "bg-ok" :
+                           d.overall_status === "warn" ? "bg-warn" :
+                           (d.overall_status === "bad" || d.overall_status === "error") ? "bg-bad" : "bg-muted";
+
+    const nameHtml = `
+      <div style="display:flex;align-items:flex-start;gap:10px;">
+        <span class="health-dot ${statusDotClass}" title="${d.overall_status.toUpperCase()}" style="margin-top:5px;"></span>
+        <div>
+          <div style="font-weight:600;font-size:13.5px;">${escapeHtml(d.name)}</div>
+          <div style="font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center;margin-top:2px;">
+            <code>${escapeHtml(d.host)}</code>
+            <span>·</span>
+            <span>${escapeHtml(d.platform || 'Unknown')}</span>
+          </div>
+          ${d.error ? `<div style="font-size:11.5px;color:var(--bad);margin-top:3px;">${escapeHtml(d.error)}</div>` : ''}
+        </div>
+      </div>
+    `;
+
+    // Site column
+    const siteHtml = `
+      <span class="badge" style="background:rgba(255,255,255,0.06);font-size:11px;">
+        <b>${escapeHtml(d.site_code)}</b> · ${escapeHtml(d.site_name)}
+      </span>
+    `;
+
+    // CPU Meter column
+    let cpuHtml = `<span style="color:var(--muted);font-size:12px;">Pending</span>`;
+    if (d.cpu_pct !== null && d.cpu_pct !== undefined) {
+      const cpuVal = d.cpu_pct;
+      const cpuColor = cpuVal >= 85 ? "var(--bad)" : (cpuVal >= 70 ? "var(--warn)" : "var(--ok)");
+      cpuHtml = `
+        <div style="min-width:120px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+            <span style="font-weight:600;color:${cpuColor};">${cpuVal}%</span>
+            <span style="color:var(--muted);font-size:11px;">${cpuVal >= 85 ? 'High' : (cpuVal >= 70 ? 'Elevated' : 'Normal')}</span>
+          </div>
+          <div class="health-meter-bg">
+            <div class="health-meter-fill" style="width:${Math.min(100, Math.max(4, cpuVal))}%;background:${cpuColor};"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Memory Meter column
+    let memHtml = `<span style="color:var(--muted);font-size:12px;">Pending</span>`;
+    if (d.mem_pct !== null && d.mem_pct !== undefined) {
+      const memVal = d.mem_pct;
+      const memColor = memVal >= 90 ? "var(--bad)" : (memVal >= 80 ? "var(--warn)" : "var(--ok)");
+      memHtml = `
+        <div style="min-width:120px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+            <span style="font-weight:600;color:${memColor};">${memVal}%</span>
+            <span style="color:var(--muted);font-size:11px;">${memVal >= 90 ? 'Crit' : (memVal >= 80 ? 'Elevated' : 'Normal')}</span>
+          </div>
+          <div class="health-meter-bg">
+            <div class="health-meter-fill" style="width:${Math.min(100, Math.max(4, memVal))}%;background:${memColor};"></div>
+          </div>
+        </div>
+      `;
+    } else if (d.overall_status !== 'pending' && d.overall_status !== 'error') {
+      memHtml = `<span style="color:var(--muted);font-size:12px;">N/A (Hardware)</span>`;
+    }
+
+    // Temperature column
+    let tempHtml = `<span style="color:var(--muted);font-size:12px;">Pending</span>`;
+    if (d.overall_status !== "pending" && d.overall_status !== "error") {
+      let tempLabel = "";
+      let tempBadgeStyle = "background:rgba(16,185,129,0.15);color:var(--ok);";
+
+      if (d.temp_c !== null) {
+        tempLabel = `${d.temp_c}°C`;
+        if (d.temp_c >= 65 || d.temp_status === "bad") {
+          tempBadgeStyle = "background:rgba(239,68,68,0.2);color:var(--bad);";
+        } else if (d.temp_c >= 52 || d.temp_status === "warn") {
+          tempBadgeStyle = "background:rgba(245,158,11,0.2);color:var(--warn);";
+        }
+      } else {
+        tempLabel = d.temp_status === "ok" ? "Normal (OK)" : (d.temp_status === "warn" ? "Thermal Warn" : "Normal");
+      }
+
+      tempHtml = `
+        <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;">
+          <span class="badge" style="${tempBadgeStyle}font-weight:600;font-size:11.5px;padding:3px 8px;">
+            ${escapeHtml(tempLabel)}
+          </span>
+          <div style="font-size:10.5px;color:var(--muted);">
+            Fans: <b style="color:${d.fans_status === 'ok' ? 'var(--ok)' : 'var(--bad)'}">${d.fans_status.toUpperCase()}</b>
+            · PSU: <b style="color:${d.psu_status === 'ok' ? 'var(--ok)' : 'var(--bad)'}">${d.psu_status.toUpperCase()}</b>
+          </div>
+        </div>
+      `;
+    }
+
+    // Actions column
+    const actionsHtml = `
+      <div style="text-align:right;">
+        <button class="btn sm" id="poll-btn-${d.id}" onclick="refreshSingleDevice(${d.id})" title="Poll single switch health over SSH">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" style="vertical-align:-2px;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          Check
+        </button>
+      </div>
+    `;
+
+    tr.innerHTML = `
+      <td>${nameHtml}</td>
+      <td>${siteHtml}</td>
+      <td>${cpuHtml}</td>
+      <td>${memHtml}</td>
+      <td>${tempHtml}</td>
+      <td>${actionsHtml}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function refreshSingleDevice(devId) {
+  const btn = document.getElementById(`poll-btn-${devId}`);
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spin-icon" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;"></span>`;
+  }
+
+  fetch(`/api/devices/${devId}/health`)
+    .then(r => r.json())
+    .then(data => {
+      const idx = fleetDevices.findIndex(d => d.id === devId);
+      if (idx !== -1) {
+        if (data.error) {
+          fleetDevices[idx].overall_status = "error";
+          fleetDevices[idx].error = data.error;
+        } else {
+          fleetDevices[idx] = {
+            ...fleetDevices[idx],
+            cpu_pct: data.cpu_pct,
+            mem_pct: data.mem_pct,
+            temp_c: data.temp_c,
+            temp_status: data.temp_status,
+            fans_status: data.fans_status,
+            psu_status: data.psu_status,
+            overall_status: data.overall_status,
+            reasons: data.reasons || [],
+            error: null,
+            last_polled: new Date().toLocaleTimeString()
+          };
+        }
+      }
+      updateKpiCounts();
+      renderHealthTable();
+    })
+    .catch(err => {
+      alert("Error querying switch health: " + err);
+    })
+    .finally(() => {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" style="vertical-align:-2px;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> Check`;
+      }
+    });
+}
+
+function appendHealthLog(timeStr, level, msg) {
+  const term = document.getElementById('healthTerminalLogs');
+  if (!term) return;
+  const line = document.createElement('div');
+  line.className = 'op-log-line';
+  
+  const time = timeStr || new Date().toTimeString().slice(0, 8);
+  const lvl = (level || 'info').toLowerCase();
+  
+  line.innerHTML = `
+    <span class="op-log-time">${escapeHtml(time)}</span>
+    <span class="op-log-badge ${lvl}">${escapeHtml(lvl.toUpperCase())}</span>
+    <span class="op-log-msg">${escapeHtml(msg)}</span>
+  `;
+  term.appendChild(line);
+  healthLogs.push(`[${time}] [${lvl.toUpperCase()}] ${msg}`);
+
+  if (document.getElementById('healthAutoScroll')?.checked) {
+    term.scrollTop = term.scrollHeight;
+  }
+}
+
+function copyHealthLogs() {
+  const text = healthLogs.join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    alert('Logs copied to clipboard');
+  }).catch(() => {
+    alert('Failed to copy logs');
+  });
+}
+
+function toggleHealthMinimize(e) {
+  if (e) e.stopPropagation();
+  const modal = document.getElementById('healthScanModal');
+  const isMin = modal.classList.toggle('minimized');
+  const btn = document.getElementById('healthMinimizeBtn');
+  if (isMin) {
+    btn.title = "Maximize / Restore console";
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`;
+  } else {
+    btn.title = "Minimize scan (run in background)";
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+  }
+}
+
+function restoreHealthModal(e) {
+  const modal = document.getElementById('healthScanModal');
+  if (modal.classList.contains('minimized')) {
+    modal.classList.remove('minimized');
+    const btn = document.getElementById('healthMinimizeBtn');
+    if (btn) {
+      btn.title = "Minimize scan (run in background)";
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+    }
+  }
+}
+
+function closeHealthModal() {
+  const modal = document.getElementById('healthScanModal');
+  modal.classList.remove('minimized');
+  modal.style.display = 'none';
+  const btn = document.getElementById('healthMinimizeBtn');
+  if (btn) {
+    btn.title = "Minimize scan (run in background)";
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+  }
+}
+
+function abortHealthScan() {
+  if (healthAbortCtrl) {
+    healthAbortCtrl.abort();
+  }
+}
+
+async function startFleetHealthScan() {
+  const siteFilter = document.getElementById("healthSiteFilter").value;
+  const targetDevs = fleetDevices.filter(d => siteFilter === "all" || String(d.site_id) === siteFilter);
+  const targetIds = targetDevs.map(d => d.id);
+
+  if (targetIds.length === 0) {
+    alert("No switches found under selected site.");
+    return;
+  }
+
+  isScanning = true;
+  const modal = document.getElementById("healthScanModal");
+  modal.classList.remove('minimized');
+  const modalTitle = document.getElementById("healthModalTitle");
+  const closeBtn = document.getElementById("healthDoneBtn");
+  const cancelBtn = document.getElementById("healthCancelBtn");
+  const scanBtn = document.getElementById("scanHealthBtn");
+  const termLogs = document.getElementById("healthTerminalLogs");
+  const pBar = document.getElementById("healthModalBarFill");
+  const pLabel = document.getElementById("healthModalStatusText");
+  const pPct = document.getElementById("healthModalPercent");
+
+  modal.style.display = "flex";
+  // Smooth scroll back to top of viewport so user sees the modal instantly without scrolling
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  modalTitle.textContent = `Scanning ${targetIds.length} Network Switches in Parallel...`;
+  closeBtn.disabled = true;
+  cancelBtn.disabled = false;
+  scanBtn.disabled = true;
+  termLogs.innerHTML = "";
+  healthLogs = [];
+  pBar.style.width = "0%";
+  pPct.textContent = "0%";
+  pLabel.textContent = `Connecting to ${targetIds.length} switches in parallel…`;
+  document.getElementById("healthStatSwitches").textContent = `0 / ${targetIds.length}`;
+  document.getElementById("healthStatOk").textContent = "0";
+  document.getElementById("healthStatWarn").textContent = "0";
+  document.getElementById("healthStatBad").textContent = "0";
+
+  healthAbortCtrl = new AbortController();
+
+  let completedDevices = 0;
+  let okCount = 0;
+  let warnCount = 0;
+  let badCount = 0;
+
+  try {
+    const res = await fetch("/api/operations/health/stream", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": typeof CSRF !== "undefined" ? CSRF : (document.querySelector('meta[name="csrf"]')?.content || "")
+      },
+      body: JSON.stringify({ site_id: siteFilter, device_ids: targetIds }),
+      signal: healthAbortCtrl.signal
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: Failed to start hardware health scan`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // keep remainder
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let ev = null;
+        try { ev = JSON.parse(line); } catch (e) { continue; }
+
+        if (ev.type === "start") {
+          appendHealthLog(ev.timestamp, "info", `Fleet scan initiated for ${ev.total} switches`);
+        } else if (ev.type === "log") {
+          appendHealthLog(ev.timestamp, ev.level || "info", ev.msg);
+        } else if (ev.type === "device") {
+          completedDevices++;
+          const pct = Math.round((completedDevices / targetIds.length) * 100);
+          pBar.style.width = `${pct}%`;
+          pPct.textContent = `${pct}%`;
+          pLabel.textContent = `Polled switch ${completedDevices} of ${targetIds.length}: ${ev.data.device_name}…`;
+          document.getElementById("healthStatSwitches").textContent = `${completedDevices} / ${targetIds.length}`;
+
+          if (ev.data.overall_status === "ok") okCount++;
+          else if (ev.data.overall_status === "warn") warnCount++;
+          else badCount++;
+
+          document.getElementById("healthStatOk").textContent = okCount;
+          document.getElementById("healthStatWarn").textContent = warnCount;
+          document.getElementById("healthStatBad").textContent = badCount;
+
+          // Update in-memory switch row
+          const idx = fleetDevices.findIndex(d => d.id === ev.device_id);
+          if (idx !== -1) {
+            fleetDevices[idx] = {
+              ...fleetDevices[idx],
+              ...ev.data,
+              last_polled: ev.timestamp
+            };
+            updateKpiCounts();
+            renderHealthTable();
+          }
+        } else if (ev.type === "done") {
+          pBar.style.width = "100%";
+          pPct.textContent = "100%";
+          pLabel.textContent = `✅ Scan completed! Telemetry recorded for ${completedDevices} switches.`;
+          document.getElementById("lastPolledTime").textContent = `Last polled at ${new Date().toLocaleTimeString()}`;
+        }
+      }
+    }
+
+    closeBtn.disabled = false;
+    cancelBtn.disabled = true;
+  } catch (err) {
+    if (err.name === "AbortError") {
+      appendHealthLog(new Date().toTimeString().slice(0, 8), "warn", "Scan aborted by user.");
+      pLabel.textContent = "Scan cancelled by user.";
+    } else {
+      appendHealthLog(new Date().toTimeString().slice(0, 8), "error", "Error: " + err.message);
+      pLabel.textContent = "Scan failed: " + err.message;
+    }
+    closeBtn.disabled = false;
+    cancelBtn.disabled = true;
+  } finally {
+    isScanning = false;
+    scanBtn.disabled = false;
+    healthAbortCtrl = null;
+    updateKpiCounts();
+    renderHealthTable();
+  }
+}
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+</script>
+{% endblock %}
