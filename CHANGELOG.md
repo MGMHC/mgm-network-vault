@@ -4,6 +4,19 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.12.2] - 2026-10-27
+
+### Fixed
+- **Top Navigation Bar Spacing & Scaling**:
+  - Fixed horizontal flex layout to prevent the `Admin ▾` menu and `Site Switcher` dropdown from overlapping at 100% display scaling and standard laptop display widths.
+  - Made `.top-nav-links` `flex: 0 0 auto` and aligned `.top-nav-right` with `margin-left: auto; flex-shrink: 0`, preventing flexbox from artificially shrinking the navigation links box and causing invisible overlap.
+  - Streamlined brand lockup, pill padding, and site selector text clipping (`text-overflow: ellipsis`) to maintain generous horizontal breathing room across all desktop resolutions.
+  - Added responsive media queries (at 1280px and 1120px) to gracefully adapt navigation items without horizontal clipping.
+- **Dropdown Toggle & Collapse Behavior**:
+  - Removed persistent CSS `:hover` and `:focus-within` rules from `.nav-dropdown-menu`, ensuring `Operations ▾` and `Admin ▾` menus toggle open/closed cleanly when clicked repeatedly.
+  - Added button focus blur and `aria-expanded` state tracking to prevent lingering focus states.
+  - Added Escape key dismiss handler to quickly close active dropdowns.
+
 ## [1.12.1] - 2026-10-27
 
 ### Optimized & Redesigned
