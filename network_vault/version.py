@@ -1,3 +1,3 @@
 """Application version - bump this (Semantic Versioning: MAJOR.MINOR.PATCH) for every release."""
-__version__ = "1.12.2"
+__version__ = "1.12.3"
 

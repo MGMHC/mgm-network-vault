@@ -4,6 +4,27 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.12.3] - 2026-10-27
+
+### Added & Optimized
+- **Complete Mobile & Tablet Browser Optimization**:
+  - **Slide-out Mobile Navigation Drawer (`#mobileNavDrawer`)**:
+    - Added a hamburger toggle button (`#mobileMenuBtn`) on tablets and mobile screens (<= 900px), opening an ergonomic, full-featured touch drawer with MGM brand lockup, active site selector, primary links, operations suite, admin controls, and user sign-out.
+    - Added backdrop blur overlay (`.mobile-nav-backdrop`) with tap-outside and Escape dismiss behavior.
+    - Integrated background scroll locking when the mobile drawer is open to prevent background viewport drift.
+  - **Mobile Touch Layout & Sizing**:
+    - Adjusted `.main.full-width` padding on small screens (12px on mobile vs 28px on desktop) to maximize usable screen real estate.
+    - Added touch-friendly minimum tap targets (>= 38px) across all buttons, filter controls, and action triggers.
+    - Set `input, select, textarea { font-size: 16px !important; }` on mobile (< 680px) to prevent iOS Safari from automatically zooming into the page when tapping form controls.
+  - **Responsive Stats & Grid Stacking**:
+    - Stat cards (`.stats`) automatically adapt into a 2-column grid on phones and single-column on ultra-narrow screens (<= 380px) instead of compressing.
+    - Dashboard overview grids (`.dash-overview-grid`), activity charts, reachability donuts, and 2/3-column grids stack vertically into single-column cards on smaller viewports.
+  - **Full-Width Table Touch Scrolling**:
+    - Added smooth touch horizontal scrolling (`overflow-x: auto; -webkit-overflow-scrolling: touch`) across all table views, switch inventories, and diagnostics matrices, preventing wide tables from breaking horizontal page boundaries on mobile devices.
+  - **Mobile Dialogs & Docks**:
+    - Responsive modal dialogs (`.modal`) with touch padding and max-height scrolling.
+    - Mobile-optimized bottom-anchored floating Port Locator dock (`.global-locator-dock`).
+
 ## [1.12.2] - 2026-10-27
 
 ### Fixed
