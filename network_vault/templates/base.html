@@ -46,59 +46,70 @@
 </head>
 <body>
 {% if current_user %}
-<div class="layout" id="layout">
-  <aside class="side" id="sidebar">
-    <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="Collapse sidebar">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-    </button>
-    <a class="brand-card" href="{{ url_for('web.dashboard') }}">
-      <img src="{{ url_for('static', filename='mgm-logo.png') }}" alt="MGM Healthcare">
-      <span class="brand-app">Network Vault</span>
-    </a>
-    {% set ep = request.endpoint or '' %}
-    <nav class="nav">
-      <a href="{{ url_for('web.dashboard') }}" class="{{ 'active' if ep == 'web.dashboard' }}">{{ icon('dash') }}<span class="nav-label">Dashboard</span></a>
-      <a href="{{ url_for('web.devices') }}" class="{{ 'active' if ep.startswith('web.device') }}">{{ icon('switch') }}<span class="nav-label">Devices</span></a>
-      <a href="{{ url_for('web.backups') }}" class="{{ 'active' if ep.startswith('web.backup') or ep == 'web.compare' }}">{{ icon('archive') }}<span class="nav-label">Backups</span></a>
-      <a href="{{ url_for('web.schedules') }}" class="{{ 'active' if ep.startswith('web.schedule') }}">{{ icon('clock') }}<span class="nav-label">Schedules</span></a>
-      <a href="{{ url_for('web.logs') }}" class="{{ 'active' if ep.startswith('web.logs') }}">{{ icon('log') }}<span class="nav-label">Logs</span></a>
-      <div class="nav-sep">Operations</div>
-      <a href="{{ url_for('web.port_locator') }}" class="{{ 'active' if ep == 'web.port_locator' }}">{{ icon('target') }}<span class="nav-label">Port Locator</span></a>
-      <a href="{{ url_for('web.health') }}" class="{{ 'active' if ep == 'web.health' }}"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="nav-label">Hardware Health</span></a>
-      <a href="{{ url_for('web.optics') }}" class="{{ 'active' if ep == 'web.optics' }}">{{ icon('optic') }}<span class="nav-label">Optical Health</span></a>
-      <a href="{{ url_for('web.vlan_audit') }}" class="{{ 'active' if ep == 'web.vlan_audit' }}"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span class="nav-label">VLAN &amp; Port Audit</span></a>
-      <a href="{{ url_for('web.lifecycle') }}" class="{{ 'active' if ep.startswith('web.lifecycle') }}"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span class="nav-label">Lifecycle &amp; EOL</span></a>
-      <div class="nav-sep">Admin</div>
-      {% if current_user_obj and current_user_obj.is_group_admin %}
-      <a href="{{ url_for('web.sites') }}" class="{{ 'active' if ep.startswith('web.site') and ep != 'web.site_switch' }}">{{ icon('building') }}<span class="nav-label">Sites</span></a>
-      {% endif %}
-      <a href="{{ url_for('web.credentials') }}" class="{{ 'active' if ep.startswith('web.credential') }}">{{ icon('key') }}<span class="nav-label">Credentials</span></a>
-      <a href="{{ url_for('web.github') }}" class="{{ 'active' if ep == 'web.github' }}">{{ icon('git') }}<span class="nav-label">GitHub sync</span></a>
-      <a href="{{ url_for('web.migrate') }}" class="{{ 'active' if ep.startswith('web.migrate') }}">{{ icon('archive') }}<span class="nav-label">Export &amp; migrate</span></a>
-      <a href="{{ url_for('web.settings') }}" class="{{ 'active' if ep == 'web.settings' }}">{{ icon('gear') }}<span class="nav-label">Settings</span></a>
-      <a href="{{ url_for('web.account') }}" class="{{ 'active' if ep == 'web.account' }}">{{ icon('user') }}<span class="nav-label">Users</span></a>
-    </nav>
-    <div class="side-foot">
-      <div class="side-foot-content">
-        Signed in as <b>{{ current_user }}</b>
-        {% if current_user_obj %}<span class="role-badge role-{{ current_user_obj.role }}">{{ current_user_obj.role }}</span>{% endif %}
-        · <a href="{{ url_for('web.logout') }}">Log out</a>
-        <div style="opacity:.6;margin-top:4px"><a href="{{ url_for('web.settings') }}#updateCard" style="color:inherit" title="Check for updates">v{{ app_version }}</a></div>
-      </div>
-    </div>
-  </aside>
-  <main class="main" id="main">
-    <div class="header-bar">
-      <div class="header-left">
+<div class="layout top-nav-layout" id="layout">
+  <header class="top-nav-bar" id="topNavbar">
+    <div class="top-nav-inner">
+      <div class="nav-brand-group">
+        <a class="nav-brand" href="{{ url_for('web.dashboard') }}">
+          <img src="{{ url_for('static', filename='mgm-logo.png') }}" alt="MGM Healthcare" class="nav-brand-logo">
+          <span class="nav-brand-text">Network Vault</span>
+        </a>
         {% if request.endpoint != 'web.dashboard' %}
         <button class="back-btn" onclick="history.back()" title="Go back">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
           Back
         </button>
         {% endif %}
       </div>
-      
-      <div class="header-right">
+
+      {% set ep = request.endpoint or '' %}
+      {% set is_ops = ep in ['web.port_locator', 'web.health', 'web.optics', 'web.vlan_audit'] or ep.startswith('web.lifecycle') %}
+      {% set is_admin = ep.startswith('web.site') or ep.startswith('web.credential') or ep == 'web.github' or ep.startswith('web.migrate') or ep == 'web.settings' or ep == 'web.account' %}
+
+      <nav class="top-nav-links">
+        <a href="{{ url_for('web.dashboard') }}" class="nav-item {{ 'active' if ep == 'web.dashboard' }}">{{ icon('dash') }}<span>Dashboard</span></a>
+        <a href="{{ url_for('web.devices') }}" class="nav-item {{ 'active' if ep.startswith('web.device') }}">{{ icon('switch') }}<span>Devices</span></a>
+        <a href="{{ url_for('web.backups') }}" class="nav-item {{ 'active' if ep.startswith('web.backup') or ep == 'web.compare' }}">{{ icon('archive') }}<span>Backups</span></a>
+        <a href="{{ url_for('web.schedules') }}" class="nav-item {{ 'active' if ep.startswith('web.schedule') }}">{{ icon('clock') }}<span>Schedules</span></a>
+        <a href="{{ url_for('web.logs') }}" class="nav-item {{ 'active' if ep.startswith('web.logs') }}">{{ icon('log') }}<span>Logs</span></a>
+        
+        <!-- Operations Dropdown -->
+        <div class="nav-dropdown {{ 'active' if is_ops }}" id="opsDropdown">
+          <button class="nav-dropdown-btn {{ 'active' if is_ops }}" type="button" onclick="toggleNavDropdown('opsDropdown', event)">
+            {{ icon('target') }}
+            <span>Operations</span>
+            <svg class="dd-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="nav-dropdown-menu">
+            <a href="{{ url_for('web.port_locator') }}" class="dd-item {{ 'active' if ep == 'web.port_locator' }}">{{ icon('target') }}<span>Port Locator</span></a>
+            <a href="{{ url_for('web.health') }}" class="dd-item {{ 'active' if ep == 'web.health' }}"><svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Hardware Health</span></a>
+            <a href="{{ url_for('web.optics') }}" class="dd-item {{ 'active' if ep == 'web.optics' }}">{{ icon('optic') }}<span>Optical Health</span></a>
+            <a href="{{ url_for('web.vlan_audit') }}" class="dd-item {{ 'active' if ep == 'web.vlan_audit' }}"><svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span>VLAN &amp; Port Audit</span></a>
+            <a href="{{ url_for('web.lifecycle') }}" class="dd-item {{ 'active' if ep.startswith('web.lifecycle') }}"><svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>Lifecycle &amp; EOL</span></a>
+          </div>
+        </div>
+
+        <!-- Admin Dropdown -->
+        <div class="nav-dropdown {{ 'active' if is_admin }}" id="adminDropdown">
+          <button class="nav-dropdown-btn {{ 'active' if is_admin }}" type="button" onclick="toggleNavDropdown('adminDropdown', event)">
+            {{ icon('gear') }}
+            <span>Admin</span>
+            <svg class="dd-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="nav-dropdown-menu">
+            {% if current_user_obj and current_user_obj.is_group_admin %}
+            <a href="{{ url_for('web.sites') }}" class="dd-item {{ 'active' if ep.startswith('web.site') and ep != 'web.site_switch' }}">{{ icon('building') }}<span>Sites</span></a>
+            {% endif %}
+            <a href="{{ url_for('web.credentials') }}" class="dd-item {{ 'active' if ep.startswith('web.credential') }}">{{ icon('key') }}<span>Credentials</span></a>
+            <a href="{{ url_for('web.github') }}" class="dd-item {{ 'active' if ep == 'web.github' }}">{{ icon('git') }}<span>GitHub sync</span></a>
+            <a href="{{ url_for('web.migrate') }}" class="dd-item {{ 'active' if ep.startswith('web.migrate') }}">{{ icon('archive') }}<span>Export &amp; migrate</span></a>
+            <a href="{{ url_for('web.settings') }}" class="dd-item {{ 'active' if ep == 'web.settings' }}">{{ icon('gear') }}<span>Settings</span></a>
+            <a href="{{ url_for('web.account') }}" class="dd-item {{ 'active' if ep == 'web.account' }}">{{ icon('user') }}<span>Users</span></a>
+          </div>
+        </div>
+      </nav>
+
+      <div class="top-nav-right">
         {% if current_user_obj %}
         <div class="site-switcher-pill">
           <div class="s-icon">{{ icon('building') }}</div>
@@ -123,8 +134,51 @@
           {% endif %}
         </div>
         {% endif %}
+
+        <!-- User Profile Pill -->
+        <div class="nav-user-pill">
+          <div class="nav-user-info">
+            <span class="nav-user-name">{{ current_user }}</span>
+            {% if current_user_obj %}<span class="role-badge role-{{ current_user_obj.role }}">{{ current_user_obj.role }}</span>{% endif %}
+          </div>
+          <a href="{{ url_for('web.logout') }}" class="nav-logout-btn" title="Sign out">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          </a>
+          <span class="nav-version"><a href="{{ url_for('web.settings') }}#updateCard" title="Version info">v{{ app_version }}</a></span>
+        </div>
       </div>
     </div>
+
+    <!-- Contextual Sub-Nav Bar for Operations & Admin -->
+    {% if is_ops %}
+    <div class="top-subnav">
+      <div class="top-subnav-inner">
+        <span class="subnav-label">Operations:</span>
+        <a href="{{ url_for('web.port_locator') }}" class="subnav-link {{ 'active' if ep == 'web.port_locator' }}">{{ icon('target') }}<span>Port Locator</span></a>
+        <a href="{{ url_for('web.health') }}" class="subnav-link {{ 'active' if ep == 'web.health' }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Hardware Health</span></a>
+        <a href="{{ url_for('web.optics') }}" class="subnav-link {{ 'active' if ep == 'web.optics' }}">{{ icon('optic') }}<span>Optical Health</span></a>
+        <a href="{{ url_for('web.vlan_audit') }}" class="subnav-link {{ 'active' if ep == 'web.vlan_audit' }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span>VLAN &amp; Port Audit</span></a>
+        <a href="{{ url_for('web.lifecycle') }}" class="subnav-link {{ 'active' if ep.startswith('web.lifecycle') }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>Lifecycle &amp; EOL</span></a>
+      </div>
+    </div>
+    {% elif is_admin %}
+    <div class="top-subnav">
+      <div class="top-subnav-inner">
+        <span class="subnav-label">Admin:</span>
+        {% if current_user_obj and current_user_obj.is_group_admin %}
+        <a href="{{ url_for('web.sites') }}" class="subnav-link {{ 'active' if ep.startswith('web.site') and ep != 'web.site_switch' }}">{{ icon('building') }}<span>Sites</span></a>
+        {% endif %}
+        <a href="{{ url_for('web.credentials') }}" class="subnav-link {{ 'active' if ep.startswith('web.credential') }}">{{ icon('key') }}<span>Credentials</span></a>
+        <a href="{{ url_for('web.github') }}" class="subnav-link {{ 'active' if ep == 'web.github' }}">{{ icon('git') }}<span>GitHub sync</span></a>
+        <a href="{{ url_for('web.migrate') }}" class="subnav-link {{ 'active' if ep.startswith('web.migrate') }}">{{ icon('archive') }}<span>Export &amp; migrate</span></a>
+        <a href="{{ url_for('web.settings') }}" class="subnav-link {{ 'active' if ep == 'web.settings' }}">{{ icon('gear') }}<span>Settings</span></a>
+        <a href="{{ url_for('web.account') }}" class="subnav-link {{ 'active' if ep == 'web.account' }}">{{ icon('user') }}<span>Users</span></a>
+      </div>
+    </div>
+    {% endif %}
+  </header>
+
+  <main class="main full-width" id="main">
     {% with msgs = get_flashed_messages(with_categories=true) %}
       {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}
     {% endwith %}
@@ -166,6 +220,19 @@
     </div>
   </div>
 </div>
+<script>
+function toggleNavDropdown(id, e) {
+  e.stopPropagation();
+  const el = document.getElementById(id);
+  if (!el) return;
+  const isOpen = el.classList.contains('open');
+  document.querySelectorAll('.nav-dropdown').forEach(d => d.classList.remove('open'));
+  if (!isOpen) el.classList.add('open');
+}
+document.addEventListener('click', () => {
+  document.querySelectorAll('.nav-dropdown').forEach(d => d.classList.remove('open'));
+});
+</script>
 <script src="{{ url_for('static', filename='app.js') }}?v={{ app_version }}"></script>
 {% block scripts %}{% endblock %}
 </body>

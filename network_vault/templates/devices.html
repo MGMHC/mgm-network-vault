@@ -27,29 +27,45 @@
     </div>
   </div>
   <div class="table-wrap">
-  <table>
-    <thead><tr><th><input type="checkbox" class="sel-all"></th>{% if current_site_id == 'all' %}<th>Site</th>{% endif %}<th>Name</th><th>Host</th><th>Platform</th><th>Model</th><th>Role</th><th>Group / Location</th><th>Credential</th><th>Status</th><th>Last backup</th><th>Backups</th><th></th></tr></thead>
+  <table class="devices-table">
+    <thead>
+      <tr>
+        <th class="col-cb"><input type="checkbox" class="sel-all"></th>
+        {% if current_site_id == 'all' %}<th class="col-site">Site</th>{% endif %}
+        <th class="col-name">Name</th>
+        <th class="col-host">Host</th>
+        <th class="col-platform">Platform</th>
+        <th class="col-model">Model</th>
+        <th class="col-role">Role</th>
+        <th class="col-group">Group / Location</th>
+        <th class="col-credential">Credential</th>
+        <th class="col-status">Status</th>
+        <th class="col-backup">Last backup</th>
+        <th class="col-backups num">Backups</th>
+        <th class="col-action"></th>
+      </tr>
+    </thead>
     <tbody>
     {% for d in devices %}
       <tr {% if not d.enabled %}style="opacity:.5" title="disabled"{% endif %}>
-        <td><input type="checkbox" class="sel" value="{{ d.id }}"></td>
+        <td class="col-cb"><input type="checkbox" class="sel" value="{{ d.id }}"></td>
         {% if current_site_id == 'all' %}
-        <td><span class="badge blue" style="font-size:10px">{{ d.site.code if d.site else '—' }}</span></td>
+        <td class="col-site"><span class="badge blue" style="font-size:10px">{{ d.site.code if d.site else '—' }}</span></td>
         {% endif %}
-        <td><a href="{{ url_for('web.device_detail', dev_id=d.id) }}"><b>{{ d.name }}</b></a>
+        <td class="col-name"><a href="{{ url_for('web.device_detail', dev_id=d.id) }}"><b>{{ d.name }}</b></a>
           {% if d.is_vc %}<span class="badge blue">VC</span>{% endif %}{% if d.legacy_ssh %} <span class="badge" title="legacy SSH algorithms">legacy</span>{% endif %}</td>
-        <td class="mono">{{ d.host }}{% if d.port != 22 %}:{{ d.port }}{% endif %}</td>
-        <td>{{ 'Junos' if d.is_juniper else ('C1300' if d.platform == 'cisco_c1300' else 'IOS') }}</td>
-        <td>{{ d.model_label }}</td>
-        <td>{{ d.role }}</td>
-        <td>{{ d.group or '—' }}<div class="muted small">{{ d.location }}</div></td>
-        <td>{{ d.credential.name if d.credential else '⚠ none' }}</td>
-        <td>{{ status_badge(d.status) }}</td>
-        <td>{{ backup_badge(d) }} <span class="muted small">{{ d.last_backup_at|ago }}</span></td>
-        <td class="num">{{ d.backups.count() }}</td>
-        <td><a class="btn sm" href="{{ url_for('web.device_edit', dev_id=d.id) }}">Edit</a></td>
+        <td class="col-host mono">{{ d.host }}{% if d.port != 22 %}:{{ d.port }}{% endif %}</td>
+        <td class="col-platform">{{ 'Junos' if d.is_juniper else ('C1300' if d.platform == 'cisco_c1300' else 'IOS') }}</td>
+        <td class="col-model">{{ d.model_label }}</td>
+        <td class="col-role">{{ d.role }}</td>
+        <td class="col-group">{{ d.group or '—' }}<div class="muted small">{{ d.location }}</div></td>
+        <td class="col-credential">{{ d.credential.name if d.credential else '⚠ none' }}</td>
+        <td class="col-status">{{ status_badge(d.status) }}</td>
+        <td class="col-backup">{{ backup_badge(d) }} <span class="muted small">{{ d.last_backup_at|ago }}</span></td>
+        <td class="col-backups num">{{ d.backups.count() }}</td>
+        <td class="col-action"><a class="btn sm" href="{{ url_for('web.device_edit', dev_id=d.id) }}">Edit</a></td>
       </tr>
-    {% else %}<tr><td colspan="12" class="empty">No devices match.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="13" class="empty">No devices match.</td></tr>{% endfor %}
     </tbody>
   </table>
   </div>

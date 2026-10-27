@@ -4,6 +4,20 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.12.1] - 2026-10-27
+
+### Optimized & Redesigned
+- **Top Navigation Bar & Full-Width View Layout**:
+  - Replaced the vertical left sidebar with a sleek, sticky full-width **Top Navigation Bar** (`.top-nav-bar`), freeing up 100% horizontal screen space for tables, switch inventories, and diagnostics.
+  - Organized all 16 menus into an intuitive top navigation header:
+    - **Primary Tabs**: Dashboard, Devices, Backups, Schedules, Logs.
+    - **Operations ▾ Dropdown**: Port Locator, Hardware Health, Optical Health, VLAN & Port Audit, Lifecycle & EOL.
+    - **Admin ▾ Dropdown**: Sites, Credentials, GitHub sync, Export & migrate, Settings, Users.
+    - **Contextual Sub-Nav Strip**: Fast 1-click switcher appears beneath the top navbar when navigating inside Operations or Admin tools.
+    - **Top Bar Utility Group**: Brand logo lockup, Back button, Site Switcher capsule, User Profile pill, and version indicator.
+  - **Full-Width Screen Utilization**: Expanded `.main` to 100% full viewport width (`.main.full-width`), completely eliminating horizontal compression and awkward viewport scrolling on table views.
+  - **Devices Table Optimization**: Refined column distribution on `.devices-table` with snug adjacent spacing between Name and Host, allowing Group / Location and notes to absorb wide screen real estate.
+
 ## [1.12.0] - 2026-10-26
 
 ### Added
