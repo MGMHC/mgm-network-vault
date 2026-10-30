@@ -1,4 +1,5 @@
-﻿from datetime import datetime
+from datetime import datetime
+import json
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash, generate_password_hash
 import netaddr
@@ -68,15 +69,29 @@ class User(db.Model):
 
     @property
     def is_group_admin(self):
-        return self.role == "group-admin"
+        r = self.role or "group-admin"
+        return r in ("group-admin", "admin")
 
     @property
     def is_site_admin(self):
-        return self.role in ("group-admin", "site-admin")
+        r = self.role or "group-admin"
+        return r in ("group-admin", "admin", "site-admin")
+
+    @property
+    def is_admin(self):
+        return self.is_site_admin
 
     @property
     def can_write(self):
-        return self.role in ("group-admin", "site-admin", "read-write")
+        """Can add/edit/delete devices, credentials, schedules, settings."""
+        r = self.role or "group-admin"
+        return r in ("group-admin", "admin", "site-admin", "read-write")
+
+    @property
+    def can_backup(self):
+        """Can trigger backups and reachability checks."""
+        r = self.role or "group-admin"
+        return r in ("group-admin", "admin", "site-admin", "read-write")
 
     @property
     def allowed_site_ids(self):
@@ -105,7 +120,7 @@ class Credential(db.Model):
     secret_enc = db.Column(db.Text, default="")
     created_at = db.Column(db.DateTime, default=now)
 
-    devices = db.relationship("Device", backref="credential", lazy="dynamic")
+    devices = db.relationship("Device", backref="credential", lazy=True)
 
 
 class Device(db.Model):
@@ -154,6 +169,18 @@ class Device(db.Model):
         return PLATFORMS.get(self.platform, self.platform)
 
     @property
+    def model_label(self):
+        return self.hw_model or ("not detected yet" if self.model == "Auto" else self.model)
+
+    @property
+    def is_juniper(self):
+        return (self.platform or "").startswith("juniper")
+
+    @property
+    def is_sonicwall(self):
+        return (self.platform or "").startswith("sonicwall")
+
+    @property
     def vc_members(self):
         if not self.vc_members_json:
             return []
@@ -192,6 +219,11 @@ class Backup(db.Model):
     sha256 = db.Column(db.String(64))
     last_commit = db.Column(db.String(64))
     git_commit = db.Column(db.String(64))
+
+    @property
+    def previous(self):
+        return (Backup.query.filter(Backup.device_id == self.device_id, Backup.created_at < self.created_at)
+                .order_by(Backup.created_at.desc()).first())
 
 
 class Schedule(db.Model):

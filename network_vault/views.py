@@ -1944,8 +1944,9 @@ def credential_delete(cid):
     u = _current_user()
     if not u.has_site_access(c.site_id):
         abort(403, "Cannot delete credentials for another site.")
-    if c.devices:
-        flash(f"Profile is used by {len(c.devices)} device(s) - reassign them first", "error")
+    dev_count = c.devices.count() if hasattr(c.devices, 'count') else len(c.devices)
+    if dev_count:
+        flash(f"Profile is used by {dev_count} device(s) - reassign them first", "error")
     else:
         db.session.delete(c)
         db.session.commit()
