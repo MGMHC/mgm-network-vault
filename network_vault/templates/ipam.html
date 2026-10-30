@@ -1,0 +1,961 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}IPAM & Subnet Hierarchies{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1>
+      <span class="title-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+          <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        </svg>
+      </span>
+      IP Address Management (IPAM)
+    </h1>
+    <div class="sub">Subnet hierarchies (IPv4/IPv6), visual utilization, IP allocations, VLANs, QinQ, VRFs, and FHRP redundancy groups.</div>
+  </div>
+  <div class="actions">
+    <button class="btn primary" onclick="openAddModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add Resource
+    </button>
+  </div>
+</div>
+
+<!-- KPI Metrics Summary Strip -->
+<div class="card vlan-summary-card" style="margin-bottom: 20px;">
+  <div class="vlan-summary-strip">
+    <div class="vlan-kpi-item" onclick="switchTab('prefixes')" style="cursor: pointer;">
+      <div class="vlan-kpi-icon" style="background:rgba(37,54,108,0.12);color:var(--accent,#25366C);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      </div>
+      <div class="vlan-kpi-content">
+        <div class="vlan-kpi-val"><span id="kpiPrefixes">0</span></div>
+        <div class="vlan-kpi-label">Subnet Prefixes</div>
+      </div>
+    </div>
+
+    <div class="vlan-kpi-item" onclick="switchTab('ips')" style="cursor: pointer;">
+      <div class="vlan-kpi-icon" style="background:rgba(16,185,129,0.12);color:var(--ok,#10b981);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      </div>
+      <div class="vlan-kpi-content">
+        <div class="vlan-kpi-val"><span id="kpiIPs">0</span></div>
+        <div class="vlan-kpi-label">Allocated IPs</div>
+      </div>
+    </div>
+
+    <div class="vlan-kpi-item" onclick="switchTab('vlans')" style="cursor: pointer;">
+      <div class="vlan-kpi-icon" style="background:rgba(217,185,138,0.2);color:var(--gold,#C3A275);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      </div>
+      <div class="vlan-kpi-content">
+        <div class="vlan-kpi-val"><span id="kpiVLANs">0</span></div>
+        <div class="vlan-kpi-label">Configured VLANs</div>
+      </div>
+    </div>
+
+    <div class="vlan-kpi-item" onclick="switchTab('vrfs')" style="cursor: pointer;">
+      <div class="vlan-kpi-icon" style="background:rgba(139,92,246,0.12);color:#8b5cf6;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+      </div>
+      <div class="vlan-kpi-content">
+        <div class="vlan-kpi-val"><span id="kpiVRFs">0</span></div>
+        <div class="vlan-kpi-label">Routing VRFs</div>
+      </div>
+    </div>
+
+    <div class="vlan-kpi-item" onclick="switchTab('fhrps')" style="cursor: pointer;">
+      <div class="vlan-kpi-icon" style="background:rgba(239,68,68,0.12);color:var(--bad,#ef4444);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <div class="vlan-kpi-content">
+        <div class="vlan-kpi-val"><span id="kpiFHRP">0</span></div>
+        <div class="vlan-kpi-label">FHRP Groups (VRRP)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab Navigation Bar -->
+<div class="tab-strip" style="display:flex;gap:8px;border-bottom:1px solid var(--border);margin-bottom:16px;">
+  <button class="tab-btn active" id="tabBtn_prefixes" onclick="switchTab('prefixes')">Subnet Hierarchies</button>
+  <button class="tab-btn" id="tabBtn_ips" onclick="switchTab('ips')">IP Addresses</button>
+  <button class="tab-btn" id="tabBtn_vlans" onclick="switchTab('vlans')">VLANs &amp; QinQ</button>
+  <button class="tab-btn" id="tabBtn_vrfs" onclick="switchTab('vrfs')">VRF Tables</button>
+  <button class="tab-btn" id="tabBtn_fhrps" onclick="switchTab('fhrps')">FHRP Redundancy</button>
+</div>
+
+<!-- TAB 1: Subnet Hierarchies & Utilization -->
+<div id="tabContent_prefixes" class="ipam-tab-pane">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h2 style="margin:0;">Subnet Hierarchy &amp; Visual Utilization</h2>
+      <div style="display:flex;gap:8px;"><input type="text" id="prefixSearch" class="input" placeholder="Search prefix or role..." onkeyup="filterPrefixTable()" style="max-width:240px;"><button class="btn primary btn-sm" onclick="openAddPrefixModal()">+ Add Subnet</button></div>
+    </div>
+    <div class="table-wrap">
+      <table class="table" id="prefixesTable">
+        <thead>
+          <tr>
+            <th>Prefix / CIDR</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Role</th>
+            <th>VRF</th>
+            <th>VLAN</th>
+            <th style="min-width: 160px;">Utilization</th>
+            <th>Site</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="prefixesTbody">
+          <tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted);">Loading subnet hierarchy...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 2: IP Addresses -->
+<div id="tabContent_ips" class="ipam-tab-pane" style="display:none;">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h2 style="margin:0;">Allocated IP Addresses</h2>
+      <div style="display:flex;gap:8px;"><input type="text" id="ipSearch" class="input" placeholder="Search IP or host..." onkeyup="filterIPTable()" style="max-width:240px;"><button class="btn primary btn-sm" onclick="openAddIPModal()">+ Add IP</button></div>
+    </div>
+    <div class="table-wrap">
+      <table class="table" id="ipsTable">
+        <thead>
+          <tr>
+            <th>IP Address</th>
+            <th>DNS Name</th>
+            <th>Status</th>
+            <th>Role</th>
+            <th>Subnet</th>
+            <th>Device &amp; Interface</th>
+            <th>VRF</th>
+            <th>Site</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="ipsTbody">
+          <tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted);">Loading IP addresses...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 3: VLANs & QinQ -->
+<div id="tabContent_vlans" class="ipam-tab-pane" style="display:none;">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h2 style="margin:0;">VLANs &amp; QinQ Tag Encapsulation</h2>
+      <input type="text" id="vlanSearch" class="input" placeholder="Search VID or VLAN name..." onkeyup="filterVlanTable()" style="max-width:260px;">
+    </div>
+    <div class="table-wrap">
+      <table class="table" id="vlansTable">
+        <thead>
+          <tr>
+            <th>VID</th>
+            <th>Name</th>
+            <th>Status</th>
+            <th>Role</th>
+            <th>Group</th>
+            <th>QinQ Mode</th>
+            <th>Outer S-VLAN</th>
+            <th>Site</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="vlansTbody">
+          <tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted);">Loading VLANs...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 4: VRF Tables -->
+<div id="tabContent_vrfs" class="ipam-tab-pane" style="display:none;">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h2 style="margin:0;">Routing VRF Instances</h2>
+      <button class="btn" onclick="openAddVRFModal()">+ Add VRF</button>
+    </div>
+    <div class="table-wrap">
+      <table class="table" id="vrfsTable">
+        <thead>
+          <tr>
+            <th>VRF Name</th>
+            <th>Route Distinguisher (RD)</th>
+            <th>Description</th>
+            <th>Subnets Assigned</th>
+            <th>IPs Assigned</th>
+            <th>Site Scope</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="vrfsTbody">
+          <tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted);">Loading VRFs...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 5: FHRP Redundancy Groups (VRRP / HSRP) -->
+<div id="tabContent_fhrps" class="ipam-tab-pane" style="display:none;">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h2 style="margin:0;">First-Hop Redundancy Protocol (FHRP) Groups</h2>
+      <button class="btn" onclick="openAddFHRPModal()">+ Add FHRP Group</button>
+    </div>
+    <div class="table-wrap">
+      <table class="table" id="fhrpsTable">
+        <thead>
+          <tr>
+            <th>Protocol</th>
+            <th>Group ID</th>
+            <th>Virtual IP (VIP)</th>
+            <th>Auth Mode</th>
+            <th>Active Members</th>
+            <th>Description</th>
+            <th>Site</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="fhrpsTbody">
+          <tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted);">Loading FHRP groups...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Resource Creation Modal -->
+<div id="ipamModal" class="modal-backdrop" style="display:none;">
+  <div class="modal-dialog card" style="max-width:540px;margin:80px auto;position:relative;">
+    <button class="modal-close-btn" onclick="closeModal('ipamModal')" style="position:absolute;right:16px;top:16px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);">&times;</button>
+    <h2 id="modalTitle" style="margin-top:0;">Add Resource</h2>
+    <div id="modalFormContainer"></div>
+  </div>
+</div>
+
+<style>
+.tab-btn {
+  background: none;
+  border: none;
+  padding: 10px 18px;
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+}
+.tab-btn:hover { color: var(--accent); }
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.util-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.util-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+.util-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.modal-backdrop {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.badge-status {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.badge-active { background: var(--ok-soft, #e3f6ee); color: var(--ok, #10b981); }
+.badge-reserved { background: var(--gold-soft, #F5EDE1); color: var(--warn, #C3A275); }
+.badge-deprecated { background: var(--bad-soft, #fdecec); color: var(--bad, #ef4444); }
+.badge-container { background: var(--accent-soft, #E7EBF5); color: var(--accent, #25366C); }
+</style>
+
+<script>
+let ipamData = { prefixes: [], ips: [], vlans: [], vrfs: [], fhrps: [], hierarchy: [] };
+
+const CSRF = document.querySelector('meta[name="csrf"]')?.getAttribute('content') || '';
+
+async function api(url, data) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': CSRF
+    },
+    body: JSON.stringify(data || {})
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error || ('HTTP ' + res.status));
+  }
+  return json;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadIPAMData();
+});
+
+async function loadIPAMData() {
+  try {
+    const res = await fetch('/api/ipam/data');
+    const json = await res.json();
+    if (!json.ok) return toast(json.error || 'Failed to fetch IPAM data', 'bad');
+    
+    ipamData = json;
+    
+    document.getElementById('kpiPrefixes').innerText = json.kpis.prefixes;
+    document.getElementById('kpiIPs').innerText = json.kpis.ips;
+    document.getElementById('kpiVLANs').innerText = json.kpis.vlans;
+    document.getElementById('kpiVRFs').innerText = json.kpis.vrfs;
+    document.getElementById('kpiFHRP').innerText = json.kpis.fhrp_groups;
+
+    renderPrefixes(json.hierarchy || json.prefixes);
+    renderIPs(json.ip_addresses);
+    renderVLANs(json.vlans);
+    renderVRFs(json.vrfs);
+    renderFHRPs(json.fhrp_groups);
+  } catch (err) {
+    console.error(err);
+    toast('Error loading IPAM data: ' + err.message, 'bad');
+  }
+}
+
+let activeTab = 'prefixes';
+
+function switchTab(tabId) {
+  activeTab = tabId;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.ipam-tab-pane').forEach(p => p.style.display = 'none');
+  
+  const btn = document.getElementById('tabBtn_' + tabId);
+  const pane = document.getElementById('tabContent_' + tabId);
+  if (btn) btn.classList.add('active');
+  if (pane) pane.style.display = 'block';
+}
+
+function renderPrefixes(hierarchy, depth = 0) {
+  const tbody = document.getElementById('prefixesTbody');
+  if (depth === 0) tbody.innerHTML = '';
+  
+  if (!hierarchy || hierarchy.length === 0) {
+    if (depth === 0) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted);">No subnets configured yet.</td></tr>';
+    return;
+  }
+
+  hierarchy.forEach(p => {
+    const tr = document.createElement('tr');
+    const indent = depth * 20;
+    const isV6 = p.family === 6;
+    const pct = p.utilization_pct || 0;
+    const barColor = pct > 85 ? 'var(--bad, #ef4444)' : (pct > 60 ? 'var(--warn, #f59e0b)' : 'var(--ok, #10b981)');
+    
+    tr.innerHTML = `
+      <td>
+        <div style="padding-left: ${indent}px; display:flex; align-items:center; gap:6px;">
+          ${depth > 0 ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>' : ''}
+          <strong class="mono" style="font-size:13px; color:var(--text);">${escapeHtml(p.prefix)}</strong>
+        </div>
+      </td>
+      <td><span class="badge-status badge-${isV6 ? 'container' : 'active'}">${isV6 ? 'IPv6' : 'IPv4'}</span></td>
+      <td><span class="badge-status badge-${p.status || 'active'}">${p.status || 'active'}</span></td>
+      <td>${escapeHtml(p.role || '-')}</td>
+      <td>${escapeHtml(p.vrf_name || 'Global')}</td>
+      <td>${escapeHtml(p.vlan_name || '-')}</td>
+      <td>
+        <div class="util-bar-container">
+          <div class="util-bar">
+            <div class="util-fill" style="width: ${pct}%; background: ${barColor};"></div>
+          </div>
+          <span style="font-size:12px; font-weight:600; width:45px; text-align:right;">${pct}%</span>
+        </div>
+        <small style="color:var(--muted); font-size:11px;">${p.allocated_addresses} / ${p.total_addresses} IPs</small>
+      </td>
+      <td><span class="badge" style="background:var(--panel-2);border:1px solid var(--border);">${escapeHtml(p.site_code || 'GLOBAL')}</span></td>
+      <td style="text-align:right;">
+        <button class="btn btn-sm" style="color:var(--bad);" onclick="deletePrefix(${p.id})">Delete</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+
+    if (p.children && p.children.length > 0) {
+      renderPrefixes(p.children, depth + 1);
+    }
+  });
+}
+
+function renderIPs(ips) {
+  const tbody = document.getElementById('ipsTbody');
+  tbody.innerHTML = '';
+  if (!ips || ips.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted);">No IP addresses recorded.</td></tr>';
+    return;
+  }
+  ips.forEach(ip => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong class="mono" style="font-size:13px; color:var(--text);">${escapeHtml(ip.address)}</strong></td>
+      <td><span class="mono" style="font-size:12px;">${escapeHtml(ip.dns_name || '-')}</span></td>
+      <td><span class="badge-status badge-${ip.status || 'active'}">${ip.status || 'active'}</span></td>
+      <td>${escapeHtml(ip.role || (ip.fhrp_group_name ? 'VIP (' + ip.fhrp_group_name + ')' : '-'))}</td>
+      <td><span class="mono">${escapeHtml(ip.prefix_str || '-')}</span></td>
+      <td>${ip.device_name ? `<strong>${escapeHtml(ip.device_name)}</strong> ${ip.interface_name ? '(' + escapeHtml(ip.interface_name) + ')' : ''}` : '-'}</td>
+      <td>${escapeHtml(ip.vrf_name || 'Global')}</td>
+      <td><span class="badge" style="background:var(--panel-2);border:1px solid var(--border);">${escapeHtml(ip.site_code || 'GLOBAL')}</span></td>
+      <td style="text-align:right;">
+        <button class="btn btn-sm" style="color:var(--bad);" onclick="deleteIP(${ip.id})">Delete</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderVLANs(vlans) {
+  const tbody = document.getElementById('vlansTbody');
+  tbody.innerHTML = '';
+  if (!vlans || vlans.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted);">No VLANs configured.</td></tr>';
+    return;
+  }
+  vlans.forEach(v => {
+    const tr = document.createElement('tr');
+    const qinq = v.qinq_role ? (v.qinq_role === 'svlan' ? '<span class="badge badge-container">Outer S-VLAN</span>' : '<span class="badge badge-active">Inner C-VLAN</span>') : '-';
+    tr.innerHTML = `
+      <td><strong class="mono" style="font-size:14px;color:var(--accent);">VLAN ${v.vid}</strong></td>
+      <td><strong>${escapeHtml(v.name)}</strong></td>
+      <td><span class="badge-status badge-${v.status || 'active'}">${v.status || 'active'}</span></td>
+      <td>${escapeHtml(v.role || '-')}</td>
+      <td>${escapeHtml(v.group_name || 'None')}</td>
+      <td>${qinq}</td>
+      <td>${escapeHtml(v.qinq_svlan_name || '-')}</td>
+      <td><span class="badge" style="background:var(--panel-2);border:1px solid var(--border);">${escapeHtml(v.site_code || 'GLOBAL')}</span></td>
+      <td style="text-align:right;">
+        <button class="btn btn-sm" style="color:var(--bad);" onclick="deleteVLAN(${v.id})">Delete</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderVRFs(vrfs) {
+  const tbody = document.getElementById('vrfsTbody');
+  tbody.innerHTML = '';
+  if (!vrfs || vrfs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted);">No VRFs configured.</td></tr>';
+    return;
+  }
+  vrfs.forEach(v => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong style="color:var(--accent);">${escapeHtml(v.name)}</strong></td>
+      <td><span class="mono" style="font-weight:600;">${escapeHtml(v.rd || '-')}</span></td>
+      <td>${escapeHtml(v.description || '-')}</td>
+      <td><span class="badge badge-container">${v.prefix_count} Subnets</span></td>
+      <td><span class="badge badge-active">${v.ip_count} IPs</span></td>
+      <td><span class="badge" style="background:var(--panel-2);border:1px solid var(--border);">${escapeHtml(v.site_code || 'GLOBAL')}</span></td>
+      <td style="text-align:right;">
+        <button class="btn btn-sm" style="color:var(--bad);" onclick="deleteVRF(${v.id})">Delete</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderFHRPs(fhrps) {
+  const tbody = document.getElementById('fhrpsTbody');
+  tbody.innerHTML = '';
+  if (!fhrps || fhrps.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted);">No FHRP redundancy groups configured.</td></tr>';
+    return;
+  }
+  fhrps.forEach(f => {
+    const tr = document.createElement('tr');
+    const memberStr = (f.members && f.members.length > 0) 
+      ? f.members.map(m => `<span>${escapeHtml(m.device_name)} (Prio: ${m.priority})</span>`).join(', ')
+      : '<span style="color:var(--muted);">None</span>';
+    tr.innerHTML = `
+      <td><span class="badge badge-container">${escapeHtml(f.protocol)}</span></td>
+      <td><strong>Group ${f.group_id}</strong></td>
+      <td><strong class="mono" style="color:var(--ok);">${escapeHtml(f.virtual_ip || '-')}</strong></td>
+      <td>${escapeHtml(f.auth_type)}</td>
+      <td>${memberStr}</td>
+      <td>${escapeHtml(f.description || '-')}</td>
+      <td><span class="badge" style="background:var(--panel-2);border:1px solid var(--border);">${escapeHtml(f.site_code || 'GLOBAL')}</span></td>
+      <td style="text-align:right;">
+        <button class="btn btn-sm" style="color:var(--bad);" onclick="deleteFHRP(${f.id})">Delete</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function openAddModal() {
+  if (activeTab === 'prefixes') openAddPrefixModal();
+  else if (activeTab === 'ips') openAddIPModal();
+  else if (activeTab === 'vlans') openAddVLANModal();
+  else if (activeTab === 'vrfs') openAddVRFModal();
+  else if (activeTab === 'fhrps') openAddFHRPModal();
+  else openAddPrefixModal();
+}
+
+function openAddPrefixModal() {
+  const container = document.getElementById('modalFormContainer');
+  document.getElementById('modalTitle').innerText = 'Add Subnet Prefix';
+  container.innerHTML = `
+    <form onsubmit="savePrefix(event)">
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Prefix / CIDR (IPv4 or IPv6) *</label>
+        <input type="text" id="m_prefix" class="input" placeholder="e.g. 10.100.0.0/24 or 2001:db8::/64" required style="width:100%;">
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;">
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Status</label>
+          <select id="m_status" class="input" style="width:100%;">
+            <option value="active">Active</option>
+            <option value="container">Container (Supernet)</option>
+            <option value="reserved">Reserved</option>
+            <option value="deprecated">Deprecated</option>
+          </select>
+        </div>
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Role</label>
+          <input type="text" id="m_role" class="input" placeholder="e.g. Clinical, Mgmt, Access" style="width:100%;">
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;">
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">VRF Routing Table</label>
+          <select id="m_vrf" class="input" style="width:100%;">
+            <option value="">Global (Default)</option>
+            ${ipamData.vrfs.map(v => `<option value="${v.id}">${v.name}</option>`).join('')}
+          </select>
+        </div>
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">VLAN Binding</label>
+          <select id="m_vlan" class="input" style="width:100%;">
+            <option value="">None</option>
+            ${ipamData.vlans.map(v => `<option value="${v.id}">VLAN ${v.vid} (${v.name})</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Description</label>
+        <input type="text" id="m_desc" class="input" placeholder="Subnet purpose or note" style="width:100%;">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button type="button" class="btn" onclick="closeModal('ipamModal')">Cancel</button>
+        <button type="submit" class="btn primary">Save Prefix</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('ipamModal').style.display = 'flex';
+}
+
+function openAddIPModal() {
+  const container = document.getElementById('modalFormContainer');
+  document.getElementById('modalTitle').innerText = 'Allocate IP Address';
+  container.innerHTML = `
+    <form onsubmit="saveIP(event)">
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">IP Address (with CIDR or host) *</label>
+        <input type="text" id="ip_addr" class="input" placeholder="e.g. 10.90.10.25/24 or 10.90.10.25" required style="width:100%;">
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;">
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Status</label>
+          <select id="ip_status" class="input" style="width:100%;">
+            <option value="active">Active</option>
+            <option value="reserved">Reserved</option>
+            <option value="deprecated">Deprecated</option>
+            <option value="dhcp">DHCP</option>
+          </select>
+        </div>
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Role</label>
+          <select id="ip_role" class="input" style="width:100%;">
+            <option value="">Default</option>
+            <option value="loopback">Loopback</option>
+            <option value="secondary">Secondary</option>
+            <option value="anycast">Anycast</option>
+            <option value="vip">VIP (Virtual IP)</option>
+            <option value="vrrp">VRRP</option>
+            <option value="hsrp">HSRP</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;">
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">DNS Name / Hostname</label>
+          <input type="text" id="ip_dns" class="input" placeholder="e.g. core-sw01.mgm.local" style="width:100%;">
+        </div>
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">VRF Routing Table</label>
+          <select id="ip_vrf" class="input" style="width:100%;">
+            <option value="">Global (Default)</option>
+            ${ipamData.vrfs.map(v => `<option value="${v.id}">${v.name}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Description / Note</label>
+        <input type="text" id="ip_desc" class="input" placeholder="e.g. Interface ge-0/0/0 or Medical Imaging Workstation" style="width:100%;">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button type="button" class="btn" onclick="closeModal('ipamModal')">Cancel</button>
+        <button type="submit" class="btn primary">Save IP Address</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('ipamModal').style.display = 'flex';
+}
+
+function openAddVLANModal() {
+  const container = document.getElementById('modalFormContainer');
+  document.getElementById('modalTitle').innerText = 'Add VLAN & QinQ Configuration';
+  container.innerHTML = `
+    <form onsubmit="saveVLAN(event)">
+      <div style="display:flex;gap:12px;margin-bottom:12px;">
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">VLAN ID (1-4094) *</label>
+          <input type="number" id="vlan_vid" class="input" min="1" max="4094" placeholder="e.g. 50" required style="width:100%;">
+        </div>
+        <div style="flex:2;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">VLAN Name *</label>
+          <input type="text" id="vlan_name" class="input" placeholder="e.g. RADIOLOGY-VLAN" required style="width:100%;">
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;">
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Status</label>
+          <select id="vlan_status" class="input" style="width:100%;">
+            <option value="active">Active</option>
+            <option value="reserved">Reserved</option>
+            <option value="deprecated">Deprecated</option>
+          </select>
+        </div>
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Role</label>
+          <input type="text" id="vlan_role" class="input" placeholder="e.g. Clinical, Infrastructure" style="width:100%;">
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;">
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">QinQ Role</label>
+          <select id="vlan_qinq_role" class="input" style="width:100%;" onchange="document.getElementById('qinq_svlan_wrap').style.display = this.value === 'cvlan' ? 'block' : 'none'">
+            <option value="">Standard 802.1Q (None)</option>
+            <option value="svlan">802.1ad Service VLAN (Outer S-VLAN / 0x88a8)</option>
+            <option value="cvlan">802.1Q Customer VLAN (Inner C-VLAN / 0x8100)</option>
+          </select>
+        </div>
+        <div style="flex:1; display:none;" id="qinq_svlan_wrap">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Enclosing Outer S-VLAN</label>
+          <select id="vlan_qinq_svlan" class="input" style="width:100%;">
+            <option value="">None</option>
+            ${ipamData.vlans.filter(v => v.qinq_role === 'svlan').map(v => `<option value="${v.id}">VLAN ${v.vid} (${v.name})</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Description</label>
+        <input type="text" id="vlan_desc" class="input" placeholder="VLAN purpose or medical department" style="width:100%;">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button type="button" class="btn" onclick="closeModal('ipamModal')">Cancel</button>
+        <button type="submit" class="btn primary">Create VLAN</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('ipamModal').style.display = 'flex';
+}
+
+function openAddVRFModal() {
+  const container = document.getElementById('modalFormContainer');
+  document.getElementById('modalTitle').innerText = 'Add VRF Routing Instance';
+  container.innerHTML = `
+    <form onsubmit="saveVRF(event)">
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">VRF Name *</label>
+        <input type="text" id="v_name" class="input" placeholder="e.g. CLINICAL-HIS-VRF" required style="width:100%;">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Route Distinguisher (RD)</label>
+        <input type="text" id="v_rd" class="input" placeholder="e.g. 65000:100" style="width:100%;">
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Description</label>
+        <input type="text" id="v_desc" class="input" placeholder="VRF purpose or segmentation note" style="width:100%;">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button type="button" class="btn" onclick="closeModal('ipamModal')">Cancel</button>
+        <button type="submit" class="btn primary">Create VRF</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('ipamModal').style.display = 'flex';
+}
+
+function openAddFHRPModal() {
+  const container = document.getElementById('modalFormContainer');
+  document.getElementById('modalTitle').innerText = 'Add FHRP Redundancy Group';
+  container.innerHTML = `
+    <form onsubmit="saveFHRP(event)">
+      <div style="display:flex;gap:12px;margin-bottom:12px;">
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Protocol</label>
+          <select id="f_protocol" class="input" style="width:100%;">
+            <option value="vrrp">VRRP</option>
+            <option value="hsrp">HSRP</option>
+            <option value="glbp">GLBP</option>
+          </select>
+        </div>
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Group ID (1-255) *</label>
+          <input type="number" id="f_gid" class="input" value="10" min="1" max="255" required style="width:100%;">
+        </div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Virtual IP (VIP) *</label>
+        <input type="text" id="f_vip" class="input" placeholder="e.g. 10.90.10.1" required style="width:100%;">
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Description</label>
+        <input type="text" id="f_desc" class="input" placeholder="Default gateway redundancy" style="width:100%;">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button type="button" class="btn" onclick="closeModal('ipamModal')">Cancel</button>
+        <button type="submit" class="btn primary">Create FHRP Group</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('ipamModal').style.display = 'flex';
+}
+
+async function savePrefix(e) {
+  e.preventDefault();
+  const body = {
+    prefix: document.getElementById('m_prefix').value,
+    status: document.getElementById('m_status').value,
+    role: document.getElementById('m_role').value,
+    vrf_id: document.getElementById('m_vrf').value,
+    vlan_id: document.getElementById('m_vlan').value,
+    description: document.getElementById('m_desc').value
+  };
+  try {
+    const res = await api('/api/ipam/prefixes', body);
+    closeModal('ipamModal');
+    toast('Subnet prefix saved successfully!', 'ok');
+    loadIPAMData();
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+async function saveIP(e) {
+  e.preventDefault();
+  const payload = {
+    address: document.getElementById('ip_addr').value.trim(),
+    status: document.getElementById('ip_status').value,
+    role: document.getElementById('ip_role').value,
+    dns_name: document.getElementById('ip_dns').value.trim(),
+    vrf_id: document.getElementById('ip_vrf').value || null,
+    description: document.getElementById('ip_desc').value.trim()
+  };
+  try {
+    const res = await api('/api/ipam/ip-addresses', payload);
+    if (!res.ok) throw new Error(res.error || 'Failed to save IP');
+    toast('IP address allocated successfully', 'ok');
+    closeModal('ipamModal');
+    loadIPAMData();
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+async function saveVLAN(e) {
+  e.preventDefault();
+  const payload = {
+    vid: parseInt(document.getElementById('vlan_vid').value, 10),
+    name: document.getElementById('vlan_name').value.trim(),
+    status: document.getElementById('vlan_status').value,
+    role: document.getElementById('vlan_role').value.trim(),
+    qinq_role: document.getElementById('vlan_qinq_role').value || null,
+    qinq_svlan_id: document.getElementById('vlan_qinq_svlan').value || null,
+    description: document.getElementById('vlan_desc').value.trim()
+  };
+  try {
+    const res = await api('/api/ipam/vlans', payload);
+    if (!res.ok) throw new Error(res.error || 'Failed to save VLAN');
+    toast('VLAN created successfully', 'ok');
+    closeModal('ipamModal');
+    loadIPAMData();
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+async function saveVRF(e) {
+  e.preventDefault();
+  const body = {
+    name: document.getElementById('v_name').value,
+    rd: document.getElementById('v_rd').value,
+    description: document.getElementById('v_desc').value
+  };
+  try {
+    const res = await api('/api/ipam/vrfs', body);
+    closeModal('ipamModal');
+    toast('VRF created successfully!', 'ok');
+    loadIPAMData();
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+async function saveFHRP(e) {
+  e.preventDefault();
+  const body = {
+    protocol: document.getElementById('f_protocol').value,
+    group_id: document.getElementById('f_gid').value,
+    virtual_ip: document.getElementById('f_vip').value,
+    description: document.getElementById('f_desc').value
+  };
+  try {
+    const res = await api('/api/ipam/fhrp-groups', body);
+    closeModal('ipamModal');
+    toast('FHRP Group created successfully!', 'ok');
+    loadIPAMData();
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+async function deletePrefix(id) {
+  if (!confirm('Are you sure you want to delete this prefix?')) return;
+  try {
+    await api('/api/ipam/prefixes/' + id + '/delete', {});
+    toast('Prefix deleted', 'ok');
+    loadIPAMData();
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+async function deleteIP(id) {
+  if (!confirm('Delete this IP address allocation?')) return;
+  try {
+    await api('/api/ipam/ip-addresses/' + id + '/delete', {});
+    toast('IP allocation deleted', 'ok');
+    loadIPAMData();
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+async function deleteVLAN(id) {
+  if (!confirm('Delete this VLAN?')) return;
+  try {
+    await api('/api/ipam/vlans/' + id + '/delete', {});
+    toast('VLAN deleted', 'ok');
+    loadIPAMData();
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+async function deleteVRF(id) {
+  if (!confirm('Delete this VRF?')) return;
+  try {
+    await api('/api/ipam/vrfs/' + id + '/delete', {});
+    toast('VRF deleted', 'ok');
+    loadIPAMData();
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+async function deleteFHRP(id) {
+  if (!confirm('Delete this FHRP Group?')) return;
+  try {
+    await api('/api/ipam/fhrp-groups/' + id + '/delete', {});
+    toast('FHRP Group deleted', 'ok');
+    loadIPAMData();
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+function closeModal(id) {
+  document.getElementById(id).style.display = 'none';
+}
+
+function filterPrefixTable() {
+  const q = document.getElementById('prefixSearch').value.toLowerCase();
+  document.querySelectorAll('#prefixesTbody tr').forEach(tr => {
+    tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function filterIPTable() {
+  const q = document.getElementById('ipSearch').value.toLowerCase();
+  document.querySelectorAll('#ipsTbody tr').forEach(tr => {
+    tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function filterVlanTable() {
+  const q = document.getElementById('vlanSearch').value.toLowerCase();
+  document.querySelectorAll('#vlansTbody tr').forEach(tr => {
+    tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function filterVRFTable() {
+  const q = document.getElementById('vrfSearch').value.toLowerCase();
+  document.querySelectorAll('#vrfsTbody tr').forEach(tr => {
+    tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function filterFHRPTable() {
+  const q = document.getElementById('fhrpSearch').value.toLowerCase();
+  document.querySelectorAll('#fhrpsTbody tr').forEach(tr => {
+    tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+</script>
+{% endblock %}

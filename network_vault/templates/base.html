@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf" content="{{ csrf_token }}">
-  <title>{% block title %}MGM Network Vault{% endblock %} · MGM Network Vault</title>
+  <title>{% block title %}MGM Network Vault{% endblock %} Ã‚Â· MGM Network Vault</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v={{ app_version }}">
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
   <style>
@@ -88,6 +88,8 @@
             <a href="{{ url_for('web.port_locator') }}" class="dd-item {{ 'active' if ep == 'web.port_locator' }}">{{ icon('target') }}<span>Port Locator</span></a>
             <a href="{{ url_for('web.health') }}" class="dd-item {{ 'active' if ep == 'web.health' }}"><svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Hardware Health</span></a>
             <a href="{{ url_for('web.optics') }}" class="dd-item {{ 'active' if ep == 'web.optics' }}">{{ icon('optic') }}<span>Optical Health</span></a>
+            <a href="{{ url_for('web.ipam') }}" class="dd-item {{ 'active' if ep == 'web.ipam' }}"><svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>IPAM &amp; Subnets</span></a>
+            <a href="{{ url_for('web.racks') }}" class="dd-item {{ 'active' if ep == 'web.racks' }}"><svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="16" y2="18"/></svg><span>Rack Elevations</span></a>
             <a href="{{ url_for('web.vlan_audit') }}" class="dd-item {{ 'active' if ep == 'web.vlan_audit' }}"><svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span>VLAN &amp; Port Audit</span></a>
             <a href="{{ url_for('web.lifecycle') }}" class="dd-item {{ 'active' if ep.startswith('web.lifecycle') }}"><svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>Lifecycle &amp; EOL</span></a>
           </div>
@@ -127,13 +129,13 @@
               <option value="all" {% if current_site_id == 'all' %}selected{% endif %}>All My Sites ({{ user_available_sites|length }})</option>
               {% endif %}
               {% for s in (all_sites if current_user_obj.is_group_admin else user_available_sites) %}
-              <option value="{{ s.id }}" {% if current_site_id == s.id %}selected{% endif %}>{{ s.code }} · {{ s.name }}</option>
+              <option value="{{ s.id }}" {% if current_site_id == s.id %}selected{% endif %}>{{ s.code }} Ã‚Â· {{ s.name }}</option>
               {% endfor %}
             </select>
           </form>
           {% else %}
           <span class="site-badge-single">
-            <b>{{ active_site.code if active_site else (user_available_sites[0].code if user_available_sites else 'Site') }}</b> · {{ active_site.name if active_site else (user_available_sites[0].name if user_available_sites else '') }}
+            <b>{{ active_site.code if active_site else (user_available_sites[0].code if user_available_sites else 'Site') }}</b> Ã‚Â· {{ active_site.name if active_site else (user_available_sites[0].name if user_available_sites else '') }}
           </span>
           {% endif %}
         </div>
@@ -161,6 +163,8 @@
         <a href="{{ url_for('web.port_locator') }}" class="subnav-link {{ 'active' if ep == 'web.port_locator' }}">{{ icon('target') }}<span>Port Locator</span></a>
         <a href="{{ url_for('web.health') }}" class="subnav-link {{ 'active' if ep == 'web.health' }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Hardware Health</span></a>
         <a href="{{ url_for('web.optics') }}" class="subnav-link {{ 'active' if ep == 'web.optics' }}">{{ icon('optic') }}<span>Optical Health</span></a>
+        <a href="{{ url_for('web.ipam') }}" class="subnav-link {{ 'active' if ep == 'web.ipam' }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>IPAM &amp; Subnets</span></a>
+        <a href="{{ url_for('web.racks') }}" class="subnav-link {{ 'active' if ep == 'web.racks' }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="16" y2="18"/></svg><span>Rack Elevations</span></a>
         <a href="{{ url_for('web.vlan_audit') }}" class="subnav-link {{ 'active' if ep == 'web.vlan_audit' }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span>VLAN &amp; Port Audit</span></a>
         <a href="{{ url_for('web.lifecycle') }}" class="subnav-link {{ 'active' if ep.startswith('web.lifecycle') }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>Lifecycle &amp; EOL</span></a>
       </div>
@@ -190,7 +194,7 @@
         <img src="{{ url_for('static', filename='mgm-logo.png') }}" alt="MGM Healthcare" class="mobile-nav-logo">
         <span class="mobile-nav-title">Network Vault</span>
       </div>
-      <button class="mobile-nav-close" onclick="closeMobileNav()" aria-label="Close menu">✕</button>
+      <button class="mobile-nav-close" onclick="closeMobileNav()" aria-label="Close menu">Ã¢Å“â€¢</button>
     </div>
 
     <div class="mobile-nav-body">
@@ -209,12 +213,12 @@
               <option value="all" {% if current_site_id == 'all' %}selected{% endif %}>All My Sites ({{ user_available_sites|length }})</option>
               {% endif %}
               {% for s in (all_sites if current_user_obj.is_group_admin else user_available_sites) %}
-              <option value="{{ s.id }}" {% if current_site_id == s.id %}selected{% endif %}>{{ s.code }} · {{ s.name }}</option>
+              <option value="{{ s.id }}" {% if current_site_id == s.id %}selected{% endif %}>{{ s.code }} Ã‚Â· {{ s.name }}</option>
               {% endfor %}
             </select>
           </form>
           {% else %}
-          <span style="font-size:12px;font-weight:600;color:#fff;">{{ active_site.code if active_site else 'Site' }} · {{ active_site.name if active_site else '' }}</span>
+          <span style="font-size:12px;font-weight:600;color:#fff;">{{ active_site.code if active_site else 'Site' }} Ã‚Â· {{ active_site.name if active_site else '' }}</span>
           {% endif %}
         </div>
       </div>
@@ -237,6 +241,8 @@
           <a href="{{ url_for('web.port_locator') }}" class="mobile-nav-link {{ 'active' if ep == 'web.port_locator' }}">{{ icon('target') }}<span>Port Locator</span></a>
           <a href="{{ url_for('web.health') }}" class="mobile-nav-link {{ 'active' if ep == 'web.health' }}"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Hardware Health</span></a>
           <a href="{{ url_for('web.optics') }}" class="mobile-nav-link {{ 'active' if ep == 'web.optics' }}">{{ icon('optic') }}<span>Optical Health</span></a>
+          <a href="{{ url_for('web.ipam') }}" class="mobile-nav-link {{ 'active' if ep == 'web.ipam' }}"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>IPAM &amp; Subnets</span></a>
+          <a href="{{ url_for('web.racks') }}" class="mobile-nav-link {{ 'active' if ep == 'web.racks' }}"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="16" y2="18"/></svg><span>Rack Elevations</span></a>
           <a href="{{ url_for('web.vlan_audit') }}" class="mobile-nav-link {{ 'active' if ep == 'web.vlan_audit' }}"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span>VLAN &amp; Port Audit</span></a>
           <a href="{{ url_for('web.lifecycle') }}" class="mobile-nav-link {{ 'active' if ep.startswith('web.lifecycle') }}"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>Lifecycle &amp; EOL</span></a>
         </div>
@@ -301,12 +307,12 @@
       <button type="button" class="gld-btn" onclick="maximizeGlobalLocator(event)" title="Restore / View in Port Locator">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
       </button>
-      <button type="button" class="gld-btn" onclick="dismissGlobalLocator(event)" title="Dismiss trace">✕</button>
+      <button type="button" class="gld-btn" onclick="dismissGlobalLocator(event)" title="Dismiss trace">Ã¢Å“â€¢</button>
     </div>
   </div>
   <div class="gld-body">
     <div class="gld-status-row">
-      <span id="gldStatusText" class="font-bold" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px;">Starting host trace…</span>
+      <span id="gldStatusText" class="font-bold" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px;">Starting host traceÃ¢â‚¬Â¦</span>
       <span id="gldPercent" class="mono font-bold" style="color:var(--accent);margin-left:8px;">0%</span>
     </div>
     <div class="gld-progress-bar">

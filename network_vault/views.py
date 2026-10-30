@@ -98,7 +98,7 @@ def require_group_admin(f):
 
 @bp.app_template_filter("dt")
 def fmt_dt(v):
-    return v.strftime("%Y-%m-%d %H:%M:%S") if v else "—"
+    return v.strftime("%Y-%m-%d %H:%M:%S") if v else "â€”"
 
 
 @bp.app_template_filter("ago")
@@ -2017,3 +2017,38 @@ def api_update_apply():
         return jsonify(res), 500
     return jsonify(res)
 
+
+# ---------------------------------------------------------------------------
+# IPAM Module View & API Registration
+# ---------------------------------------------------------------------------
+
+@bp.route('/ipam')
+def ipam():
+    """IPAM Management Dashboard: Subnets, Visual Utilization, VLANs, QinQ, VRFs, FHRP."""
+    u = _current_user()
+    devs = _site_filter(Device.query, Device).order_by(Device.name).all()
+    user_sites_list = Site.query.order_by(Site.code).all() if (u and u.is_group_admin) else (u.assigned_sites if u else [])
+    active_site_id = _active_site_id()
+    return render_template('ipam.html', devices=devs, sites=user_sites_list, active_site_id=active_site_id)
+
+
+from .ipam_views import register_ipam_views
+register_ipam_views(bp, _current_user, _active_site_id, _site_filter, require_write)
+
+
+# ---------------------------------------------------------------------------
+# DCIM Visual Rack Elevations & Cabinet Management
+# ---------------------------------------------------------------------------
+
+@bp.route('/racks')
+def racks():
+    """DCIM Visual Rack Elevations & Equipment Cabinets."""
+    u = _current_user()
+    devs = _site_filter(Device.query, Device).order_by(Device.name).all()
+    user_sites_list = Site.query.order_by(Site.code).all() if (u and u.is_group_admin) else (u.assigned_sites if u else [])
+    active_site_id = _active_site_id()
+    return render_template('racks.html', devices=devs, sites=user_sites_list, active_site_id=active_site_id)
+
+
+from .rack_views import register_rack_views
+register_rack_views(bp, _current_user, _active_site_id, _site_filter, require_write)

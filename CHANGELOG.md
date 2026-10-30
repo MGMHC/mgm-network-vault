@@ -4,6 +4,42 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.13.0] - 2026-10-31
+
+### Added
+- **IPAM Module (IP Address Management & Subnet Hierarchies)**:
+  - **Subnet Hierarchy Trees & Visual Utilization (`/ipam`)**:
+    - Multi-level nested tree containment for IPv4 and IPv6 subnets with dynamic, color-coded utilization progress bars (Green <60%, Amber 60-85%, Red >85%).
+    - Supports container supernets, allocated counts, broadcast, and netmask calculations via `netaddr`.
+  - **Allocated IP Address Directory**:
+    - Host IP tracking with DNS hostnames, subnet prefix bindings, device interface bindings, and VIP roles.
+  - **VLANs & QinQ Dual-Tagging**:
+    - 802.1Q standard VLANs (1–4094), status, roles, VLAN Groups, and 802.1ad QinQ dual-tagging (Outer `S-VLAN` and Inner `C-VLAN` mapping).
+  - **VRF Routing Instances**:
+    - Virtual Routing and Forwarding tables with Route Distinguisher (RD) tracking, prefix counts, and tenant IP isolation.
+  - **FHRP Redundancy Groups**:
+    - VRRP, HSRP, and GLBP redundancy clusters with Virtual IPs, authentication types, and member switch priority rankings.
+  - **Full REST API & Interactive Modals**:
+    - Complete CRUD endpoints under `/api/ipam/*` with CSRF protection and toast feedback.
+
+- **DCIM Visual Rack Elevations & Equipment Cabinets**:
+  - **Interactive 42U/48U Cabinet Graphic (`/racks`)**:
+    - High-fidelity visual rack elevation with metal side rails, embossed unit numbering (U42 ... U1), and Front vs. Rear elevation toggle.
+    - Switch faceplates styled with real-time status LED indicators (Up, Down, Warning), hardware model badges, management IP pills, and role gradients (Core, Distribution, Access, Firewall, Server).
+    - Multi-RU equipment spanning (e.g. 2U switches cleanly span two rack units).
+    - Hover inspection tooltips with direct jump links to device backups and configuration diffs.
+  - **Rack Space Management**:
+    - Real-time space utilization metrics (Occupied RUs, Reserved RUs, Available RUs, and Utilization %).
+    - Equipment Mounting & Unmounting directly from available inventory.
+    - RU space reservations for planned future hardware with user notes.
+    - Cabinet organization by Site and Room / IDF Closets.
+  - **Pre-Populated Cabinets**:
+    - Automatically organized 15 existing inventory switches into physical cabinets (`MDF-CORE-RACK-01`, `1F-RACK1`, `1F-RACK2`, `GF-RACK1`, `UTILITY-RACK1`, `4F-RACK1`, `2F-LAB-RACK`).
+
+### Fixed
+- **Schedule & LogEntry ORM Schemas**: Added missing database model columns (`frequency`, `time`, `day_of_week`, `day_of_month` to `Schedule`, and `device_name`, `details` to `LogEntry`) to align with existing SQLite schema.
+- **Device & Backup ORM Properties**: Added `vc_degraded` property to `Device` and restored missing `Backup` model columns (`changed`, `lines_removed`, `sha256`, `path`, etc.) resolving dashboard calculation exceptions.
+
 ## [1.12.3] - 2026-10-27
 
 ### Added & Optimized

@@ -1,0 +1,971 @@
+{% extends "base.html" %}
+{% block title %}Rack Elevations - MGM Network Vault{% endblock %}
+
+{% block content %}
+<style>
+/* Rack Elevation Visual System */
+.rack-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.rack-page-title h1 {
+  margin: 0 0 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 24px;
+}
+.rack-page-title .sub {
+  color: var(--muted);
+  font-size: 13px;
+}
+.rack-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* 42U Cabinet Graphic */
+.rack-cabinet-wrap {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+}
+.rack-frame {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  background: #14171f;
+  border: 4px solid #2b313f;
+  border-radius: 6px;
+  box-shadow: inset 0 0 20px rgba(0,0,0,0.8), 0 8px 24px rgba(0,0,0,0.3);
+  position: relative;
+  user-select: none;
+}
+.rack-frame-header {
+  background: #202531;
+  padding: 8px 16px;
+  color: #94a3b8;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid #2b313f;
+}
+.rack-units-container {
+  display: flex;
+  flex-direction: column;
+}
+.rack-unit-row {
+  display: flex;
+  height: 28px;
+  border-bottom: 1px solid #1e2430;
+  position: relative;
+  transition: background 0.15s ease;
+}
+.rack-unit-row:last-child {
+  border-bottom: none;
+}
+.rack-unit-row:hover .unit-hover-actions {
+  opacity: 1;
+}
+
+.rack-rail {
+  width: 32px;
+  background: #181c25;
+  color: #64748b;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid #2b313f;
+  flex-shrink: 0;
+}
+.rack-rail.rail-right {
+  border-right: none;
+  border-left: 1px solid #2b313f;
+}
+.rack-slot-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  background: #11141c;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Device Faceplate Styling */
+.rack-device {
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  color: #f8fafc;
+  font-size: 11px;
+  border: 1px solid rgba(255,255,255,0.15);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 2px 4px rgba(0,0,0,0.4);
+  position: relative;
+}
+.rack-device.role-core {
+  background: linear-gradient(180deg, #1e3a8a 0%, #172554 100%);
+  border-color: #3b82f6;
+}
+.rack-device.role-distribution {
+  background: linear-gradient(180deg, #3730a3 0%, #1e1b4b 100%);
+  border-color: #6366f1;
+}
+.rack-device.role-access {
+  background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+  border-color: #4b5563;
+}
+.rack-device.role-firewall {
+  background: linear-gradient(180deg, #7f1d1d 0%, #450a0a 100%);
+  border-color: #ef4444;
+}
+.rack-device.role-server {
+  background: linear-gradient(180deg, #064e3b 0%, #022c22 100%);
+  border-color: #10b981;
+}
+
+.rack-device-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+.rack-device-name {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #ffffff;
+}
+.rack-device-name a {
+  color: #ffffff;
+  text-decoration: none;
+}
+.rack-device-name a:hover {
+  text-decoration: underline;
+  color: var(--gold, #C3A275);
+}
+.rack-device-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.12);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.rack-device-status-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px currentColor;
+}
+.led-up { color: #10b981; background: #10b981; }
+.led-down { color: #ef4444; background: #ef4444; }
+.led-warn { color: #f59e0b; background: #f59e0b; }
+.led-unknown { color: #94a3b8; background: #94a3b8; }
+
+.rack-reservation-slot {
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(245, 158, 11, 0.08),
+    rgba(245, 158, 11, 0.08) 8px,
+    rgba(245, 158, 11, 0.16) 8px,
+    rgba(245, 158, 11, 0.16) 16px
+  );
+  border: 1px dashed rgba(245, 158, 11, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  color: #fbbf24;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rack-empty-slot {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #475569;
+  font-size: 10px;
+}
+.unit-hover-actions {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  display: flex;
+  gap: 4px;
+}
+
+/* Sidebar Rack List */
+.rack-list-item {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  background: var(--panel);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.rack-list-item:hover {
+  border-color: var(--accent, #25366C);
+  background: var(--panel-2);
+}
+.rack-list-item.active {
+  border-color: var(--accent, #25366C);
+  background: rgba(37, 54, 108, 0.08);
+  box-shadow: inset 3px 0 0 var(--accent, #25366C);
+}
+.rack-meter-bar {
+  height: 6px;
+  background: rgba(0,0,0,0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+.rack-meter-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+</style>
+
+<!-- Header -->
+<div class="rack-page-header">
+  <div class="rack-page-title">
+    <h1>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" style="color:var(--accent,#25366C);"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="16" y2="18"/></svg>
+      DCIM Visual Rack Elevations
+    </h1>
+    <div class="sub">42U/48U physical equipment cabinets, rack units, mounting allocations, and space utilization.</div>
+  </div>
+  <div class="rack-actions">
+    <button class="btn" onclick="openAddGroupModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      Add Room / Closet
+    </button>
+    <button class="btn primary" onclick="openAddRackModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add Cabinet Rack
+    </button>
+  </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="card vlan-summary-card" style="margin-bottom: 20px;">
+  <div class="vlan-summary-strip">
+    <div class="vlan-kpi-item">
+      <div class="vlan-kpi-icon" style="background:rgba(37,54,108,0.12);color:var(--accent,#25366C);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="14" x2="16" y2="14"/></svg>
+      </div>
+      <div class="vlan-kpi-content">
+        <div class="vlan-kpi-val"><span id="kpiTotalRacks">0</span></div>
+        <div class="vlan-kpi-label">Cabinet Racks</div>
+      </div>
+    </div>
+    <div class="vlan-kpi-item">
+      <div class="vlan-kpi-icon" style="background:rgba(16,185,129,0.12);color:var(--ok,#10b981);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </div>
+      <div class="vlan-kpi-content">
+        <div class="vlan-kpi-val"><span id="kpiOccupiedUnits">0</span></div>
+        <div class="vlan-kpi-label">Mounted Equipment (RUs)</div>
+      </div>
+    </div>
+    <div class="vlan-kpi-item">
+      <div class="vlan-kpi-icon" style="background:rgba(245,158,11,0.12);color:var(--warn,#f59e0b);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      </div>
+      <div class="vlan-kpi-content">
+        <div class="vlan-kpi-val"><span id="kpiReservedUnits">0</span></div>
+        <div class="vlan-kpi-label">Reserved Units</div>
+      </div>
+    </div>
+    <div class="vlan-kpi-item">
+      <div class="vlan-kpi-icon" style="background:rgba(217,185,138,0.2);color:var(--gold,#C3A275);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+      </div>
+      <div class="vlan-kpi-content">
+        <div class="vlan-kpi-val"><span id="kpiTotalUnits">0</span></div>
+        <div class="vlan-kpi-label">Total Rack Space (RUs)</div>
+      </div>
+    </div>
+    <div class="vlan-kpi-item">
+      <div class="vlan-kpi-icon" style="background:rgba(139,92,246,0.12);color:#8b5cf6;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+      </div>
+      <div class="vlan-kpi-content">
+        <div class="vlan-kpi-val"><span id="kpiOverallUtil">0</span>%</div>
+        <div class="vlan-kpi-label">Space Utilization</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main Split Container -->
+<div style="display:grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: flex-start;">
+
+  <!-- Left Column: Rack Browser & Filters -->
+  <div class="card" style="padding:16px;">
+    <div style="margin-bottom:14px;">
+      <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Filter by Room / Closet</label>
+      <select id="groupFilter" class="input" style="width:100%;" onchange="filterRacks()">
+        <option value="all">All Rooms &amp; IDF Closets</option>
+      </select>
+    </div>
+    <div style="margin-bottom:14px;">
+      <input type="text" id="rackSearch" class="input" placeholder="Search rack name or room..." onkeyup="filterRacks()" style="width:100%;">
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="font-size:12px;font-weight:600;color:var(--muted);">Cabinets (<span id="rackFilteredCount">0</span>)</span>
+    </div>
+
+    <div id="rackListContainer" style="max-height: calc(100vh - 380px); overflow-y:auto; padding-right:4px;">
+      <div style="text-align:center;padding:24px;color:var(--muted);">Loading racks...</div>
+    </div>
+  </div>
+
+  <!-- Right Column: Visual Cabinet Elevation -->
+  <div class="rack-cabinet-wrap">
+    
+    <!-- Active Rack Header -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <h2 id="currentRackName" style="margin:0;font-size:20px;">Select a Cabinet</h2>
+          <span id="currentRackStatus" class="badge" style="display:none;"></span>
+          <span id="currentRackRole" class="badge" style="display:none;background:var(--panel-2);border:1px solid var(--border);"></span>
+        </div>
+        <div id="currentRackLocation" style="font-size:12px;color:var(--muted);margin-top:2px;"></div>
+      </div>
+
+      <!-- Controls: Front/Rear & Actions -->
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="segmented-control" style="display:flex;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:2px;">
+          <button id="faceFrontBtn" class="btn btn-sm primary" onclick="setRackFace('front')" style="padding:4px 12px;border:none;">Front</button>
+          <button id="faceRearBtn" class="btn btn-sm" onclick="setRackFace('rear')" style="padding:4px 12px;border:none;">Rear</button>
+        </div>
+
+        <button class="btn btn-sm" onclick="openMountModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Mount Equipment
+        </button>
+
+        <button class="btn btn-sm" onclick="openReserveModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Reserve RUs
+        </button>
+
+        <button class="btn btn-sm" style="color:var(--bad);" onclick="deleteCurrentRack()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Active Rack Utilization Strip -->
+    <div id="currentRackUtilWrap" style="margin-bottom:16px;display:none;">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+        <span><strong>Space Utilization:</strong> <span id="currentRackUtilText">0%</span></span>
+        <span style="color:var(--muted);"><span id="currentRackUtilUnits">0 / 42 RUs</span> (<span id="currentRackAvailUnits">42 Available</span>)</span>
+      </div>
+      <div class="rack-meter-bar" style="height:8px;">
+        <div id="currentRackUtilFill" class="rack-meter-fill" style="width:0%;background:var(--ok,#10b981);"></div>
+      </div>
+    </div>
+
+    <!-- 42U Visual Frame -->
+    <div id="rackFrame" class="rack-frame">
+      <div class="rack-frame-header">
+        <span id="frameTitleLeft">19" STANDARD 42U CABINET</span>
+        <span id="frameTitleRight">FRONT ELEVATION</span>
+      </div>
+      <div id="rackUnitsBody" class="rack-units-container">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Modal: Mount Device -->
+<div id="mountModal" class="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;z-index:1000;">
+  <div class="card" style="width:100%;max-width:480px;box-shadow:0 12px 32px rgba(0,0,0,0.4);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);">
+      <h3 style="margin:0;">Mount Equipment in Rack</h3>
+      <button class="btn btn-sm" onclick="closeModal('mountModal')">✕</button>
+    </div>
+    <form onsubmit="saveMount(event)">
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Select Unmounted Device *</label>
+        <select id="mount_device" class="input" style="width:100%;" required>
+          <option value="">-- Choose Device --</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;">
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Rack Position (Top RU) *</label>
+          <input type="number" id="mount_pos" class="input" min="1" max="48" required style="width:100%;">
+        </div>
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Height (RUs)</label>
+          <select id="mount_height" class="input" style="width:100%;">
+            <option value="1">1U (Standard Switch)</option>
+            <option value="2">2U (Distribution / Storage)</option>
+            <option value="3">3U</option>
+            <option value="4">4U (Core Chassis)</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Mounted Face</label>
+        <select id="mount_face" class="input" style="width:100%;">
+          <option value="front">Front Elevation</option>
+          <option value="rear">Rear Elevation</option>
+          <option value="both">Both (Full Depth)</option>
+        </select>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button type="button" class="btn" onclick="closeModal('mountModal')">Cancel</button>
+        <button type="submit" class="btn primary">Mount Equipment</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Add Cabinet Rack -->
+<div id="rackModal" class="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;z-index:1000;">
+  <div class="card" style="width:100%;max-width:520px;box-shadow:0 12px 32px rgba(0,0,0,0.4);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);">
+      <h3 style="margin:0;">Add Cabinet Rack</h3>
+      <button class="btn btn-sm" onclick="closeModal('rackModal')">✕</button>
+    </div>
+    <form onsubmit="saveRack(event)">
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Rack Name *</label>
+        <input type="text" id="r_name" class="input" placeholder="e.g. MDF-CORE-RACK-02 or 3F-IDF-RACK1" required style="width:100%;">
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;">
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Room / IDF Closet</label>
+          <select id="r_group" class="input" style="width:100%;">
+            <option value="">Unassigned</option>
+          </select>
+        </div>
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Facility Location</label>
+          <input type="text" id="r_facility" class="input" placeholder="e.g. Row 1, Pos B" style="width:100%;">
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;">
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Height (Units)</label>
+          <select id="r_uheight" class="input" style="width:100%;">
+            <option value="42">42U (Standard)</option>
+            <option value="48">48U (High Density)</option>
+            <option value="24">24U (Half Rack)</option>
+            <option value="12">12U (Wallmount)</option>
+          </select>
+        </div>
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Role</label>
+          <select id="r_role" class="input" style="width:100%;">
+            <option value="network">Network</option>
+            <option value="core">Core / Spine</option>
+            <option value="access">Access / IDF</option>
+            <option value="server">Server / Compute</option>
+            <option value="storage">Storage / SAN</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Comments / Notes</label>
+        <input type="text" id="r_comments" class="input" placeholder="Cabinet power specs or vendor model" style="width:100%;">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button type="button" class="btn" onclick="closeModal('rackModal')">Cancel</button>
+        <button type="submit" class="btn primary">Save Cabinet</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Add Room / Closet -->
+<div id="groupModal" class="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;z-index:1000;">
+  <div class="card" style="width:100%;max-width:440px;box-shadow:0 12px 32px rgba(0,0,0,0.4);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);">
+      <h3 style="margin:0;">Add Room / IDF Closet</h3>
+      <button class="btn btn-sm" onclick="closeModal('groupModal')">✕</button>
+    </div>
+    <form onsubmit="saveGroup(event)">
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Room / Closet Name *</label>
+        <input type="text" id="g_name" class="input" placeholder="e.g. 3F East Telecommunications Closet" required style="width:100%;">
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Description</label>
+        <input type="text" id="g_desc" class="input" placeholder="Location, access keys, or HVAC note" style="width:100%;">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button type="button" class="btn" onclick="closeModal('groupModal')">Cancel</button>
+        <button type="submit" class="btn primary">Create Room</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Add Reservation -->
+<div id="reserveModal" class="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;z-index:1000;">
+  <div class="card" style="width:100%;max-width:440px;box-shadow:0 12px 32px rgba(0,0,0,0.4);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);">
+      <h3 style="margin:0;">Reserve Rack Space</h3>
+      <button class="btn btn-sm" onclick="closeModal('reserveModal')">✕</button>
+    </div>
+    <form onsubmit="saveReservation(event)">
+      <div style="display:flex;gap:12px;margin-bottom:12px;">
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Unit Position (Top RU) *</label>
+          <input type="number" id="res_unit" class="input" min="1" max="48" required style="width:100%;">
+        </div>
+        <div style="flex:1;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Height (Units)</label>
+          <input type="number" id="res_height" class="input" min="1" max="10" value="1" required style="width:100%;">
+        </div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Purpose / Description *</label>
+        <input type="text" id="res_desc" class="input" placeholder="e.g. Reserved for Spine Switch Expansion" required style="width:100%;">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button type="button" class="btn" onclick="closeModal('reserveModal')">Cancel</button>
+        <button type="submit" class="btn primary">Save Reservation</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const CSRF = document.querySelector('meta[name="csrf"]')?.getAttribute('content') || '';
+
+async function api(url, data) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': CSRF
+    },
+    body: JSON.stringify(data || {})
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || ('HTTP ' + res.status));
+  return json;
+}
+
+let racksData = [];
+let groupsData = [];
+let currentRackId = null;
+let currentFace = 'front';
+let currentRackDetail = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadRacks();
+});
+
+async function loadRacks(selectedId) {
+  try {
+    const res = await fetch('/api/racks');
+    const json = await res.json();
+    if (!json.ok) return toast(json.error || 'Failed to load racks', 'bad');
+
+    racksData = json.racks || [];
+    groupsData = json.groups || [];
+
+    // Update KPIs
+    document.getElementById('kpiTotalRacks').innerText = json.kpis.total_racks;
+    document.getElementById('kpiTotalUnits').innerText = json.kpis.total_units;
+    document.getElementById('kpiOccupiedUnits').innerText = json.kpis.occupied_units;
+    document.getElementById('kpiReservedUnits').innerText = json.kpis.reserved_units;
+    document.getElementById('kpiOverallUtil').innerText = json.kpis.overall_utilization;
+
+    // Populate group filters
+    const gSelect = document.getElementById('groupFilter');
+    gSelect.innerHTML = '<option value="all">All Rooms & IDF Closets</option>';
+    groupsData.forEach(g => {
+      gSelect.innerHTML += `<option value="${g.id}">${escapeHtml(g.name)} (${g.rack_count})</option>`;
+    });
+
+    renderRackList();
+
+    // Auto-select first rack or preserved selection
+    if (racksData.length > 0) {
+      const targetId = selectedId || currentRackId || racksData[0].id;
+      selectRack(targetId);
+    }
+  } catch (err) {
+    console.error(err);
+    toast(err.message, 'bad');
+  }
+}
+
+function renderRackList() {
+  const container = document.getElementById('rackListContainer');
+  const q = document.getElementById('rackSearch').value.toLowerCase();
+  const gid = document.getElementById('groupFilter').value;
+
+  const filtered = racksData.filter(r => {
+    const matchSearch = r.name.toLowerCase().includes(q) || (r.group_name && r.group_name.toLowerCase().includes(q));
+    const matchGroup = gid === 'all' || String(r.group_id) === String(gid);
+    return matchSearch && matchGroup;
+  });
+
+  document.getElementById('rackFilteredCount').innerText = filtered.length;
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted);font-size:12px;">No cabinets found matching filter.</div>';
+    return;
+  }
+
+  container.innerHTML = '';
+  filtered.forEach(r => {
+    const u = r.utilization;
+    const barColor = u.pct > 80 ? 'var(--bad, #ef4444)' : (u.pct > 50 ? 'var(--warn, #f59e0b)' : 'var(--ok, #10b981)');
+    const div = document.createElement('div');
+    div.className = 'rack-list-item' + (r.id === currentRackId ? ' active' : '');
+    div.onclick = () => selectRack(r.id);
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+        <strong style="font-size:14px;color:var(--text);">${escapeHtml(r.name)}</strong>
+        <span class="badge" style="font-size:10px;text-transform:uppercase;">${escapeHtml(r.role)}</span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);">${escapeHtml(r.group_name)} ${r.facility_id ? '• ' + escapeHtml(r.facility_id) : ''}</div>
+      <div class="rack-meter-bar">
+        <div class="rack-meter-fill" style="width:${u.pct}%;background:${barColor};"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:4px;">
+        <span>${u.occupied} Devices (${u.pct}%)</span>
+        <span>${u.available} RUs Free</span>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function filterRacks() {
+  renderRackList();
+}
+
+async function selectRack(rackId) {
+  currentRackId = rackId;
+  document.querySelectorAll('.rack-list-item').forEach(el => el.classList.remove('active'));
+  renderRackList();
+
+  try {
+    const res = await fetch(`/api/racks/${rackId}?face=${currentFace}`);
+    const json = await res.json();
+    if (!json.ok) return toast(json.error || 'Failed to load rack detail', 'bad');
+
+    currentRackDetail = json;
+    const r = json.rack;
+
+    document.getElementById('currentRackName').innerText = r.name;
+    document.getElementById('currentRackLocation').innerText = `${r.site_code} • ${r.group_name} ${r.facility_id ? '• ' + r.facility_id : ''}`;
+
+    const stBadge = document.getElementById('currentRackStatus');
+    stBadge.innerText = r.status.toUpperCase();
+    stBadge.style.display = 'inline-block';
+    stBadge.className = 'badge ' + (r.status === 'active' ? 'ok' : 'warn');
+
+    const roleBadge = document.getElementById('currentRackRole');
+    roleBadge.innerText = r.role.toUpperCase();
+    roleBadge.style.display = 'inline-block';
+
+    // Utilization strip
+    const u = r.utilization;
+    document.getElementById('currentRackUtilWrap').style.display = 'block';
+    document.getElementById('currentRackUtilText').innerText = `${u.pct}%`;
+    document.getElementById('currentRackUtilUnits').innerText = `${u.occupied + u.reserved} / ${u.total} RUs`;
+    document.getElementById('currentRackAvailUnits').innerText = `${u.available} Available`;
+    const uFill = document.getElementById('currentRackUtilFill');
+    uFill.style.width = `${u.pct}%`;
+    uFill.style.background = u.pct > 80 ? 'var(--bad, #ef4444)' : (u.pct > 50 ? 'var(--warn, #f59e0b)' : 'var(--ok, #10b981)');
+
+    document.getElementById('frameTitleLeft').innerText = `19" STANDARD ${r.u_height}U CABINET — ${r.name}`;
+    document.getElementById('frameTitleRight').innerText = `${currentFace.toUpperCase()} ELEVATION`;
+
+    renderElevation(currentFace === 'front' ? json.elevation_front : json.elevation_rear);
+
+    // Populate unmounted devices in Mount modal
+    const devSelect = document.getElementById('mount_device');
+    devSelect.innerHTML = '<option value="">-- Choose Device --</option>';
+    (json.unmounted_devices || []).forEach(d => {
+      devSelect.innerHTML += `<option value="${d.id}">${escapeHtml(d.name)} (${escapeHtml(d.model || d.platform)})</option>`;
+    });
+  } catch (err) {
+    console.error(err);
+    toast(err.message, 'bad');
+  }
+}
+
+function setRackFace(face) {
+  currentFace = face;
+  document.getElementById('faceFrontBtn').className = face === 'front' ? 'btn btn-sm primary' : 'btn btn-sm';
+  document.getElementById('faceRearBtn').className = face === 'rear' ? 'btn btn-sm primary' : 'btn btn-sm';
+  if (currentRackId) {
+    selectRack(currentRackId);
+  }
+}
+
+function renderElevation(elevation) {
+  const container = document.getElementById('rackUnitsBody');
+  container.innerHTML = '';
+
+  if (!elevation || elevation.length === 0) {
+    container.innerHTML = '<div style="padding:24px;text-align:center;color:#64748b;">No units in this elevation.</div>';
+    return;
+  }
+
+  elevation.forEach(slot => {
+    const row = document.createElement('div');
+    row.className = 'rack-unit-row';
+
+    let contentHtml = '';
+
+    if (slot.occupied && slot.device) {
+      const d = slot.device;
+      if (slot.is_primary) {
+        const heightStyle = slot.span > 1 ? `height:${slot.span * 28 - 2}px; position:absolute; top:0; left:32px; right:32px; z-index:10;` : '';
+        const ledClass = d.status === 'up' ? 'led-up' : (d.status === 'down' ? 'led-down' : (d.status === 'ssh-down' ? 'led-warn' : 'led-unknown'));
+        const roleClass = 'role-' + (d.role || 'access').toLowerCase();
+
+        contentHtml = `
+          <div class="rack-device ${roleClass}" style="${heightStyle}">
+            <div class="rack-device-info">
+              <span class="rack-device-status-led ${ledClass}" title="Status: ${escapeHtml(d.status)}"></span>
+              <span class="rack-device-name">
+                <a href="/devices/${d.id}" title="Click to view device backup & details">${escapeHtml(d.name)}</a>
+              </span>
+              <span class="rack-device-badge">${escapeHtml(d.model || '')}</span>
+              ${d.host ? `<span class="mono" style="font-size:10px;opacity:0.8;">${escapeHtml(d.host)}</span>` : ''}
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="rack-device-badge" style="background:rgba(0,0,0,0.3);">${escapeHtml(d.role || 'device')}</span>
+              <button class="btn btn-sm" style="padding:1px 6px;font-size:10px;background:rgba(239,68,68,0.2);color:#fca5a5;border:none;" onclick="unmountDevice(${d.id})" title="Unmount from rack">✕</button>
+            </div>
+          </div>
+        `;
+      } else {
+        contentHtml = '<div style="width:100%;height:100%;background:rgba(0,0,0,0.3);"></div>';
+      }
+    } else if (slot.reserved && slot.reservation) {
+      const res = slot.reservation;
+      if (slot.is_primary) {
+        contentHtml = `
+          <div class="rack-reservation-slot">
+            <span>RESERVED: ${escapeHtml(res.description)} ${res.user ? '(' + escapeHtml(res.user) + ')' : ''}</span>
+            <button class="btn btn-sm" style="padding:1px 6px;font-size:10px;background:rgba(245,158,11,0.2);color:#fef08a;border:none;" onclick="deleteReservation(${res.id})" title="Remove reservation">✕</button>
+          </div>
+        `;
+      } else {
+        contentHtml = '<div class="rack-reservation-slot" style="border-top:none;"></div>';
+      }
+    } else {
+      contentHtml = `
+        <div class="rack-empty-slot">
+          <span></span>
+          <div class="unit-hover-actions">
+            <button class="btn btn-sm" style="padding:2px 6px;font-size:9px;background:#1e293b;border:1px solid #334155;color:#94a3b8;" onclick="quickMountAt(${slot.unit})">+ Mount at U${slot.unit}</button>
+            <button class="btn btn-sm" style="padding:2px 6px;font-size:9px;background:#1e293b;border:1px solid #334155;color:#94a3b8;" onclick="quickReserveAt(${slot.unit})">Reserve</button>
+          </div>
+        </div>
+      `;
+    }
+
+    row.innerHTML = `
+      <div class="rack-rail">U${slot.unit}</div>
+      <div class="rack-slot-content">${contentHtml}</div>
+      <div class="rack-rail rail-right">U${slot.unit}</div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function quickMountAt(unit) {
+  document.getElementById('mount_pos').value = unit;
+  openMountModal();
+}
+
+function quickReserveAt(unit) {
+  document.getElementById('res_unit').value = unit;
+  openReserveModal();
+}
+
+function openMountModal() {
+  document.getElementById('mountModal').style.display = 'flex';
+}
+
+function openAddRackModal() {
+  const gSelect = document.getElementById('r_group');
+  gSelect.innerHTML = '<option value="">Unassigned</option>';
+  groupsData.forEach(g => {
+    gSelect.innerHTML += `<option value="${g.id}">${escapeHtml(g.name)}</option>`;
+  });
+  document.getElementById('rackModal').style.display = 'flex';
+}
+
+function openAddGroupModal() {
+  document.getElementById('groupModal').style.display = 'flex';
+}
+
+function openReserveModal() {
+  document.getElementById('reserveModal').style.display = 'flex';
+}
+
+function closeModal(id) {
+  document.getElementById(id).style.display = 'none';
+}
+
+async function saveMount(e) {
+  e.preventDefault();
+  if (!currentRackId) return toast('No active rack selected', 'bad');
+
+  const payload = {
+    device_id: parseInt(document.getElementById('mount_device').value, 10),
+    rack_id: currentRackId,
+    position: parseInt(document.getElementById('mount_pos').value, 10),
+    height: parseInt(document.getElementById('mount_height').value, 10),
+    face: document.getElementById('mount_face').value
+  };
+
+  try {
+    await api('/api/racks/mount', payload);
+    toast('Equipment mounted into rack successfully', 'ok');
+    closeModal('mountModal');
+    loadRacks(currentRackId);
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+async function unmountDevice(deviceId) {
+  if (!confirm('Unmount this equipment from the rack? (Device will remain in inventory)')) return;
+  try {
+    await api('/api/racks/unmount', { device_id: deviceId });
+    toast('Equipment unmounted', 'ok');
+    loadRacks(currentRackId);
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+async function saveRack(e) {
+  e.preventDefault();
+  const payload = {
+    name: document.getElementById('r_name').value.trim(),
+    group_id: document.getElementById('r_group').value || null,
+    facility_id: document.getElementById('r_facility').value.trim(),
+    u_height: parseInt(document.getElementById('r_uheight').value, 10),
+    role: document.getElementById('r_role').value,
+    comments: document.getElementById('r_comments').value.trim()
+  };
+
+  try {
+    const res = await api('/api/racks', payload);
+    toast('Cabinet rack created successfully', 'ok');
+    closeModal('rackModal');
+    loadRacks(res.rack.id);
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+async function saveGroup(e) {
+  e.preventDefault();
+  const payload = {
+    name: document.getElementById('g_name').value.trim(),
+    description: document.getElementById('g_desc').value.trim()
+  };
+
+  try {
+    await api('/api/rack-groups', payload);
+    toast('Room / IDF Closet created', 'ok');
+    closeModal('groupModal');
+    loadRacks(currentRackId);
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+async function saveReservation(e) {
+  e.preventDefault();
+  if (!currentRackId) return toast('No active rack selected', 'bad');
+
+  const payload = {
+    rack_id: currentRackId,
+    unit: parseInt(document.getElementById('res_unit').value, 10),
+    height: parseInt(document.getElementById('res_height').value, 10),
+    description: document.getElementById('res_desc').value.trim()
+  };
+
+  try {
+    await api('/api/racks/reservations', payload);
+    toast('Rack unit reserved successfully', 'ok');
+    closeModal('reserveModal');
+    loadRacks(currentRackId);
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+async function deleteReservation(resId) {
+  if (!confirm('Delete this rack reservation?')) return;
+  try {
+    await api(`/api/racks/reservations/${resId}/delete`, {});
+    toast('Reservation deleted', 'ok');
+    loadRacks(currentRackId);
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+async function deleteCurrentRack() {
+  if (!currentRackId) return;
+  if (!confirm('Are you sure you want to delete this cabinet? (Mounted devices will be safely unmounted to inventory)')) return;
+  try {
+    await api(`/api/racks/${currentRackId}/delete`, {});
+    toast('Cabinet deleted', 'ok');
+    currentRackId = null;
+    loadRacks();
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+</script>
+{% endblock %}
