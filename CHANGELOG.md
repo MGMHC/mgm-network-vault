@@ -4,6 +4,29 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.13.1] - 2026-11-04
+
+### Fixed
+- **Backup Engine & Nightly Scheduler Execution**:
+  - Restored essential columns on the `Job` model (`trigger`, `started`, `finished`, `total`, `done`, `ok`, `failed`, `unchanged`, `status`) aligning with the existing SQLite schema.
+  - Resolved `TypeError: 'trigger' is an invalid keyword argument for Job` causing **HTTP 500** during manual backups (`/api/backup`).
+  - Restored automated execution of scheduled nightly backups (`Schedule #1 (Nightly backup)`) and syslog-triggered backups.
+- **Admin Settings & User Authorization Access**:
+  - Restored missing `User.is_admin`, `User.can_write`, `User.can_backup`, and `User.allowed_site_ids` properties in `network_vault/models.py`.
+  - Resolved `AttributeError: 'User' object has no attribute 'is_admin'` causing **HTTP 500** on `/settings`.
+- **Credential Profiles Directory & Safe Deletion**:
+  - Reverted `Credential.devices` relationship mapping from `dynamic` to standard eager/lazy list and added robust count fallbacks in `credentials.html` and `views.py`.
+  - Resolved `TypeError: object of type 'AppenderQuery' has no len()` causing **HTTP 500** on `/credentials` and credential deletion.
+- **VLAN Port Audit & Transceiver Device Properties**:
+  - Restored `Device.is_juniper`, `Device.is_sonicwall`, and `Device.model_label` properties in `models.py`.
+  - Resolved `AttributeError: 'Device' object has no attribute 'is_juniper'` during VLAN port audit background probes (`/api/operations/vlan-audit/data`).
+- **Backup Diffs & Comparison History**:
+  - Restored `Backup.previous` property in `models.py` for config comparison links and delta calculation across dashboard, device views, and backup archives.
+- **Top Bar Title & Navigation Mojibake Glitches**:
+  - Replaced corrupted double-encoded UTF-8 characters (`Ã,Â·`, `Ã‚Â·`, `Ã¢Å“â€¢`, `Ã¢â‚¬Â¦`) in `base.html` with fail-safe standard HTML entities (`&middot;`, `&times;`, `&hellip;`).
+- **Dependencies & Imports**:
+  - Added missing `import json` in `models.py` for Virtual Chassis member and job details serialization.
+
 ## [1.13.0] - 2026-10-31
 
 ### Added
