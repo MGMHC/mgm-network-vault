@@ -245,11 +245,18 @@ class Schedule(db.Model):
 
 class Job(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    kind = db.Column(db.String(32), nullable=False)  # backup_batch | reachability | detect
-    status = db.Column(db.String(16), default="running")  # running | success | partial | error
+    kind = db.Column(db.String(32), default="backup")
+    trigger = db.Column(db.String(64), default="manual")
+    started = db.Column(db.DateTime, default=now)
+    finished = db.Column(db.DateTime)
+    total = db.Column(db.Integer, default=0)
+    done = db.Column(db.Integer, default=0)
+    ok = db.Column(db.Integer, default=0)
+    failed = db.Column(db.Integer, default=0)
+    unchanged = db.Column(db.Integer, default=0)
+    status = db.Column(db.String(16), default="running")
     created_at = db.Column(db.DateTime, default=now)
     finished_at = db.Column(db.DateTime)
-    total = db.Column(db.Integer, default=0)
     completed = db.Column(db.Integer, default=0)
     errors = db.Column(db.Integer, default=0)
     details_json = db.Column(db.Text)
