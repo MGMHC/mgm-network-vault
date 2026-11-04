@@ -231,8 +231,8 @@
     data: {
       labels,
       datasets: [
-        { label: 'Backups', data: backups, backgroundColor: 'rgba(37,54,108,0.25)', borderColor: '#25366C', borderWidth: 1.5, borderRadius: 3, order: 2 },
-        { label: 'Changes', data: changes, type: 'line', borderColor: '#C3A275', backgroundColor: 'rgba(195,162,117,0.15)', borderWidth: 1.5, pointRadius: 2, tension: 0.3, fill: true, order: 1 }
+        { label: 'Backups', data: backups, backgroundColor: 'rgba(56, 189, 248, 0.22)', borderColor: '#38bdf8', borderWidth: 1.5, borderRadius: 4, order: 2 },
+        { label: 'Changes', data: changes, type: 'line', borderColor: '#f5b301', backgroundColor: 'rgba(245, 179, 1, 0.15)', borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#f5b301', tension: 0.35, fill: true, order: 1 }
       ]
     },
     options: {
@@ -260,7 +260,7 @@
       labels: ['Up', 'SSH only', 'Down', 'Unknown'],
       datasets: [{
         data: [d.up, d.ssh_only, d.down, d.unknown],
-        backgroundColor: ['#12805c', '#8A5A00', '#c0262d', '#ccc'],
+        backgroundColor: ['#34d399', '#fbbf24', '#f87171', 'rgba(148, 163, 184, 0.4)'],
         borderWidth: 0, hoverOffset: 4
       }]
     },

@@ -4,6 +4,18 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 **PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
 
+## [1.13.2] - 2026-11-04
+
+### Added
+- **Liquid Glass Studio UI Theme & Ambient Backdrop**:
+  - Implemented modern visionOS / Apple-inspired **Liquid Glass Studio** interface styling across the entire suite.
+  - Added illuminated neon teal and deep cyan keyboard ambient backdrop (bg-liquid.jpg) with radial lighting and high-contrast dark frosted overlay.
+  - Multi-pass frosted glass cards and panels with backdrop-filter: blur(28px) saturate(190%) and specular rim refraction highlights (box-shadow: inset 0 1px 0 rgba(255,255,255,0.18)).
+  - Translucent floating top dock and contextual sub-navigation bars with glowing cyan pill tabs.
+  - Liquid glass capsule badges with neon glows and gradient primary action buttons.
+  - Upgraded dashboard Chart.js telemetry: luminous cyan backup bars, electric gold config change curves, and neon reachability donut segments.
+  - Deep frosted glass floating operation progress modals and port locator dock widgets.
+
 ## [1.13.1] - 2026-11-04
 
 ### Fixed
