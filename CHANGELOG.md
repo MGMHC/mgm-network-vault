@@ -3,6 +3,20 @@
 All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](https://semver.org):
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 
+## [1.13.4] - 2026-11-04
+
+### Fixed
+- **Date Selector & Calendar Popup Styling**:
+  - Added `<meta name="color-scheme" content="dark">` to `base.html` and `color-scheme: dark;` to `:root`, `html`, and `input[type="date"]`.
+  - Fixed native browser calendar dialog appearing in bright white by forcing the browser to render the calendar in native dark mode matching the Liquid Glass studio palette.
+  - Styled `-webkit-calendar-picker-indicator` with luminous cyan glow and invert filters.
+- **Dropdown & Filter Menus Liquid Glass Styling**:
+  - Restyled all `<select>` inputs with dark translucent glass backgrounds (`rgba(9, 15, 30, 0.68)`), frosted glass blur, specular rim highlights, and glowing cyan SVG chevrons.
+  - Replaced native grey dropdown menus with dark midnight obsidian (`#0b1426`) option styling.
+- **Top Navigation Back Button Vertical Alignment**:
+  - Removed legacy `margin-bottom: 14px` rule on `.back-btn` that was pushing the button upward out of alignment.
+  - Standardized `.back-btn`, `.nav-brand`, and `.nav-item` to identical 32px heights and vertical flex alignment for pixel-perfect linear centering.
+
 ## [1.13.3] - 2026-11-04
 
 ### Fixed

@@ -1,5 +1,6 @@
 /* MGM brand palette & Liquid Glass design tokens (inspired by liquid-glass-studio) */
 :root {
+  color-scheme: dark;
   --mgm-blue: #38bdf8; --mgm-gold: #38bdf8; --mgm-light-gold: #7dd3fc;
   --mgm-chrome: #0284c7; --mgm-yellow: #f59e0b; --mgm-grey: #94a3b8;
 
@@ -78,7 +79,7 @@
   }
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; }
+html, body { margin: 0; color-scheme: dark; }
 body {
   font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   background-color: #060a14;
@@ -161,14 +162,17 @@ h3 { font-size: 14px; margin: 0 0 8px; font-weight: 650; }
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  height: 32px;
 }
 .nav-brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
+  height: 32px;
+  box-sizing: border-box;
   text-decoration: none;
   background: rgba(255, 255, 255, 0.95);
-  padding: 4px 9px;
+  padding: 0 10px;
   border-radius: 9px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.8);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -179,7 +183,7 @@ h3 { font-size: 14px; margin: 0 0 8px; font-weight: 650; }
   box-shadow: 0 4px 14px rgba(56, 189, 248, 0.4);
 }
 .nav-brand-logo {
-  height: 25px;
+  height: 22px;
   width: auto;
   display: block;
 }
@@ -195,29 +199,48 @@ h3 { font-size: 14px; margin: 0 0 8px; font-weight: 650; }
 }
 
 /* Back Button */
-.back-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 9px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #ffffff;
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  transition: all 0.15s ease;
+.back-btn,
+.nav-brand-group .back-btn,
+.top-nav-bar .back-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  height: 32px !important;
+  padding: 0 12px !important;
+  border-radius: 9px !important;
+  box-sizing: border-box !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  color: #f1f5f9 !important;
+  font: inherit !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+  cursor: pointer !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  vertical-align: middle !important;
 }
-.back-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.28);
-  transform: translateX(-2px);
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+.back-btn svg,
+.nav-brand-group .back-btn svg,
+.top-nav-bar .back-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+.back-btn:hover,
+.nav-brand-group .back-btn:hover,
+.top-nav-bar .back-btn:hover {
+  background: rgba(56, 189, 248, 0.18) !important;
+  border-color: rgba(56, 189, 248, 0.45) !important;
+  color: #38bdf8 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
 }
 
 /* Top Nav Links */
@@ -227,19 +250,25 @@ h3 { font-size: 14px; margin: 0 0 8px; font-weight: 650; }
   gap: 4px;
   flex: 0 0 auto;
   flex-shrink: 0;
+  height: 32px;
 }
 .top-nav-links .nav-item {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  padding: 6px 10px;
-  border-radius: 8px;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 11px;
+  border-radius: 9px;
   color: var(--side-text);
   font-size: 12.5px;
   font-weight: 600;
+  line-height: 1;
   text-decoration: none;
   white-space: nowrap;
   transition: all 0.15s ease;
+  margin: 0;
 }
 .top-nav-links .nav-item svg {
   width: 14px;
@@ -436,7 +465,7 @@ h3 { font-size: 14px; margin: 0 0 8px; font-weight: 650; }
   white-space: nowrap;
 }
 .top-nav-right .site-select option {
-  background: #1C2A55;
+  background: #0b1426;
   color: #ffffff;
 }
 .site-badge-single {
@@ -706,7 +735,7 @@ h3 { font-size: 14px; margin: 0 0 8px; font-weight: 650; }
   padding: 2px 0;
 }
 .mobile-site-select option {
-  background: #1C2A55;
+  background: #0b1426;
   color: #ffffff;
 }
 
@@ -1303,15 +1332,74 @@ label { display: block; font-weight: 600; font-size: 12.5px; margin-bottom: 5px;
 .field { margin-bottom: 15px; }
 .field .help { color: var(--muted); font-size: 12px; margin-top: 4px; }
 input[type=text], input[type=password], input[type=email], input[type=number], input[type=date], input[type=time], input[type=search], select, textarea {
-  width: 100%; padding: 8px 12px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 10px; background: rgba(9, 15, 30, 0.65); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); color: #f8fafc; font: inherit; transition: border-color .15s ease, box-shadow .15s ease; box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35); }
-input:focus, select:focus, textarea:focus { outline: none; border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25), inset 0 1px 2px rgba(0, 0, 0, 0.25); }
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 9px;
+  background: rgba(9, 15, 30, 0.68);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: #f8fafc;
+  font: inherit;
+  font-size: 13px;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 2px 4px rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.28), inset 0 1px 2px rgba(0, 0, 0, 0.25);
+  background-color: rgba(11, 18, 38, 0.85);
+}
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2338bdf8' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 10px center !important;
+  background-size: 13px 13px !important;
+  padding-right: 32px !important;
+}
+select option, select optgroup {
+  background-color: #0b1426 !important;
+  color: #f1f5f9 !important;
+  padding: 10px 14px;
+}
+input[type="date"], input[type="time"] {
+  color-scheme: dark !important;
+  cursor: pointer;
+}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.85) hue-rotate(180deg) brightness(1.25);
+  cursor: pointer;
+  opacity: 0.85;
+  padding: 2px;
+  border-radius: 4px;
+  transition: opacity .15s ease, filter .15s ease;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  filter: invert(1) drop-shadow(0 0 6px rgba(56, 189, 248, 0.9));
+}
 textarea { min-height: 70px; }
 .check { display: flex; gap: 8px; align-items: center; font-weight: 500; font-size: 13.5px; margin-bottom: 8px; }
 .check input { width: 16px; height: 16px; min-width: 16px; flex-shrink: 0; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0 16px; }
 .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; padding: 12px 18px; border-bottom: 1px solid rgba(255, 255, 255, 0.10); background: rgba(10, 18, 36, 0.55); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
 .filters > * { width: auto; }
-.filters input:not([type="checkbox"]):not([type="radio"]), .filters select { width: auto; min-width: 130px; padding: 6px 10px; }
+.filters input:not([type="checkbox"]):not([type="radio"]), .filters select {
+  width: auto;
+  min-width: 130px;
+  height: 35px;
+  box-sizing: border-box;
+  padding: 6px 12px;
+  border-radius: 8px;
+}
 .filters input[type="search"] { min-width: 160px; }
 .filters input[type="checkbox"], .filters input[type="radio"] { width: auto; min-width: 0; padding: 0; }
 
@@ -1525,15 +1613,15 @@ pre.code { background: var(--panel-2); border: 1px solid var(--border); border-r
 .layout.sidebar-collapsed .nav a { justify-content: center; padding: 10px 0; border-radius: 8px; width: 100%; }
 .layout.sidebar-collapsed .sidebar-toggle svg { transform: rotate(180deg); }
 
-/* ── Back button ─────────────────────────────────────────────────────────── */
-.back-btn {
+/* ── Back button (inline in page content) ────────────────────────────────── */
+.main > .back-btn {
   display: inline-flex; align-items: center; gap: 5px;
   margin-bottom: 14px;
   padding: 5px 11px; border-radius: 7px; border: 1px solid var(--border);
   background: var(--panel); color: var(--muted); font: inherit; font-size: 12.5px;
   cursor: pointer; transition: color .15s, background .15s;
 }
-.back-btn:hover { color: var(--text); background: var(--panel-2); }
+.main > .back-btn:hover { color: var(--text); background: var(--panel-2); }
 
 /* ── Dashboard chart grid ────────────────────────────────────────────────── */
 .dash-charts { margin-bottom: 18px; }
