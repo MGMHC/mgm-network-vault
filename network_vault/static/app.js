@@ -580,4 +580,198 @@ function pollGlobalLocatorStatus(runId) {
   } catch (e) {}
 })();
 
+/* ── ObaidQatan Liquid Glass Select Enhancer ────────────────────────────── */
+function initLiquidSelects() {
+  const selects = document.querySelectorAll('.filters select, select.liquid-select');
+  selects.forEach(select => {
+    if (select.dataset.lgEnhanced) return;
+    select.dataset.lgEnhanced = 'true';
+
+    // Build custom liquid glass wrapper
+    const wrapper = document.createElement('div');
+    wrapper.className = 'lg-select-wrapper';
+
+    // Position next to select and hide native select
+    select.parentNode.insertBefore(wrapper, select);
+    wrapper.appendChild(select);
+    select.style.position = 'absolute';
+    select.style.opacity = '0';
+    select.style.pointerEvents = 'none';
+    select.style.width = '0';
+    select.style.height = '0';
+    select.style.margin = '0';
+    select.style.padding = '0';
+
+    // Find current selected option
+    const currentOpt = select.options[select.selectedIndex] || select.options[0];
+    const initialText = currentOpt ? currentOpt.textContent : '';
+
+    // Trigger button
+    const trigger = document.createElement('div');
+    trigger.className = 'lg-select-trigger';
+    trigger.setAttribute('tabindex', '0');
+    trigger.setAttribute('role', 'combobox');
+    trigger.setAttribute('aria-expanded', 'false');
+
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'lg-select-label-text';
+    labelSpan.textContent = initialText;
+
+    const chevronSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    chevronSvg.setAttribute('class', 'lg-select-chevron');
+    chevronSvg.setAttribute('viewBox', '0 0 24 24');
+    chevronSvg.setAttribute('fill', 'none');
+    chevronSvg.setAttribute('stroke', 'currentColor');
+    chevronSvg.setAttribute('stroke-width', '2.5');
+    chevronSvg.setAttribute('stroke-linecap', 'round');
+    chevronSvg.setAttribute('stroke-linejoin', 'round');
+    const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    polyline.setAttribute('points', '6 9 12 15 18 9');
+    chevronSvg.appendChild(polyline);
+
+    trigger.appendChild(labelSpan);
+    trigger.appendChild(chevronSvg);
+    wrapper.appendChild(trigger);
+
+    // Popover
+    const popover = document.createElement('div');
+    popover.className = 'lg-select-popover';
+
+    // Search box if more than 6 options
+    let searchInput = null;
+    if (select.options.length > 6) {
+      const searchBox = document.createElement('div');
+      searchBox.className = 'lg-select-search';
+      searchInput = document.createElement('input');
+      searchInput.type = 'text';
+      searchInput.placeholder = 'Search options…';
+      searchInput.setAttribute('autocomplete', 'off');
+      searchBox.appendChild(searchInput);
+      popover.appendChild(searchBox);
+    }
+
+    const optionsList = document.createElement('div');
+    optionsList.className = 'lg-select-options';
+
+    const optionElements = [];
+    Array.from(select.options).forEach((opt, idx) => {
+      const optEl = document.createElement('div');
+      optEl.className = 'lg-select-option' + (opt.selected ? ' selected' : '');
+      optEl.textContent = opt.textContent;
+      optEl.dataset.value = opt.value;
+      optEl.dataset.index = idx;
+
+      optEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        select.value = opt.value;
+        labelSpan.textContent = opt.textContent;
+        optionElements.forEach(el => el.classList.remove('selected'));
+        optEl.classList.add('selected');
+        closePopover();
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+
+      optionsList.appendChild(optEl);
+      optionElements.push(optEl);
+    });
+
+    popover.appendChild(optionsList);
+    wrapper.appendChild(popover);
+
+    function openPopover() {
+      // Close any other open select popovers
+      document.querySelectorAll('.lg-select-wrapper.open').forEach(w => {
+        if (w !== wrapper) {
+          w.classList.remove('open');
+          w.querySelector('.lg-select-trigger')?.setAttribute('aria-expanded', 'false');
+        }
+      });
+      wrapper.classList.add('open');
+      trigger.setAttribute('aria-expanded', 'true');
+      if (searchInput) {
+        searchInput.value = '';
+        optionElements.forEach(el => el.style.display = '');
+        setTimeout(() => searchInput.focus(), 60);
+      }
+    }
+
+    function closePopover() {
+      wrapper.classList.remove('open');
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (wrapper.classList.contains('open')) {
+        closePopover();
+      } else {
+        openPopover();
+      }
+    });
+
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        const query = searchInput.value.toLowerCase().trim();
+        optionElements.forEach(el => {
+          const match = el.textContent.toLowerCase().includes(query);
+          el.style.display = match ? '' : 'none';
+        });
+      });
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          closePopover();
+          trigger.focus();
+        }
+      });
+    }
+
+    trigger.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        openPopover();
+      } else if (e.key === 'Escape') {
+        closePopover();
+      }
+    });
+
+    select.addEventListener('change', () => {
+      const selOpt = select.options[select.selectedIndex];
+      if (selOpt) {
+        labelSpan.textContent = selOpt.textContent;
+        optionElements.forEach(el => {
+          el.classList.toggle('selected', el.dataset.value === selOpt.value);
+        });
+      }
+    });
+  });
+}
+
+// Close all custom select dropdowns on outside click
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.lg-select-wrapper')) {
+    document.querySelectorAll('.lg-select-wrapper.open').forEach(w => {
+      w.classList.remove('open');
+      w.querySelector('.lg-select-trigger')?.setAttribute('aria-expanded', 'false');
+    });
+  }
+});
+
+// Close on Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.lg-select-wrapper.open').forEach(w => {
+      w.classList.remove('open');
+      w.querySelector('.lg-select-trigger')?.setAttribute('aria-expanded', 'false');
+    });
+  }
+});
+
+// Initialize on DOM load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initLiquidSelects);
+} else {
+  initLiquidSelects();
+}
+
+
 

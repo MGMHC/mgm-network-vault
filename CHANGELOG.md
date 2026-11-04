@@ -3,6 +3,19 @@
 All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](https://semver.org):
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 
+## [1.13.5] - 2026-11-04
+
+### Added
+- **ObaidQatan Liquid Glass Component Library System**:
+  - Re-architected glassmorphism effects across all pages based on [ObaidQatan/liquid-glass-component-library](https://github.com/ObaidQatan/liquid-glass-component-library).
+  - Ambient refractive fluid glow orbs in the background driving continuous live light refraction through frosted glass surfaces.
+  - Multi-stop specular glass gradients on panels, cards, modals, and nav dock (linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(255, 255, 255, 0.02) 100%)).
+  - Top highlight sheen lines (linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent)) along the top border of cards, navigation bars, dropdowns, and modals.
+  - Dual-tier rim reflections with specular top edge and bottom shadow rim.
+  - Apple VisionOS fluid spring transitions (cubic-bezier(0.16, 1, 0.3, 1)) for page load entrances, card reveals, dropdown menus, and modal dialogs.
+  - Custom Liquid Glass Select component (.lg-select) providing floating frosted glass dropdowns with search filtering, active selection indicators, and smooth spring animations.
+  - Frosted glass modal backdrops (backdrop-filter: blur(24px) saturate(190%)) with spring scaling entrances (modal-liquid-enter).
+
 ## [1.13.4] - 2026-11-04
 
 ### Fixed
