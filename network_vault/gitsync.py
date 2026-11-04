@@ -670,7 +670,7 @@ def full_sync(app, user=None):
                             n = 0
                             devices = site.devices.all()
                             for d in devices:
-                                b = d.backups.first()
+                                b = d.backups.order_by(Backup.created_at.desc()).first()
                                 if b:
                                     _write_device_files(d, b, rd)
                                     sha = _commit(_message(d, b), date=b.created_at, repo_dir=rd)

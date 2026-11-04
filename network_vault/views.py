@@ -1812,7 +1812,7 @@ def migrate_export():
     tmp.mkdir(exist_ok=True)
     out = tmp / f"network-vault-export_{now():%Y%m%d-%H%M%S}.nvault"
     try:
-        m = portable.export_archive(BASE_DIR, out, pw, config.CONFIG_FILE)
+        m = portable.export_archive(BASE_DIR, out, pw, config.CONFIG_FILE, backup_dir=BACKUP_DIR)
     except portable.ExportError as e:
         flash(str(e), "error")
         return redirect(url_for("web.migrate"))

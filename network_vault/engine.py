@@ -528,7 +528,7 @@ def backup_device(device_id, trigger="manual", user=None):
         apply_facts(device, data["facts"], data["vc"], actor)
 
         digest = config_hash(data["config"])
-        prev = device.backups.first()
+        prev = device.backups.order_by(Backup.created_at.desc()).first()
         changed = prev is not None and prev.sha256 != digest  # first backup is a baseline, not a change
         added = removed = 0
         if prev and changed:
@@ -588,13 +588,13 @@ def backup_device(device_id, trigger="manual", user=None):
 def apply_retention(device):
     keep = get_int("retention_count")
     days = get_int("retention_days")
-    q = device.backups.filter(Backup.pinned.is_(False))
+    q = device.backups.filter(Backup.pinned.is_(False)).order_by(Backup.created_at.desc())
     victims = []
     if keep > 0:
         victims += q.offset(keep).all()
     if days > 0:
         victims += q.filter(Backup.created_at < now() - timedelta(days=days)).all()
-    latest = device.backups.first()
+    latest = device.backups.order_by(Backup.created_at.desc()).first()
     for b in {v.id: v for v in victims}.values():
         if latest and b.id == latest.id:
             continue

@@ -18,7 +18,7 @@ BASE_DIR.mkdir(parents=True, exist_ok=True)
 apply_pending_restore(BASE_DIR)
 # restored.json is left by the swap (here or by "manage.py import") so the app can log it once
 RESTORED = json.loads((BASE_DIR / "restored.json").read_text(encoding="utf-8"))     if (BASE_DIR / "restored.json").exists() else None
-BACKUP_DIR = BASE_DIR / "backups"
+BACKUP_DIR = config.backup_dir()
 BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
 

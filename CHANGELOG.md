@@ -2,7 +2,20 @@
 
 All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](https://semver.org):
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
-**PATCH** = bug fix. The version is in `network_vault/version.py` and shown in the app's sidebar.
+
+## [1.13.3] - 2026-11-04
+
+### Fixed
+- **Backup Retention & Disappearing Backups**:
+  - Configured explicit descending ordering (`order_by='desc(Backup.created_at)'`) on the `Device.backups` relationship and retention pruning queries.
+  - Resolved an inverted retention issue where devices that reached the retention limit (e.g. 20 backups) were purging newly taken backups instead of the oldest backups.
+  - Ensured `prev = device.backups.order_by(Backup.created_at.desc()).first()` correctly retrieves the most recent backup baseline for config change diffing.
+
+### Added
+- **Configurable Backup Local Directory**:
+  - Added dedicated `backup_dir` setting in `config.toml` (`D:/NetworkVault/Config-Backups`) and `network_vault/config.py`.
+  - Migrated all 3,359 existing stored device configuration archives seamlessly from `C:\MGM\mgm-network-vault\data\backups` to `D:\NetworkVault\Config-Backups`.
+  - Updated storage telemetry and backup exports to operate directly with the custom backup location.
 
 ## [1.13.2] - 2026-11-04
 

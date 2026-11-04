@@ -156,7 +156,7 @@ class Device(db.Model):
     last_backup_status = db.Column(db.String(16))  # success | error | changed
     last_backup_error = db.Column(db.Text)
 
-    backups = db.relationship("Backup", backref="device", cascade="all, delete-orphan", lazy="dynamic")
+    backups = db.relationship("Backup", backref="device", cascade="all, delete-orphan", lazy="dynamic", order_by="desc(Backup.created_at)")
 
     # DCIM Rack elevation fields
     rack_id = db.Column(db.Integer, db.ForeignKey("dcim_rack.id", ondelete="SET NULL"), nullable=True, index=True)

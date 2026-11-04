@@ -105,11 +105,12 @@ def _counts(db_path):
         con.close()
 
 
-def export_archive(base_dir, out_path, passphrase, config_file=None):
+def export_archive(base_dir, out_path, passphrase, config_file=None, backup_dir=None):
     """Write an encrypted export of the data folder to out_path. Returns the manifest."""
     if len(passphrase or "") < 10:
         raise ExportError("Use a passphrase of at least 10 characters.")
     base_dir = Path(base_dir)
+    bk_dir = Path(backup_dir) if backup_dir else (base_dir / "backups")
     tmp = base_dir / "tmp"
     tmp.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
@@ -123,7 +124,7 @@ def export_archive(base_dir, out_path, passphrase, config_file=None):
         src.close()
         dst.close()
 
-        backup_files = [p for p in (base_dir / "backups").rglob("*") if p.is_file()]
+        backup_files = [p for p in bk_dir.rglob("*") if p.is_file()] if bk_dir.exists() else []
         manifest = {
             "format": FORMAT, "app": APP_NAME, "app_version": __version__,
             "created": datetime.now().isoformat(timespec="seconds"),
@@ -136,7 +137,7 @@ def export_archive(base_dir, out_path, passphrase, config_file=None):
             for name in ("secret.key", "flask.key"):
                 z.write(base_dir / name, f"data/{name}")
             for p in backup_files:
-                z.write(p, "data/" + p.relative_to(base_dir).as_posix())
+                z.write(p, "data/backups/" + p.relative_to(bk_dir).as_posix())
             if config_file and Path(config_file).exists():
                 z.write(config_file, "config.toml")
         _encrypt_file(zip_path, out_path, passphrase)

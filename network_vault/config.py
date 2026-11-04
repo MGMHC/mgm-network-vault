@@ -14,6 +14,7 @@ DEFAULTS = {
     "host": "0.0.0.0",          # listen address (0.0.0.0 = all network cards)
     "port": 8080,
     "data_dir": "data",         # database, encryption keys, backups (relative to the app folder)
+    "backup_dir": "",           # local directory for configuration backups (empty = data_dir/backups)
     "threads": 12,              # web server worker threads
     "behind_proxy": False,      # true when published through IIS / nginx / a load balancer
     "secure_cookies": False,    # true when users reach the app over HTTPS
@@ -49,4 +50,12 @@ def get(key):
 def data_dir():
     p = Path(get("data_dir"))
     return p if p.is_absolute() else APP_ROOT / p
+
+
+def backup_dir():
+    raw = get("backup_dir")
+    if raw and str(raw).strip():
+        p = Path(str(raw).strip())
+        return p if p.is_absolute() else APP_ROOT / p
+    return data_dir() / "backups"
 
