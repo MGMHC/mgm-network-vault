@@ -1547,6 +1547,8 @@ textarea { min-height: 70px; }
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%), rgba(8, 14, 28, 0.65);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+  position: relative;
+  z-index: 25;
 }
 .filters > * { width: auto; }
 .filters input:not([type="checkbox"]):not([type="radio"]), .filters select {
@@ -1839,30 +1841,29 @@ pre.code { background: var(--panel-2); border: 1px solid var(--border); border-r
   transform: rotate(180deg);
 }
 
-/* Floating Popover */
+/* Floating Popover (Fixed in Viewport to Never Go Behind Headers) */
 .lg-select-popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  min-width: 100%;
-  max-width: 320px;
-  z-index: 999;
+  position: fixed;
+  z-index: 999999;
+  min-width: 180px;
+  max-width: 340px;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.06) 50%, rgba(255, 255, 255, 0.02) 100%), rgba(7, 13, 28, 0.94);
   backdrop-filter: blur(40px) saturate(220%);
   -webkit-backdrop-filter: blur(40px) saturate(220%);
-  border: 1px solid rgba(255, 255, 255, 0.20);
-  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 16px;
   box-shadow: 
     inset 0 1.5px 1px rgba(255, 255, 255, 0.40),
-    inset 0 -1px 2px rgba(0, 0, 0, 0.3),
-    0 24px 60px rgba(0, 0, 0, 0.82),
-    0 0 28px rgba(56, 189, 248, 0.2);
-  padding: 6px;
-  display: none;
+    inset 0 -1px 2px rgba(0, 0, 0, 0.35),
+    0 24px 60px rgba(0, 0, 0, 0.85),
+    0 0 32px rgba(56, 189, 248, 0.22);
+  padding: 8px;
+  display: flex;
   flex-direction: column;
   gap: 3px;
   transform-origin: top center;
   overflow: hidden;
+  animation: dd-liquid-enter 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .lg-select-popover::before {
   content: "";
@@ -1871,10 +1872,6 @@ pre.code { background: var(--panel-2); border: 1px solid var(--border); border-r
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
   pointer-events: none;
-}
-.lg-select-wrapper.open .lg-select-popover {
-  display: flex;
-  animation: dd-liquid-enter 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .lg-select-search {
@@ -1932,6 +1929,224 @@ pre.code { background: var(--panel-2); border: 1px solid var(--border); border-r
   font-weight: 700;
   color: #38bdf8;
   font-size: 12px;
+}
+
+/* ── Liquid Glass Custom Calendar Component (inspired by ObaidQatan/LiquidGlassCalendar) ── */
+.lg-date-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+.lg-date-input {
+  cursor: pointer;
+  padding-right: 36px !important;
+}
+.lg-date-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #38bdf8;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+.lg-date-btn:hover {
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.15);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+}
+
+/* Floating Rounded Liquid Glass Calendar */
+.lg-calendar-popover {
+  position: fixed;
+  z-index: 999999;
+  width: 290px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.06) 50%, rgba(255, 255, 255, 0.02) 100%), rgba(8, 14, 28, 0.95);
+  backdrop-filter: blur(40px) saturate(220%);
+  -webkit-backdrop-filter: blur(40px) saturate(220%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 20px !important;
+  box-shadow: 
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.45),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.35),
+    0 28px 70px rgba(0, 0, 0, 0.88),
+    0 0 32px rgba(56, 189, 248, 0.25);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+  font-family: inherit;
+  transform-origin: top center;
+  overflow: hidden;
+  animation: dd-liquid-enter 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.lg-calendar-popover::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  pointer-events: none;
+}
+
+/* Header */
+.lg-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.lg-cal-month-year {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: 0.01em;
+}
+.lg-cal-nav-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.lg-cal-nav-btn:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #ffffff;
+  transform: scale(1.08);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.3);
+}
+.lg-cal-nav-btn:active {
+  transform: scale(0.92);
+}
+
+/* Weekday Grid */
+.lg-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 6px;
+  text-align: center;
+}
+.lg-cal-weekdays span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  padding: 4px 0;
+}
+
+/* Days Grid */
+.lg-cal-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.lg-cal-day {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: #e2e8f0;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  background: transparent;
+}
+.lg-cal-day:hover:not(.disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  transform: scale(1.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.lg-cal-day:active:not(.disabled) {
+  transform: scale(0.95);
+}
+.lg-cal-day.empty {
+  cursor: default;
+  pointer-events: none;
+}
+.lg-cal-day.disabled {
+  color: rgba(255, 255, 255, 0.25);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.lg-cal-day.today::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 2px;
+  border-radius: 99px;
+  background: #38bdf8;
+  box-shadow: 0 0 6px #38bdf8;
+}
+.lg-cal-day.selected {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.95) 0%, rgba(37, 99, 235, 0.95) 100%) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  box-shadow: 
+    0 4px 14px rgba(56, 189, 248, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+  transform: scale(1.04);
+}
+
+/* Footer */
+.lg-cal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.lg-cal-foot-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #38bdf8;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 7px;
+  transition: all 0.15s ease;
+}
+.lg-cal-foot-btn:hover {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #7dd3fc;
+}
+.lg-cal-clear {
+  color: #94a3b8;
+}
+.lg-cal-clear:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
 }
 
 @media (max-width: 1100px) { .g2, .g3 { grid-template-columns: 1fr; } }

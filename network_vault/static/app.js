@@ -580,7 +580,21 @@ function pollGlobalLocatorStatus(runId) {
   } catch (e) {}
 })();
 
-/* ── ObaidQatan Liquid Glass Select Enhancer ────────────────────────────── */
+/* ── ObaidQatan Liquid Glass Popovers & Selects ──────────────────────────── */
+let activeLiquidSelect = null;
+let activeLiquidCalendar = null;
+
+function closeAllLiquidPopovers() {
+  if (activeLiquidSelect) {
+    activeLiquidSelect.close();
+    activeLiquidSelect = null;
+  }
+  if (activeLiquidCalendar) {
+    activeLiquidCalendar.close();
+    activeLiquidCalendar = null;
+  }
+}
+
 function initLiquidSelects() {
   const selects = document.querySelectorAll('.filters select, select.liquid-select');
   selects.forEach(select => {
@@ -591,7 +605,7 @@ function initLiquidSelects() {
     const wrapper = document.createElement('div');
     wrapper.className = 'lg-select-wrapper';
 
-    // Position next to select and hide native select
+    // Position next to select and visually hide native select
     select.parentNode.insertBefore(wrapper, select);
     wrapper.appendChild(select);
     select.style.position = 'absolute';
@@ -633,9 +647,10 @@ function initLiquidSelects() {
     trigger.appendChild(chevronSvg);
     wrapper.appendChild(trigger);
 
-    // Popover
+    // Floating Popover (appended directly to document.body so it NEVER renders behind headers or tables)
     const popover = document.createElement('div');
     popover.className = 'lg-select-popover';
+    popover.style.display = 'none';
 
     // Search box if more than 6 options
     let searchInput = null;
@@ -676,28 +691,61 @@ function initLiquidSelects() {
     });
 
     popover.appendChild(optionsList);
-    wrapper.appendChild(popover);
+
+    function positionPopover() {
+      const rect = trigger.getBoundingClientRect();
+      const popoverWidth = Math.max(rect.width, 180);
+      let left = rect.left;
+      if (left + popoverWidth > window.innerWidth - 12) {
+        left = Math.max(12, window.innerWidth - popoverWidth - 12);
+      }
+      let top = rect.bottom + 6;
+      // Flip upward if not enough room below but room above
+      const spaceBelow = window.innerHeight - rect.bottom;
+      if (spaceBelow < 260 && rect.top > 260) {
+        top = Math.max(12, rect.top - popover.offsetHeight - 6);
+      }
+      popover.style.top = top + 'px';
+      popover.style.left = left + 'px';
+      popover.style.minWidth = popoverWidth + 'px';
+    }
 
     function openPopover() {
-      // Close any other open select popovers
-      document.querySelectorAll('.lg-select-wrapper.open').forEach(w => {
-        if (w !== wrapper) {
-          w.classList.remove('open');
-          w.querySelector('.lg-select-trigger')?.setAttribute('aria-expanded', 'false');
-        }
-      });
+      closeAllLiquidPopovers();
+
       wrapper.classList.add('open');
       trigger.setAttribute('aria-expanded', 'true');
+
+      // Append directly to document.body so it NEVER gets trapped behind sticky headers or table rows
+      document.body.appendChild(popover);
+      popover.style.display = 'flex';
+      positionPopover();
+
+      activeLiquidSelect = {
+        wrapper,
+        trigger,
+        popover,
+        positionPopover,
+        close: closePopover,
+      };
+
       if (searchInput) {
         searchInput.value = '';
         optionElements.forEach(el => el.style.display = '');
-        setTimeout(() => searchInput.focus(), 60);
+        setTimeout(() => searchInput.focus(), 50);
       }
     }
 
     function closePopover() {
       wrapper.classList.remove('open');
       trigger.setAttribute('aria-expanded', 'false');
+      popover.style.display = 'none';
+      if (popover.parentNode === document.body) {
+        document.body.removeChild(popover);
+      }
+      if (activeLiquidSelect && activeLiquidSelect.wrapper === wrapper) {
+        activeLiquidSelect = null;
+      }
     }
 
     trigger.addEventListener('click', (e) => {
@@ -746,32 +794,306 @@ function initLiquidSelects() {
   });
 }
 
-// Close all custom select dropdowns on outside click
-document.addEventListener('click', (e) => {
-  if (!e.target.closest('.lg-select-wrapper')) {
-    document.querySelectorAll('.lg-select-wrapper.open').forEach(w => {
-      w.classList.remove('open');
-      w.querySelector('.lg-select-trigger')?.setAttribute('aria-expanded', 'false');
+/* ── ObaidQatan Liquid Glass Rounded Calendar Datepicker ─────────────────── */
+const CAL_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+const CAL_WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+function parseISODate(str) {
+  if (!str) return null;
+  const parts = str.split('-');
+  if (parts.length === 3) {
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+      return new Date(y, m, d);
+    }
+  }
+  return null;
+}
+
+function formatISODate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function initLiquidDatepickers() {
+  const dateInputs = document.querySelectorAll('input[type="date"]');
+  dateInputs.forEach(input => {
+    if (input.dataset.lgDateEnhanced) return;
+    input.dataset.lgDateEnhanced = 'true';
+
+    // Change to type="text" to completely prevent the native square OS picker
+    input.type = 'text';
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('placeholder', 'YYYY-MM-DD');
+    input.classList.add('lg-date-input');
+
+    // Create wrapper
+    const wrapper = document.createElement('div');
+    wrapper.className = 'lg-date-wrapper';
+    input.parentNode.insertBefore(wrapper, input);
+    wrapper.appendChild(input);
+
+    // Create calendar trigger button
+    const calBtn = document.createElement('button');
+    calBtn.type = 'button';
+    calBtn.className = 'lg-date-btn';
+    calBtn.setAttribute('title', 'Open Calendar');
+    calBtn.setAttribute('tabindex', '-1');
+    calBtn.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3" ry="3"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`;
+    wrapper.appendChild(calBtn);
+
+    // Create floating calendar popover
+    const calPopover = document.createElement('div');
+    calPopover.className = 'lg-calendar-popover';
+    calPopover.style.display = 'none';
+
+    let viewDate = parseISODate(input.value) || new Date();
+
+    function renderCalendar() {
+      calPopover.innerHTML = '';
+
+      const year = viewDate.getFullYear();
+      const month = viewDate.getMonth();
+      const today = new Date();
+      const selectedDate = parseISODate(input.value);
+
+      // Header (Prev, Title, Next)
+      const header = document.createElement('div');
+      header.className = 'lg-cal-header';
+
+      const prevBtn = document.createElement('button');
+      prevBtn.type = 'button';
+      prevBtn.className = 'lg-cal-nav-btn lg-cal-prev';
+      prevBtn.setAttribute('title', 'Previous Month');
+      prevBtn.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`;
+      prevBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        viewDate = new Date(year, month - 1, 1);
+        renderCalendar();
+      });
+
+      const title = document.createElement('span');
+      title.className = 'lg-cal-month-year';
+      title.textContent = `${CAL_MONTHS[month]} ${year}`;
+
+      const nextBtn = document.createElement('button');
+      nextBtn.type = 'button';
+      nextBtn.className = 'lg-cal-nav-btn lg-cal-next';
+      nextBtn.setAttribute('title', 'Next Month');
+      nextBtn.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+      nextBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        viewDate = new Date(year, month + 1, 1);
+        renderCalendar();
+      });
+
+      header.appendChild(prevBtn);
+      header.appendChild(title);
+      header.appendChild(nextBtn);
+      calPopover.appendChild(header);
+
+      // Weekday Row
+      const weekdays = document.createElement('div');
+      weekdays.className = 'lg-cal-weekdays';
+      CAL_WEEKDAYS.forEach(dayName => {
+        const s = document.createElement('span');
+        s.textContent = dayName;
+        weekdays.appendChild(s);
+      });
+      calPopover.appendChild(weekdays);
+
+      // Days Grid
+      const daysGrid = document.createElement('div');
+      daysGrid.className = 'lg-cal-days';
+
+      const firstDay = new Date(year, month, 1).getDay();
+      const totalDays = new Date(year, month + 1, 0).getDate();
+
+      // Empty lead days
+      for (let i = 0; i < firstDay; i++) {
+        const emptyCell = document.createElement('div');
+        emptyCell.className = 'lg-cal-day empty';
+        daysGrid.appendChild(emptyCell);
+      }
+
+      // Day buttons
+      for (let dayNum = 1; dayNum <= totalDays; dayNum++) {
+        const dayBtn = document.createElement('button');
+        dayBtn.type = 'button';
+        dayBtn.className = 'lg-cal-day';
+        dayBtn.textContent = dayNum;
+
+        const cellDate = new Date(year, month, dayNum);
+
+        // Check today
+        if (
+          cellDate.getDate() === today.getDate() &&
+          cellDate.getMonth() === today.getMonth() &&
+          cellDate.getFullYear() === today.getFullYear()
+        ) {
+          dayBtn.classList.add('today');
+        }
+
+        // Check selected
+        if (
+          selectedDate &&
+          cellDate.getDate() === selectedDate.getDate() &&
+          cellDate.getMonth() === selectedDate.getMonth() &&
+          cellDate.getFullYear() === selectedDate.getFullYear()
+        ) {
+          dayBtn.classList.add('selected');
+        }
+
+        dayBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          input.value = formatISODate(cellDate);
+          closeCalendar();
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+
+        daysGrid.appendChild(dayBtn);
+      }
+
+      calPopover.appendChild(daysGrid);
+
+      // Footer
+      const footer = document.createElement('div');
+      footer.className = 'lg-cal-footer';
+
+      const clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.className = 'lg-cal-foot-btn lg-cal-clear';
+      clearBtn.textContent = 'Clear';
+      clearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        input.value = '';
+        closeCalendar();
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+
+      const todayBtn = document.createElement('button');
+      todayBtn.type = 'button';
+      todayBtn.className = 'lg-cal-foot-btn lg-cal-today';
+      todayBtn.textContent = 'Today';
+      todayBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        input.value = formatISODate(today);
+        closeCalendar();
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+
+      footer.appendChild(clearBtn);
+      footer.appendChild(todayBtn);
+      calPopover.appendChild(footer);
+    }
+
+    function positionCalendar() {
+      const rect = input.getBoundingClientRect();
+      const calWidth = 290;
+      let left = rect.left;
+      if (left + calWidth > window.innerWidth - 12) {
+        left = Math.max(12, window.innerWidth - calWidth - 12);
+      }
+      let top = rect.bottom + 6;
+      if (window.innerHeight - rect.bottom < 320 && rect.top > 320) {
+        top = Math.max(12, rect.top - calPopover.offsetHeight - 6);
+      }
+      calPopover.style.top = top + 'px';
+      calPopover.style.left = left + 'px';
+    }
+
+    function openCalendar() {
+      closeAllLiquidPopovers();
+
+      viewDate = parseISODate(input.value) || new Date();
+      renderCalendar();
+
+      document.body.appendChild(calPopover);
+      calPopover.style.display = 'flex';
+      positionCalendar();
+
+      activeLiquidCalendar = {
+        input,
+        popover: calPopover,
+        positionCalendar,
+        close: closeCalendar,
+      };
+    }
+
+    function closeCalendar() {
+      calPopover.style.display = 'none';
+      if (calPopover.parentNode === document.body) {
+        document.body.removeChild(calPopover);
+      }
+      if (activeLiquidCalendar && activeLiquidCalendar.input === input) {
+        activeLiquidCalendar = null;
+      }
+    }
+
+    input.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openCalendar();
     });
+
+    calBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openCalendar();
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeCalendar();
+      }
+    });
+  });
+}
+
+// Global outside click handler
+document.addEventListener('click', (e) => {
+  const isSelect = e.target.closest('.lg-select-wrapper') || e.target.closest('.lg-select-popover');
+  const isCalendar = e.target.closest('.lg-date-wrapper') || e.target.closest('.lg-calendar-popover');
+  if (!isSelect && !isCalendar) {
+    closeAllLiquidPopovers();
   }
 });
 
-// Close on Escape key
+// Global Escape handler
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    document.querySelectorAll('.lg-select-wrapper.open').forEach(w => {
-      w.classList.remove('open');
-      w.querySelector('.lg-select-trigger')?.setAttribute('aria-expanded', 'false');
-    });
+    closeAllLiquidPopovers();
   }
 });
 
+// Reposition floating popovers on scroll or window resize
+window.addEventListener('scroll', () => {
+  if (activeLiquidSelect) activeLiquidSelect.positionPopover();
+  if (activeLiquidCalendar) activeLiquidCalendar.positionCalendar();
+}, { passive: true });
+
+window.addEventListener('resize', () => {
+  if (activeLiquidSelect) activeLiquidSelect.positionPopover();
+  if (activeLiquidCalendar) activeLiquidCalendar.positionCalendar();
+}, { passive: true });
+
 // Initialize on DOM load
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initLiquidSelects);
-} else {
+function initLiquidComponents() {
   initLiquidSelects();
+  initLiquidDatepickers();
 }
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initLiquidComponents);
+} else {
+  initLiquidComponents();
+}
+
 
 
 

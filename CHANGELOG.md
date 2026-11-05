@@ -3,6 +3,19 @@
 All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](https://semver.org):
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 
+## [1.13.6] - 2026-11-05
+
+### Added
+- **Liquid Glass Rounded Calendar Date Picker**:
+  - Implemented custom Liquid Glass Datepicker component (LiquidGlassCalendar) with rounded 20px corners, live blur (backdrop-filter: blur(40px)), and specular reflections.
+  - Replaced browser/OS native square picker dialog with smooth floating frosted calendar dialog supporting month/year navigation, quick 'Today' and 'Clear' buttons, and today/selected day indicators.
+
+### Fixed
+- **Dropdown & Popover Stacking Context (Never Goes Behind Headers)**:
+  - Portaled all floating select popovers and calendar dialogs directly to document.body with fixed viewport positioning and z-index: 999999.
+  - Resolved issue where select dropdown menus were slipping behind sticky table headers (th), action buttons (Backup selected, Compare 2 selected), or being clipped by card boundaries.
+  - Added dynamic viewport bounds checking and auto-flip upward when near screen bottom.
+
 ## [1.13.5] - 2026-11-04
 
 ### Added
