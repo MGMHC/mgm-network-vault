@@ -52,8 +52,8 @@
         {% if current_site_id == 'all' %}
         <td class="col-site"><span class="badge blue" style="font-size:10px">{{ d.site.code if d.site else '—' }}</span></td>
         {% endif %}
-        <td class="col-name"><a href="{{ url_for('web.device_detail', dev_id=d.id) }}"><b>{{ d.name }}</b></a>
-          {% if d.is_vc %}<span class="badge blue">VC</span>{% endif %}{% if d.legacy_ssh %} <span class="badge" title="legacy SSH algorithms">legacy</span>{% endif %}</td>
+        <td class="col-name"><a href="{{ url_for('web.device_detail', dev_id=d.id) }}" {% if d.legacy_ssh %}title="Legacy SSH algorithms enabled"{% endif %}><b>{{ d.name }}</b></a>
+          {% if d.is_vc %}<span class="badge blue">VC</span>{% endif %}</td>
         <td class="col-host mono">{{ d.host }}{% if d.port != 22 %}:{{ d.port }}{% endif %}</td>
         <td class="col-platform">{{ 'Junos' if d.is_juniper else ('C1300' if d.platform == 'cisco_c1300' else 'IOS') }}</td>
         <td class="col-model">{{ d.model_label }}</td>

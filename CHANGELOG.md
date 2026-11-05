@@ -3,6 +3,22 @@
 All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](https://semver.org):
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 
+## [1.13.7] - 2026-11-05
+
+### Fixed
+- **Credentials & Multi-Site Access (HTTP 500 Error)**:
+  - Resolved `TypeError: 'set' object is not subscriptable` in `_active_site_id()` and credential/schedule views when accessed by site administrators or non-group-admin users.
+  - Standardized `User.allowed_site_ids` to return a deterministic sorted list of site IDs instead of an un-subscriptable set.
+  - Added robust fallback `device_count` property to `Credential` model, ensuring profile tables render without error regardless of SQLAlchemy relationship loader strategy.
+- **Dynamic Viewport Responsiveness on 1366x768 Displays**:
+  - Prevented page-level horizontal overflow (`html, body { max-width: 100%; overflow-x: hidden; }`).
+  - Added dedicated `@media (max-width: 1400px)` dynamic layout scaling for 1366x768 laptop and desktop monitors across all core tables.
+  - Compacted Devices table columns, padding, and filter inputs so all 13 columns fit within 1249px available width without requiring horizontal scrollbars.
+  - Truncated `Last commit` column on Backups table with ellipsis and native tooltip to preserve horizontal table boundaries.
+  - Optimized Users & Access Management page (`/account`) with adaptive 270px sidebar and compact user action groups on screens $\le$ 1400px.
+- **Cleaned Devices Table Layout**:
+  - Removed duplicate `legacy` badge from device names in the main inventory table to save space, keeping legacy SSH details accessible via device detail and link tooltips.
+
 ## [1.13.6] - 2026-11-05
 
 ### Added

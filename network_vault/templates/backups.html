@@ -35,8 +35,8 @@
     </div>
     <span class="muted small">Tip: select any two backups (even from different switches) to compare them.</span>
   </div>
-  <div class="table-wrap"><table>
-    <thead><tr><th><input type="checkbox" class="sel-all"></th>{% if current_site_id == 'all' %}<th>Site</th>{% endif %}<th>Device</th><th>Taken</th><th>Trigger</th><th>Change</th><th>Last commit</th><th class="num">Size</th><th>Download</th><th></th></tr></thead>
+  <div class="table-wrap"><table class="backups-table">
+    <thead><tr><th><input type="checkbox" class="sel-all"></th>{% if current_site_id == 'all' %}<th>Site</th>{% endif %}<th>Device</th><th>Taken</th><th>Trigger</th><th>Change</th><th class="col-commit">Last commit</th><th class="num">Size</th><th>Download</th><th></th></tr></thead>
     <tbody>
     {% for b in p.items %}
       <tr>
@@ -48,7 +48,7 @@
         <td><a href="{{ url_for('web.backup_view', bid=b.id) }}">{{ b.created_at|dt }}</a>{% if b.pinned %} <span class="badge blue">pinned</span>{% endif %}</td>
         <td class="small">{{ b.trigger }}</td>
         <td>{% if b.changed %}<span class="badge warn">changed</span> <span class="small"><span style="color:var(--ok)">+{{ b.lines_added }}</span> <span style="color:var(--bad)">-{{ b.lines_removed }}</span></span>{% elif b.previous %}<span class="badge">no change</span>{% else %}<span class="badge blue">baseline</span>{% endif %}</td>
-        <td class="small muted">{{ b.last_commit or '' }}</td>
+        <td class="small muted col-commit" title="{{ b.last_commit or '' }}">{{ b.last_commit or '' }}</td>
         <td class="num small">{{ b.size|size }}</td>
         <td class="small"><a href="{{ url_for('web.backup_download', bid=b.id) }}">conf</a>{% if b.set_path %} · <a href="{{ url_for('web.backup_download', bid=b.id, part='set') }}">set</a>{% endif %}{% if b.info_path %} · <a href="{{ url_for('web.backup_download', bid=b.id, part='info') }}">info</a>{% endif %}{% if b.git_commit and b.git_commit|gh_commit %} · <a href="{{ b.git_commit|gh_commit }}" target="_blank" rel="noopener">GitHub ↗</a>{% endif %}</td>
         <td class="num">{% set prev = b.previous %}{% if prev %}<a class="btn sm" href="{{ url_for('web.compare', a=prev.id, b=b.id) }}">Diff prev</a>{% endif %}</td>

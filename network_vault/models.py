@@ -100,7 +100,7 @@ class User(db.Model):
         ids = {s.id for s in self.assigned_sites}
         if self.site_id:
             ids.add(self.site_id)
-        return ids
+        return sorted(list(ids))
 
     def has_site_access(self, site_id):
         if self.is_group_admin:
@@ -121,6 +121,13 @@ class Credential(db.Model):
     created_at = db.Column(db.DateTime, default=now)
 
     devices = db.relationship("Device", backref="credential", lazy=True)
+
+    @property
+    def device_count(self):
+        try:
+            return self.devices.count()
+        except (AttributeError, TypeError):
+            return len(self.devices)
 
 
 class Device(db.Model):

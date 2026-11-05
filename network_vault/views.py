@@ -43,7 +43,7 @@ def _active_site_id():
             return None
     
     # Non-group-admin users (site-admin, read-write, read-only)
-    allowed = u.allowed_site_ids
+    allowed = list(u.allowed_site_ids or [])
     if not allowed:
         return None
     if len(allowed) == 1:
@@ -1609,7 +1609,7 @@ def schedule_save():
         s.target_value = request.form.get(f"target_{s.target}", "")
     s.enabled = _bool("enabled")
     if not sid:
-        s.site_id = _active_site_id() or (u.allowed_site_ids[0] if (u and u.allowed_site_ids) else None)
+        s.site_id = _active_site_id() or (list(u.allowed_site_ids)[0] if (u and u.allowed_site_ids) else None)
         if not s.site_id:
             first_s = Site.query.order_by(Site.id).first()
             s.site_id = first_s.id if first_s else None
@@ -1921,7 +1921,7 @@ def credentials():
                 if u.has_site_access(target_sid):
                     c.site_id = target_sid
             elif not cid:
-                c.site_id = site_id or (u.allowed_site_ids[0] if (u and u.allowed_site_ids) else None)
+                c.site_id = site_id or (list(u.allowed_site_ids)[0] if (u and u.allowed_site_ids) else None)
                 if not c.site_id:
                     first_s = Site.query.order_by(Site.id).first()
                     c.site_id = first_s.id if first_s else None

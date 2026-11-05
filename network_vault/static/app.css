@@ -53,7 +53,7 @@
   }
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; color-scheme: dark; }
+html, body { margin: 0; color-scheme: dark; max-width: 100%; overflow-x: hidden; }
 body {
   font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   background-color: #060a14;
@@ -3065,6 +3065,110 @@ h2 svg {
 .bg-warn { background: var(--warn); box-shadow: 0 0 6px rgba(245, 158, 11, 0.4); }
 .bg-bad { background: var(--bad); box-shadow: 0 0 6px rgba(239, 68, 68, 0.4); }
 .bg-muted { background: var(--muted); }
+
+/* --------------------------------------------------------------------------- Responsive scaling for 1366x768 and compact displays */
+@media (max-width: 1400px) {
+  .main.full-width {
+    padding: 16px 14px 40px !important;
+  }
+  
+  /* Filter bar compacting */
+  .filters {
+    padding: 10px 14px !important;
+    gap: 8px !important;
+    flex-wrap: wrap !important;
+  }
+  .filters input:not([type="checkbox"]):not([type="radio"]),
+  .filters select,
+  .lg-select-trigger {
+    height: 32px !important;
+    font-size: 12px !important;
+    padding: 0 8px !important;
+  }
+  .lg-select-trigger {
+    min-width: 110px !important;
+  }
+  
+  /* Global compact table cells */
+  table th, table td {
+    padding: 7px 8px !important;
+    font-size: 12.5px !important;
+  }
+  
+  /* Devices table column compacting to fit 1366px displays */
+  .devices-table {
+    table-layout: auto !important;
+    width: 100% !important;
+  }
+  .devices-table .col-cb {
+    width: 28px !important;
+    min-width: 28px !important;
+    padding: 6px 4px 6px 8px !important;
+  }
+  .devices-table .col-site {
+    width: 48px !important;
+    min-width: 48px !important;
+    padding: 6px 4px !important;
+  }
+  .devices-table .col-name {
+    min-width: 140px !important;
+    max-width: 180px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+  .devices-table .col-host {
+    padding: 6px 6px !important;
+    font-size: 11.5px !important;
+  }
+  .devices-table .col-platform {
+    padding: 6px 6px !important;
+  }
+  .devices-table .col-model {
+    max-width: 105px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    padding: 6px 6px !important;
+  }
+  .devices-table .col-role {
+    padding: 6px 6px !important;
+  }
+  .devices-table .col-group {
+    min-width: 85px !important;
+    max-width: 120px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    padding: 6px 6px !important;
+  }
+  .devices-table .col-credential {
+    max-width: 90px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    padding: 6px 6px !important;
+  }
+  .devices-table .col-status,
+  .devices-table .col-backup,
+  .devices-table .col-backups,
+  .devices-table .col-action {
+    padding: 6px 5px !important;
+  }
+  .devices-table .col-action .btn.sm {
+    padding: 3px 6px !important;
+    font-size: 11px !important;
+  }
+
+  /* Backups table commit truncation */
+  .backups-table th.col-commit,
+  .backups-table td.col-commit {
+    max-width: 140px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+}
 
 
 
