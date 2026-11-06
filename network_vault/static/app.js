@@ -22,6 +22,33 @@ function toast(html, kind = '', ms = 5000) {
   return el;
 }
 
+// Theme: look (glass|normal) and mode (dark|light), remembered per user (see theme.py).
+// Applies immediately, mirrors into the nv_theme cookie (so the next page paints right even before
+// login state is known), then saves to the account. A failed save keeps the look and says so.
+function setTheme({ look, mode }) {
+  const root = document.documentElement;
+  look = look || root.dataset.look;
+  mode = mode || root.dataset.mode;
+  root.dataset.look = look;
+  root.dataset.mode = mode;
+  const scheme = document.querySelector('meta[name="color-scheme"]');
+  if (scheme) scheme.content = mode;
+  document.querySelectorAll('[data-set-look]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.setLook === look)));
+  document.querySelectorAll('[data-set-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.setMode === mode)));
+  document.cookie = `nv_theme=${look}-${mode}; path=/; max-age=31536000; samesite=lax`;
+  window.dispatchEvent(new CustomEvent('themechange', { detail: { look, mode } }));
+  return api('/api/account/theme', { look, mode }).catch(() => {
+    toast("Couldn't save your theme", 'bad');
+  });
+}
+window.setTheme = setTheme;
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-set-look], [data-set-mode]');
+  if (!b) return;
+  setTheme(b.dataset.setLook ? { look: b.dataset.setLook } : { mode: b.dataset.setMode });
+});
+
 function selected(scope = document) {
   return [...scope.querySelectorAll('input.sel:checked')].map(i => i.value);
 }

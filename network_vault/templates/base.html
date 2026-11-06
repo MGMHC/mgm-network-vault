@@ -110,6 +110,8 @@
       </nav>
 
       <div class="top-nav-right">
+        <div class="theme-seg" role="group" aria-label="Look"><button type="button" data-set-look="glass" title="Liquid glass" aria-pressed="{{ 'true' if theme_look == 'glass' else 'false' }}">Glass</button><button type="button" data-set-look="normal" title="Normal" aria-pressed="{{ 'true' if theme_look == 'normal' else 'false' }}">Normal</button></div>
+        <div class="theme-seg" role="group" aria-label="Mode"><button type="button" data-set-mode="light" title="Day" aria-label="Day" aria-pressed="{{ 'true' if theme_mode == 'light' else 'false' }}">&#9728;</button><button type="button" data-set-mode="dark" title="Night" aria-label="Night" aria-pressed="{{ 'true' if theme_mode == 'dark' else 'false' }}">&#9790;</button></div>
         {% if current_user_obj %}
         <div class="site-switcher-pill">
           <div class="s-icon">{{ icon('building') }}</div>
@@ -148,40 +150,40 @@
         </div>
       </div>
     </div>
-
-    <!-- Contextual Sub-Nav Bar for Operations & Admin -->
-    {% if is_ops %}
-    <div class="top-subnav">
-      <div class="top-subnav-inner">
-        <span class="subnav-label">Operations:</span>
-        <a href="{{ url_for('web.port_locator') }}" class="subnav-link {{ 'active' if ep == 'web.port_locator' }}">{{ icon('target') }}<span>Port Locator</span></a>
-        <a href="{{ url_for('web.health') }}" class="subnav-link {{ 'active' if ep == 'web.health' }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Hardware Health</span></a>
-        <a href="{{ url_for('web.optics') }}" class="subnav-link {{ 'active' if ep == 'web.optics' }}">{{ icon('optic') }}<span>Optical Health</span></a>
-        <a href="{{ url_for('web.ipam') }}" class="subnav-link {{ 'active' if ep == 'web.ipam' }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>IPAM &amp; Subnets</span></a>
-        <a href="{{ url_for('web.racks') }}" class="subnav-link {{ 'active' if ep == 'web.racks' }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="16" y2="18"/></svg><span>Rack Elevations</span></a>
-        <a href="{{ url_for('web.vlan_audit') }}" class="subnav-link {{ 'active' if ep == 'web.vlan_audit' }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span>VLAN &amp; Port Audit</span></a>
-        <a href="{{ url_for('web.lifecycle') }}" class="subnav-link {{ 'active' if ep.startswith('web.lifecycle') }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>Lifecycle &amp; EOL</span></a>
-      </div>
-    </div>
-    {% elif is_admin %}
-    <div class="top-subnav">
-      <div class="top-subnav-inner">
-        <span class="subnav-label">Admin:</span>
-        {% if current_user_obj and current_user_obj.is_group_admin %}
-        <a href="{{ url_for('web.sites') }}" class="subnav-link {{ 'active' if ep.startswith('web.site') and ep != 'web.site_switch' }}">{{ icon('building') }}<span>Sites</span></a>
-        {% endif %}
-        <a href="{{ url_for('web.credentials') }}" class="subnav-link {{ 'active' if ep.startswith('web.credential') }}">{{ icon('key') }}<span>Credentials</span></a>
-        <a href="{{ url_for('web.github') }}" class="subnav-link {{ 'active' if ep == 'web.github' }}">{{ icon('git') }}<span>GitHub sync</span></a>
-        {% if current_user_obj and current_user_obj.is_group_admin %}
-        <a href="{{ url_for('web.migrate') }}" class="subnav-link {{ 'active' if ep.startswith('web.migrate') }}">{{ icon('archive') }}<span>Export &amp; migrate</span></a>
-        {% endif %}
-        <a href="{{ url_for('web.settings') }}" class="subnav-link {{ 'active' if ep == 'web.settings' }}">{{ icon('gear') }}<span>Settings</span></a>
-        {% if current_user_obj and current_user_obj.is_group_admin %}<a href="{{ url_for('web.alerts') }}" class="subnav-link {{ 'active' if ep.startswith('web.alerts') }}">{{ icon('bell') }}<span>Alerts</span></a>{% endif %}
-        <a href="{{ url_for('web.account') }}" class="subnav-link {{ 'active' if ep == 'web.account' }}">{{ icon('user') }}<span>Users</span></a>
-      </div>
-    </div>
-    {% endif %}
   </header>
+
+  <!-- Contextual Sub-Nav Bar for Operations & Admin -->
+  {% if is_ops %}
+  <div class="top-subnav">
+    <div class="top-subnav-inner">
+      <span class="subnav-label">Operations:</span>
+      <a href="{{ url_for('web.port_locator') }}" class="subnav-link {{ 'active' if ep == 'web.port_locator' }}">{{ icon('target') }}<span>Port Locator</span></a>
+      <a href="{{ url_for('web.health') }}" class="subnav-link {{ 'active' if ep == 'web.health' }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Hardware Health</span></a>
+      <a href="{{ url_for('web.optics') }}" class="subnav-link {{ 'active' if ep == 'web.optics' }}">{{ icon('optic') }}<span>Optical Health</span></a>
+      <a href="{{ url_for('web.ipam') }}" class="subnav-link {{ 'active' if ep == 'web.ipam' }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>IPAM &amp; Subnets</span></a>
+      <a href="{{ url_for('web.racks') }}" class="subnav-link {{ 'active' if ep == 'web.racks' }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="16" y2="18"/></svg><span>Rack Elevations</span></a>
+      <a href="{{ url_for('web.vlan_audit') }}" class="subnav-link {{ 'active' if ep == 'web.vlan_audit' }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span>VLAN &amp; Port Audit</span></a>
+      <a href="{{ url_for('web.lifecycle') }}" class="subnav-link {{ 'active' if ep.startswith('web.lifecycle') }}"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>Lifecycle &amp; EOL</span></a>
+    </div>
+  </div>
+  {% elif is_admin %}
+  <div class="top-subnav">
+    <div class="top-subnav-inner">
+      <span class="subnav-label">Admin:</span>
+      {% if current_user_obj and current_user_obj.is_group_admin %}
+      <a href="{{ url_for('web.sites') }}" class="subnav-link {{ 'active' if ep.startswith('web.site') and ep != 'web.site_switch' }}">{{ icon('building') }}<span>Sites</span></a>
+      {% endif %}
+      <a href="{{ url_for('web.credentials') }}" class="subnav-link {{ 'active' if ep.startswith('web.credential') }}">{{ icon('key') }}<span>Credentials</span></a>
+      <a href="{{ url_for('web.github') }}" class="subnav-link {{ 'active' if ep == 'web.github' }}">{{ icon('git') }}<span>GitHub sync</span></a>
+      {% if current_user_obj and current_user_obj.is_group_admin %}
+      <a href="{{ url_for('web.migrate') }}" class="subnav-link {{ 'active' if ep.startswith('web.migrate') }}">{{ icon('archive') }}<span>Export &amp; migrate</span></a>
+      {% endif %}
+      <a href="{{ url_for('web.settings') }}" class="subnav-link {{ 'active' if ep == 'web.settings' }}">{{ icon('gear') }}<span>Settings</span></a>
+      {% if current_user_obj and current_user_obj.is_group_admin %}<a href="{{ url_for('web.alerts') }}" class="subnav-link {{ 'active' if ep.startswith('web.alerts') }}">{{ icon('bell') }}<span>Alerts</span></a>{% endif %}
+      <a href="{{ url_for('web.account') }}" class="subnav-link {{ 'active' if ep == 'web.account' }}">{{ icon('user') }}<span>Users</span></a>
+    </div>
+  </div>
+  {% endif %}
 
   <!-- Mobile Navigation Drawer & Backdrop -->
   <div class="mobile-nav-backdrop" id="mobileNavBackdrop" onclick="closeMobileNav()"></div>
@@ -215,7 +217,7 @@
             </select>
           </form>
           {% else %}
-          <span style="font-size:12px;font-weight:600;color:#fff;">{{ active_site.code if active_site else 'Site' }} &middot; {{ active_site.name if active_site else '' }}</span>
+          <span style="font-size:12px;font-weight:600;color:var(--text);">{{ active_site.code if active_site else 'Site' }} &middot; {{ active_site.name if active_site else '' }}</span>
           {% endif %}
         </div>
       </div>
@@ -264,6 +266,8 @@
     </div>
 
     <div class="mobile-nav-footer">
+      <div class="mobile-theme-row"><span>Look</span><div class="theme-seg" role="group" aria-label="Look"><button type="button" data-set-look="glass" title="Liquid glass" aria-pressed="{{ 'true' if theme_look == 'glass' else 'false' }}">Glass</button><button type="button" data-set-look="normal" title="Normal" aria-pressed="{{ 'true' if theme_look == 'normal' else 'false' }}">Normal</button></div></div>
+      <div class="mobile-theme-row"><span>Mode</span><div class="theme-seg" role="group" aria-label="Mode"><button type="button" data-set-mode="light" title="Day" aria-label="Day" aria-pressed="{{ 'true' if theme_mode == 'light' else 'false' }}">&#9728;</button><button type="button" data-set-mode="dark" title="Night" aria-label="Night" aria-pressed="{{ 'true' if theme_mode == 'dark' else 'false' }}">&#9790;</button></div></div>
       <div class="mobile-user-row">
         <div class="mobile-user-details">
           <span class="mobile-user-name">{{ current_user }}</span>

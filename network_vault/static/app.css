@@ -227,24 +227,19 @@ h3 {
   box-sizing: border-box;
 }
 
-/* ── Top Navigation Bar Header (Liquid Glass Dock) ───────────────────────── */
+/* ── Top Navigation Bar Header (floating glass bar) ──────────────────────── */
+/* A wide pill floating 12px from the top and sides. The glass blur and the gradient edge are
+   drawn by theme.css (only under data-look=glass); Normal gets a solid panel and a hairline. */
 .top-nav-bar {
   position: sticky;
-  top: 0;
+  top: 12px;
   z-index: 300;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 50%, rgba(255, 255, 255, 0.01) 100%), rgba(6, 11, 24, 0.78) !important;
-  color: var(--side-text);
-  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 -1px 0 rgba(0, 0, 0, 0.35) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.14) !important;
-}
-
-.top-nav-bar::after {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent 5%, rgba(255, 255, 255, 0.45) 50%, transparent 95%);
-  pointer-events: none;
+  margin: 12px 12px 0;
+  background: var(--panel-strong);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
 }
 
 .top-nav-inner {
@@ -252,7 +247,7 @@ h3 {
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
-  padding: 0 16px;
+  padding: 0 14px;
   height: 52px;
   max-width: 100%;
   box-sizing: border-box;
@@ -267,6 +262,8 @@ h3 {
   height: 32px;
 }
 
+/* theme-exempt:start */
+/* The logo artwork needs its white plate in every look and mode. */
 .nav-brand {
   display: inline-flex;
   align-items: center;
@@ -274,17 +271,16 @@ h3 {
   height: 32px;
   box-sizing: border-box;
   text-decoration: none;
-  background: rgba(255, 255, 255, 0.95);
+  background: #ffffff;
   padding: 0 10px;
-  border-radius: 9px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  border-radius: 999px;
+  box-shadow: 0 1px 3px var(--drop);
+  transition: transform 0.15s ease;
 }
 
 .nav-brand:hover {
   text-decoration: none;
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.4);
 }
 
 .nav-brand-logo {
@@ -303,31 +299,31 @@ h3 {
   padding-left: 6px;
   white-space: nowrap;
 }
+/* theme-exempt:end */
 
 /* Back Button */
 .back-btn,
 .nav-brand-group .back-btn,
 .top-nav-bar .back-btn {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 5px !important;
-  height: 32px !important;
-  padding: 0 12px !important;
-  border-radius: 9px !important;
-  box-sizing: border-box !important;
-  background: rgba(255, 255, 255, 0.08) !important;
-  border: 1px solid rgba(255, 255, 255, 0.16) !important;
-  color: #f1f5f9 !important;
-  font: inherit !important;
-  font-size: 12.5px !important;
-  font-weight: 600 !important;
-  line-height: 1 !important;
-  margin: 0 !important;
-  cursor: pointer !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 2px 8px rgba(0, 0, 0, 0.25) !important;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
-  vertical-align: middle !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  box-sizing: border-box;
+  background: var(--chip);
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  margin: 0;
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease;
+  vertical-align: middle;
 }
 
 .back-btn svg,
@@ -342,11 +338,8 @@ h3 {
 .back-btn:hover,
 .nav-brand-group .back-btn:hover,
 .top-nav-bar .back-btn:hover {
-  background: rgba(56, 189, 248, 0.18) !important;
-  border-color: rgba(56, 189, 248, 0.45) !important;
-  color: #38bdf8 !important;
-  transform: translateY(-1px) !important;
-  box-shadow: 0 0 14px rgba(56, 189, 248, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+  background: var(--chip-hover);
+  color: var(--accent);
 }
 
 /* Top Nav Links */
@@ -366,15 +359,15 @@ h3 {
   gap: 5px;
   height: 32px;
   box-sizing: border-box;
-  padding: 0 11px;
-  border-radius: 9px;
-  color: var(--side-text);
+  padding: 0 12px;
+  border-radius: 999px;
+  color: var(--text-dim);
   font-size: 12.5px;
   font-weight: 600;
   line-height: 1;
   text-decoration: none;
   white-space: nowrap;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
   margin: 0;
 }
 
@@ -386,21 +379,24 @@ h3 {
 }
 
 .top-nav-links .nav-item:hover {
-  background: rgba(255, 255, 255, 0.10);
-  color: #ffffff;
+  background: var(--chip);
+  color: var(--text);
   text-decoration: none;
 }
 
+/* The current page: glass lens (theme.css) in Glass, an accent-soft pill with accent text in Normal. */
 .top-nav-links .nav-item.active {
-  background: rgba(56, 189, 248, 0.18) !important;
-  color: #38bdf8 !important;
-  border: 1px solid rgba(56, 189, 248, 0.4) !important;
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+  color: var(--lens-text);
 }
 
 .top-nav-links .nav-item.active svg {
-  color: #38bdf8 !important;
   opacity: 1;
+}
+
+/* ([data-mode] only raises specificity above theme.css's own Normal lens rule.) */
+:root[data-look="normal"][data-mode] :is(.top-nav-links .nav-item.active, .nav-dropdown-btn.active, .top-subnav .subnav-link.active) {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 /* Dropdown Menus */
@@ -413,17 +409,20 @@ h3 {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  color: var(--side-text);
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 10px 0 12px;
+  border-radius: 999px;
+  color: var(--text-dim);
   background: transparent;
-  border: 1px solid transparent;
+  border: 0;
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
+  line-height: 1;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .nav-dropdown-btn svg {
@@ -440,43 +439,32 @@ h3 {
 }
 
 .nav-dropdown-btn:hover {
-  background: rgba(255, 255, 255, 0.10);
-  color: #ffffff;
+  background: var(--chip);
+  color: var(--text);
 }
 
 .nav-dropdown.open .nav-dropdown-btn {
-  background: rgba(255, 255, 255, 0.18);
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--chip-hover);
+  color: var(--text);
 }
 
 .nav-dropdown.open .nav-dropdown-btn .dd-arrow {
   transform: rotate(180deg);
 }
 
+/* Operations/Admin button when the current page lives inside it (lens from theme.css). */
 .nav-dropdown.active:not(.open) .nav-dropdown-btn {
-  background: rgba(56, 189, 248, 0.18) !important;
-  color: #38bdf8 !important;
-  border: 1px solid rgba(56, 189, 248, 0.4) !important;
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
-}
-
-.nav-dropdown.active .nav-dropdown-btn svg {
-  color: #38bdf8 !important;
+  color: var(--lens-text);
 }
 
 .nav-dropdown-menu {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 10px);
   left: 0;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.06) 50%, rgba(255, 255, 255, 0.02) 100%), rgba(7, 13, 28, 0.90) !important;
-  border: 1px solid rgba(255, 255, 255, 0.20) !important;
-  border-radius: 16px;
-  box-shadow:
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.4),
-    inset 0 -1px 2px rgba(0, 0, 0, 0.3),
-    0 24px 60px rgba(0, 0, 0, 0.8),
-    0 0 28px rgba(56, 189, 248, 0.18) !important;
+  background: var(--overlay);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
   min-width: 220px;
   padding: 8px;
   display: none;
@@ -485,16 +473,6 @@ h3 {
   z-index: 500;
   transform-origin: top left;
   overflow: hidden;
-  position: absolute;
-}
-
-.nav-dropdown-menu::after {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
-  pointer-events: none;
 }
 
 @keyframes dd-liquid-enter {
@@ -520,15 +498,14 @@ h3 {
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  border-radius: 8px;
-  color: var(--side-text);
+  border-radius: 12px;
+  color: var(--text-dim);
   font-size: 13px;
   font-weight: 550;
   text-decoration: none;
   white-space: nowrap;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background-color 0.18s ease, color 0.18s ease;
   position: relative;
-  border: 1px solid transparent;
 }
 
 .nav-dropdown-menu .dd-item svg {
@@ -539,19 +516,14 @@ h3 {
 }
 
 .nav-dropdown-menu .dd-item:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
+  background: var(--chip);
+  color: var(--text);
   text-decoration: none;
-  transform: translateX(4px);
-  border-color: rgba(255, 255, 255, 0.14);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .nav-dropdown-menu .dd-item.active {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.25) 0%, rgba(37, 99, 235, 0.32) 100%);
-  color: #ffffff;
-  border-color: rgba(56, 189, 248, 0.45);
-  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .nav-dropdown-menu .dd-item.active svg {
@@ -568,27 +540,67 @@ h3 {
   flex-shrink: 0;
 }
 
+/* Glass | Normal and Day | Night switches (the same control sits in the mobile drawer). */
+.theme-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--chip);
+}
+
+.theme-seg button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  min-width: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.theme-seg button:hover {
+  color: var(--text);
+}
+
+.theme-seg button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 /* Site Switcher Pill */
 .top-nav-right .site-switcher-pill {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 2px 8px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 99px;
-  transition: border-color 0.15s ease;
+  padding: 2px 10px;
+  background: var(--chip);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: none;
+  transition: background-color 0.15s ease;
   max-width: 220px;
 }
 
 .top-nav-right .site-switcher-pill:hover {
-  border-color: var(--mgm-chrome);
+  background: var(--chip-hover);
+  box-shadow: none;
 }
 
 .top-nav-right .site-switcher-pill .s-icon {
   display: flex;
   align-items: center;
-  color: var(--mgm-chrome);
+  color: var(--accent);
 }
 
 .top-nav-right .site-switcher-pill .s-icon svg {
@@ -605,7 +617,7 @@ h3 {
 .top-nav-right .site-select {
   border: none;
   background: transparent;
-  color: #ffffff;
+  color: var(--text);
   font-family: inherit;
   font-size: 11.5px;
   font-weight: 600;
@@ -618,13 +630,20 @@ h3 {
 }
 
 .top-nav-right .site-select option {
-  background: #0b1426;
-  color: #ffffff;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* The custom select trigger (enhanced from .site-select) is styled further down with a fixed white;
+   keep it on the text token inside the bar. */
+.top-nav-right .site-switcher-pill .lg-select-trigger.site-select-trigger,
+.mobile-site-box .lg-select-trigger.site-select-trigger {
+  color: var(--text) !important;
 }
 
 .site-badge-single {
   font-size: 11.5px;
-  color: #ffffff;
+  color: var(--text);
   white-space: nowrap;
 }
 
@@ -633,12 +652,12 @@ h3 {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 8px 2px 10px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 99px;
+  padding: 2px 10px;
+  background: var(--chip);
+  border: 0;
+  border-radius: 999px;
   font-size: 11.5px;
-  color: #ffffff;
+  color: var(--text);
   flex-shrink: 0;
 }
 
@@ -659,20 +678,20 @@ h3 {
 .nav-logout-btn {
   display: flex;
   align-items: center;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--text-dim);
   padding: 2px;
   border-radius: 4px;
   transition: color 0.15s ease;
 }
 
 .nav-logout-btn:hover {
-  color: #f87171;
+  color: var(--bad);
   text-decoration: none;
 }
 
 .nav-version {
   font-size: 10.5px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--muted);
   margin-left: 1px;
 }
 
@@ -682,7 +701,7 @@ h3 {
 }
 
 .nav-version a:hover {
-  color: var(--mgm-chrome);
+  color: var(--accent);
 }
 
 /* ── Mobile Navigation Drawer & Backdrop ────────────────────────────────── */
@@ -692,25 +711,25 @@ h3 {
   justify-content: center;
   width: 34px;
   height: 34px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: #ffffff;
+  border-radius: 999px;
+  background: var(--chip);
+  border: 0;
+  color: var(--text);
   cursor: pointer;
   padding: 0;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease;
   flex-shrink: 0;
 }
 
 .mobile-menu-btn:hover,
 .mobile-menu-btn:active {
-  background: rgba(255, 255, 255, 0.22);
+  background: var(--chip-hover);
 }
 
 .mobile-nav-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(4, 8, 18, 0.75);
+  background: var(--overlay);
   z-index: 1000;
   opacity: 0;
   pointer-events: none;
@@ -718,7 +737,7 @@ h3 {
 }
 
 .mobile-nav-backdrop.open {
-  opacity: 1;
+  opacity: 0.6;
   pointer-events: auto;
 }
 
@@ -729,15 +748,15 @@ h3 {
   bottom: 0;
   width: 310px;
   max-width: 86vw;
-  background: rgba(8, 14, 28, 0.88);
-  color: #ffffff;
+  background: var(--overlay);
+  color: var(--text);
   z-index: 1001;
   transform: translateX(-100%);
   transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
   flex-direction: column;
-  box-shadow: 12px 0 40px rgba(0, 0, 0, 0.75), inset -1px 0 0 rgba(255, 255, 255, 0.12);
-  border-right: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 12px 0 40px var(--drop);
+  border-right: 1px solid var(--border);
   visibility: hidden;
 }
 
@@ -751,9 +770,7 @@ h3 {
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.03);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  border-bottom: 1px solid var(--hair);
   flex-shrink: 0;
 }
 
@@ -763,22 +780,23 @@ h3 {
   gap: 10px;
 }
 
+/* theme-exempt:start */
 .mobile-nav-logo {
   height: 28px;
   width: auto;
   background: #ffffff;
   padding: 3px 7px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  border-radius: 999px;
+  box-shadow: 0 1px 3px var(--drop);
 }
+/* theme-exempt:end */
 
 .mobile-nav-title {
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #ffffff;
-  text-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+  color: var(--text);
 }
 
 .mobile-nav-close {
@@ -787,20 +805,18 @@ h3 {
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: #ffffff;
+  border-radius: 999px;
+  background: var(--chip);
+  border: 0;
+  color: var(--text);
   font-size: 15px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 
 .mobile-nav-close:hover,
 .mobile-nav-close:active {
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(56, 189, 248, 0.4);
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+  background: var(--chip-hover);
 }
 
 .mobile-nav-body {
@@ -824,7 +840,7 @@ h3 {
   font-weight: 750;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--mgm-gold);
+  color: var(--muted);
   padding: 0 8px 4px;
 }
 
@@ -839,13 +855,12 @@ h3 {
   align-items: center;
   gap: 10px;
   padding: 9px 12px;
-  border-radius: 9px;
-  color: var(--side-text);
+  border-radius: 12px;
+  color: var(--text-dim);
   font-size: 13.5px;
   font-weight: 600;
   text-decoration: none;
-  transition: all 0.15s ease;
-  border: 1px solid transparent;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .mobile-nav-link svg {
@@ -857,17 +872,14 @@ h3 {
 
 .mobile-nav-link:hover,
 .mobile-nav-link:active {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
+  background: var(--chip);
+  color: var(--text);
   text-decoration: none;
 }
 
 .mobile-nav-link.active {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.24) 0%, rgba(37, 99, 235, 0.3) 100%);
-  color: #ffffff;
-  border-color: rgba(56, 189, 248, 0.45);
-  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .mobile-nav-link.active svg {
@@ -879,11 +891,11 @@ h3 {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
+  background: var(--chip);
+  border: 0;
+  border-radius: 12px;
   padding: 6px 10px;
-  color: var(--mgm-chrome);
+  color: var(--accent);
 }
 
 .mobile-site-box svg {
@@ -902,7 +914,7 @@ h3 {
   width: 100%;
   background: transparent;
   border: none;
-  color: #ffffff;
+  color: var(--text);
   font-family: inherit;
   font-size: 12.5px;
   font-weight: 600;
@@ -912,18 +924,27 @@ h3 {
 }
 
 .mobile-site-select option {
-  background: #0b1426;
-  color: #ffffff;
+  background: var(--bg);
+  color: var(--text);
 }
 
 .mobile-nav-footer {
   padding: 12px 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid var(--hair);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.mobile-theme-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
 }
 
 .mobile-user-row {
@@ -943,7 +964,7 @@ h3 {
 .mobile-user-name {
   font-size: 13px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -953,32 +974,38 @@ h3 {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 9px;
-  border-radius: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
   font-size: 11.5px;
   font-weight: 600;
-  color: #fca5a5;
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--bad);
+  background: var(--bad-soft);
   text-decoration: none;
   white-space: nowrap;
-  transition: all 0.15s ease;
+  transition: opacity 0.15s ease;
 }
 
 .mobile-logout-btn:hover,
 .mobile-logout-btn:active {
-  background: rgba(239, 68, 68, 0.28);
-  color: #ffffff;
+  opacity: 0.8;
   text-decoration: none;
 }
 
 .mobile-version-tag {
   font-size: 10.5px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--muted);
   text-align: center;
 }
 
 /* ── Responsive Top Bar Adjustments ───────────────────────────────────────── */
+/* The bar now also carries the theme switches: shed the least useful bits first. */
+@media (max-width: 1600px) {
+  .nav-brand-text,
+  .nav-version {
+    display: none;
+  }
+}
+
 @media (max-width: 1280px) {
   .top-nav-inner {
     padding: 0 12px;
@@ -987,7 +1014,7 @@ h3 {
 
   .top-nav-links .nav-item,
   .nav-dropdown-btn {
-    padding: 4px 6px;
+    padding: 0 8px;
     font-size: 12px;
     gap: 4px;
   }
@@ -997,7 +1024,7 @@ h3 {
   }
 }
 
-@media (max-width: 1120px) {
+@media (max-width: 1440px) {
   .nav-brand-text {
     display: none;
   }
@@ -1016,8 +1043,14 @@ h3 {
   }
 }
 
-/* ── Tablet & Mobile Breakpoints (<= 900px) ──────────────────────────────── */
-@media (max-width: 900px) {
+/* Below 1200px the user name moves to the drawer; below 1100px the whole menu does, switches included. */
+@media (max-width: 1200px) {
+  .nav-user-pill .nav-user-info {
+    display: none;
+  }
+}
+
+@media (max-width: 1100px) {
   .mobile-menu-btn {
     display: inline-flex;
   }
@@ -1026,10 +1059,21 @@ h3 {
     display: none !important;
   }
 
+  .top-nav-right .theme-seg {
+    display: none;
+  }
+}
+
+/* ── Tablet & Mobile Breakpoints (<= 900px) ──────────────────────────────── */
+@media (max-width: 900px) {
   .top-nav-inner {
     padding: 0 12px;
     height: 50px;
     gap: 8px;
+  }
+
+  .top-subnav {
+    top: 72px;
   }
 
   .nav-brand-text {
@@ -1064,6 +1108,23 @@ h3 {
   }
 }
 
+/* Narrow phones: the user name moves to the drawer so the bar fits */
+@media (max-width: 480px) {
+  .nav-user-pill .nav-user-info {
+    display: none;
+  }
+
+  .top-nav-right .site-switcher-pill {
+    max-width: 150px;
+  }
+}
+
+@media (max-width: 380px) {
+  .top-nav-right .site-switcher-pill {
+    max-width: 112px;
+  }
+}
+
 /* ── Smartphone Breakpoints (<= 680px) ───────────────────────────────────── */
 @media (max-width: 680px) {
 
@@ -1080,8 +1141,12 @@ h3 {
     gap: 6px;
   }
 
+  .top-subnav {
+    top: 70px;
+  }
+
   .nav-brand {
-    padding: 2px 6px;
+    padding: 0 8px;
   }
 
   .nav-brand-logo {
@@ -1089,7 +1154,7 @@ h3 {
   }
 
   .back-btn {
-    padding: 3px 6px;
+    padding: 0 8px;
     font-size: 11px;
     gap: 3px;
   }
@@ -1254,7 +1319,7 @@ h3 {
   }
 
   .top-subnav-inner {
-    height: 36px !important;
+    height: 32px !important;
     gap: 5px !important;
   }
 
@@ -1302,19 +1367,29 @@ h3 {
   }
 }
 
-/* Contextual Sub-Nav Bar */
+/* ── Contextual Sub-Nav Bar (second, slimmer floating strip under the bar) ─ */
 .top-subnav {
-  background: rgba(8, 14, 28, 0.45);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  padding: 0 24px;
+  position: sticky;
+  top: 74px;
+  z-index: 299;
+  margin: 8px 12px 0;
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  padding: 0 16px;
+}
+
+/* theme.css gives the glass edge's anchor `position: relative`; the strip must stay sticky. */
+:root .top-nav-layout > .top-subnav {
+  position: sticky;
 }
 
 .top-subnav-inner {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 38px;
+  gap: 6px;
+  height: 34px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -1328,9 +1403,8 @@ h3 {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--mgm-gold);
+  color: var(--muted);
   margin-right: 4px;
-  text-shadow: 0 0 10px rgba(245, 179, 1, 0.35);
 }
 
 .subnav-link {
@@ -1338,14 +1412,13 @@ h3 {
   align-items: center;
   gap: 6px;
   padding: 4px 12px;
-  border-radius: 99px;
+  border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--side-text);
+  color: var(--text-dim);
   text-decoration: none;
   white-space: nowrap;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-  border: 1px solid transparent;
+  transition: background-color 0.18s ease, color 0.18s ease;
 }
 
 .subnav-link svg {
@@ -1355,22 +1428,18 @@ h3 {
 }
 
 .subnav-link:hover {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.14);
-  color: #ffffff;
+  background: var(--chip);
+  color: var(--text);
   text-decoration: none;
 }
 
 .subnav-link.active {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.28) 0%, rgba(37, 99, 235, 0.35) 100%);
-  border: 1px solid rgba(56, 189, 248, 0.55);
-  color: #ffffff;
+  color: var(--lens-text);
   font-weight: 700;
-  box-shadow: 0 2px 10px rgba(56, 189, 248, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .subnav-link.active svg {
-  color: var(--accent);
+  color: inherit;
 }
 
 /* ── Page transition & animations ────────────────────────────────────────── */
@@ -4385,14 +4454,21 @@ h2 svg.icon {
   navigation: auto;
 }
 
-/* The top bar is identical on every page: keep it still instead of cross-fading it */
+/* The top bar and the sub-row are identical on every page: keep them still instead of cross-fading */
 .top-nav-bar {
   view-transition-name: topnav;
 }
 
+.top-subnav {
+  view-transition-name: topsub;
+}
+
 ::view-transition-group(topnav),
 ::view-transition-old(topnav),
-::view-transition-new(topnav) {
+::view-transition-new(topnav),
+::view-transition-group(topsub),
+::view-transition-old(topsub),
+::view-transition-new(topsub) {
   animation: none;
 }
 
