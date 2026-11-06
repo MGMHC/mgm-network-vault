@@ -129,18 +129,7 @@
     </div>
   </div>
 
-  <h2 style="margin-top:22px">Switch-down Alerts</h2>
-  <label class="check" style="margin-bottom:12px">
-    <input type="checkbox" name="alert_down_enabled" value="1" {{ 'checked' if s.alert_down_enabled == '1' }}>
-    <b>Email when a switch goes down</b>, and again when it recovers
-  </label>
-  <div class="form-grid">
-    <div class="field">
-      <label>Failed checks before alerting</label>
-      <input type="number" name="alert_down_checks" value="{{ s.alert_down_checks }}" min="1" step="1">
-      <div class="help">Emails Group Administrators (all sites) and Site Administrators (their sites) when a switch fails this many reachability checks in a row (no ping and no SSH), and again when it recovers. With checks every {{ s.ping_interval_min }} min, 2 means about {{ (s.ping_interval_min|int) * 2 }} min. Needs outbound email enabled above.</div>
-    </div>
-  </div>
+  {% if is_ga %}<p class="muted small" style="margin:18px 0 0">Email alerts (switch down, backup failed, config changed) are configured on the <a href="{{ url_for('web.alerts') }}">Alerts page</a>.</p>{% endif %}
   </fieldset>
 
   <button class="btn primary" style="margin-top:16px">Save settings</button>

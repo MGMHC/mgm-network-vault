@@ -1,3 +1,19 @@
+## [Unreleased]
+
+### Added
+- **Alerts page** (Admin → Alerts, Group Administrators only): one place for every email alert, separate from the mail-server settings.
+  - **Three triggers**, each with an on/off switch and its own settings: Switch down / recovered (moved here from Settings, current values kept), **Backup failed** and **Config changed**.
+  - **Messages**: each trigger has one or more messages. A message chooses who receives it (Group admins, Site admins for their own sites, extra addresses), can be limited to some sites, and has its own wording. Everyone gets each switch once per run, even when several messages include them.
+  - **Wording editor**: subject, opening paragraph and closing line with clickable fields such as `{count}`, `{first_switch}`, `{site}` and `{committed_by}`; live preview with sample data, "Send test to me" and "Reset wording to default". The list of switches, errors and diffs is added automatically, so an edit can't break the email.
+  - **Email style**: header colour, MGM logo (embedded, so it shows without loading remote images) and footer text, shared by every alert.
+  - **Recent alerts**: the last 20 alerts sent or failed. Alerts are also in Logs under the new `alert` category.
+- **Backup failed alert**: one email per backup run listing the switches whose backup failed and why. A switch is reported once until its backup succeeds again, so a dead switch isn't emailed every night.
+- **Config changed alert**: one email per backup run listing switches whose configuration changed, with +/- line counts, who committed the change and how (Juniper), the first 40 changed lines (adjustable, 0 for none) and a "View full comparison" link. Changes found by manual backups can be included or left out.
+
+### Changed
+- Switch-down emails use the new shared style; when one check has switches going down and others recovering, each person gets a separate "down" and "recovered" email.
+- Settings → Email Notifications now only holds the mail server settings, with a link to the Alerts page.
+
 ## [1.15.0] - 2026-11-06
 
 ### Added

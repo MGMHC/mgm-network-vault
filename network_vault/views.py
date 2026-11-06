@@ -1797,7 +1797,7 @@ def logs():
     p = q.paginate(page=page, per_page=100, error_out=False)
     dev_q = _site_filter(Device.query, Device)
     return render_template("logs.html", p=p, f=f, devices=dev_q.order_by(Device.name).all(),
-                           categories=["backup", "reachability", "schedule", "device", "git", "auth", "system"])
+                           categories=["backup", "reachability", "alert", "schedule", "device", "git", "auth", "system"])
 
 
 @bp.route("/logs/export.csv")
@@ -2074,8 +2074,7 @@ def credential_delete(cid):
 
 
 GROUP_ADMIN_SETTINGS = {"smtp_enabled", "smtp_host", "smtp_port", "smtp_encryption", "smtp_user",
-                        "smtp_pass_enc", "smtp_from_name", "smtp_from", "app_url",
-                        "alert_down_enabled", "alert_down_checks"}
+                        "smtp_pass_enc", "smtp_from_name", "smtp_from", "app_url"}
 
 
 @bp.route("/settings", methods=["GET", "POST"])
@@ -2084,17 +2083,14 @@ def settings():
     if request.method == "POST":
         me = _current_user()
         for k in DEFAULT_SETTINGS:
+            if k.startswith("alert_"):
+                continue  # owned by the Alerts page
             if k in GROUP_ADMIN_SETTINGS and not me.is_group_admin:
                 continue  # mail server and public URL affect every site's password resets
             if k == "skip_unchanged":
                 set_setting(k, "1" if _bool(k) else "0")
-            elif k in ("smtp_enabled", "alert_down_enabled"):
+            elif k == "smtp_enabled":
                 set_setting(k, "1" if request.form.get(k) == "1" else "0")
-            elif k == "alert_down_checks":
-                try:
-                    set_setting(k, str(max(1, int(request.form.get(k, "")))))
-                except ValueError:
-                    set_setting(k, DEFAULT_SETTINGS[k])
             elif k == "smtp_pass_enc":
                 new_pw = request.form.get("smtp_password", "").strip()
                 if new_pw:
@@ -2184,3 +2180,6 @@ def racks():
 
 from .rack_views import register_rack_views
 register_rack_views(bp, _current_user, _active_site_id, _site_filter, require_write)
+
+from .alerts_views import register_alert_views  # noqa: E402
+register_alert_views(bp, _current_user, require_group_admin)

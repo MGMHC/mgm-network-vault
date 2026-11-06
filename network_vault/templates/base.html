@@ -69,7 +69,7 @@
 
       {% set ep = request.endpoint or '' %}
       {% set is_ops = ep in ['web.port_locator', 'web.health', 'web.optics', 'web.vlan_audit'] or ep.startswith('web.lifecycle') %}
-      {% set is_admin = ep.startswith('web.site') or ep.startswith('web.credential') or ep == 'web.github' or ep.startswith('web.migrate') or ep == 'web.settings' or ep == 'web.account' %}
+      {% set is_admin = ep.startswith('web.site') or ep.startswith('web.credential') or ep == 'web.github' or ep.startswith('web.migrate') or ep == 'web.settings' or ep == 'web.account' or ep.startswith('web.alerts') %}
 
       <nav class="top-nav-links">
         <a href="{{ url_for('web.dashboard') }}" class="nav-item {{ 'active' if ep == 'web.dashboard' }}">{{ icon('dash') }}<span>Dashboard</span></a>
@@ -113,6 +113,7 @@
             <a href="{{ url_for('web.migrate') }}" class="dd-item {{ 'active' if ep.startswith('web.migrate') }}">{{ icon('archive') }}<span>Export &amp; migrate</span></a>
             {% endif %}
             <a href="{{ url_for('web.settings') }}" class="dd-item {{ 'active' if ep == 'web.settings' }}">{{ icon('gear') }}<span>Settings</span></a>
+            {% if current_user_obj and current_user_obj.is_group_admin %}<a href="{{ url_for('web.alerts') }}" class="dd-item {{ 'active' if ep.startswith('web.alerts') }}">{{ icon('bell') }}<span>Alerts</span></a>{% endif %}
             <a href="{{ url_for('web.account') }}" class="dd-item {{ 'active' if ep == 'web.account' }}">{{ icon('user') }}<span>Users</span></a>
           </div>
         </div>
@@ -185,6 +186,7 @@
         <a href="{{ url_for('web.migrate') }}" class="subnav-link {{ 'active' if ep.startswith('web.migrate') }}">{{ icon('archive') }}<span>Export &amp; migrate</span></a>
         {% endif %}
         <a href="{{ url_for('web.settings') }}" class="subnav-link {{ 'active' if ep == 'web.settings' }}">{{ icon('gear') }}<span>Settings</span></a>
+        {% if current_user_obj and current_user_obj.is_group_admin %}<a href="{{ url_for('web.alerts') }}" class="subnav-link {{ 'active' if ep.startswith('web.alerts') }}">{{ icon('bell') }}<span>Alerts</span></a>{% endif %}
         <a href="{{ url_for('web.account') }}" class="subnav-link {{ 'active' if ep == 'web.account' }}">{{ icon('user') }}<span>Users</span></a>
       </div>
     </div>
@@ -265,6 +267,7 @@
           <a href="{{ url_for('web.migrate') }}" class="mobile-nav-link {{ 'active' if ep.startswith('web.migrate') }}">{{ icon('archive') }}<span>Export &amp; migrate</span></a>
           {% endif %}
           <a href="{{ url_for('web.settings') }}" class="mobile-nav-link {{ 'active' if ep == 'web.settings' }}">{{ icon('gear') }}<span>Settings</span></a>
+          {% if current_user_obj and current_user_obj.is_group_admin %}<a href="{{ url_for('web.alerts') }}" class="mobile-nav-link {{ 'active' if ep.startswith('web.alerts') }}">{{ icon('bell') }}<span>Alerts</span></a>{% endif %}
           <a href="{{ url_for('web.account') }}" class="mobile-nav-link {{ 'active' if ep == 'web.account' }}">{{ icon('user') }}<span>Users</span></a>
         </div>
       </div>

@@ -1,0 +1,331 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Alerts{% endblock %}
+{% block content %}
+<div class="topbar"><div><h1>Alerts</h1><div class="sub">Choose which events send email, who receives them and how they are worded.</div></div></div>
+
+{% if not smtp_on %}
+<div class="card" style="border-left:4px solid var(--warn, #C3A275)">
+  <b>Outbound email is turned off.</b> No alerts are sent until it is enabled in
+  <a href="{{ url_for('web.settings') }}">Settings → Email Notifications</a>.
+</div>
+{% endif %}
+
+<!-- ── Email style ─────────────────────────────────────────────────────────── -->
+<form method="post" action="{{ url_for('web.alerts_style') }}" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="card-head"><h2>{{ icon('gear') }} Email style</h2></div>
+  <p class="muted small" style="margin:0 0 12px">Shared by every alert email.</p>
+  <div class="form-grid">
+    <div class="field">
+      <label>Header colour</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="color" id="styleColorPick" value="{{ s.alert_style_color }}" style="width:44px;height:36px;padding:2px" oninput="document.getElementById('styleColor').value=this.value">
+        <input type="text" id="styleColor" name="alert_style_color" value="{{ s.alert_style_color }}" pattern="#[0-9a-fA-F]{6}" style="max-width:120px" oninput="if(/^#[0-9a-fA-F]{6}$/.test(this.value))document.getElementById('styleColorPick').value=this.value">
+      </div>
+    </div>
+    <div class="field">
+      <label>Logo</label>
+      <label class="check"><input type="checkbox" name="alert_style_logo" value="1" {{ 'checked' if s.alert_style_logo == '1' }}> Show the MGM logo in the header</label>
+    </div>
+    <div class="field" style="grid-column:1 / -1">
+      <label>Footer text</label>
+      <input type="text" name="alert_style_footer" value="{{ s.alert_style_footer }}" maxlength="300">
+    </div>
+  </div>
+  <button class="btn primary" style="margin-top:12px">Save style</button>
+</form>
+
+<!-- ── Triggers ─────────────────────────────────────────────────────────────── -->
+{% for trig, label in triggers.items() %}
+<div class="card" id="trigger-{{ trig }}">
+  <form method="post" action="{{ url_for('web.alerts_trigger', trigger=trig) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <h2>{{ icon('bell') }} {{ label }}</h2>
+      {% set on = s.alert_down_enabled if trig == 'switch_down' else (s.alert_backup_enabled if trig == 'backup_failed' else s.alert_change_enabled) %}
+      <label class="check" style="margin:0"><input type="checkbox" name="enabled" value="1" {{ 'checked' if on == '1' }}> <b>On</b></label>
+    </div>
+    {% if trig == 'switch_down' %}
+      <p class="muted small" style="margin:0 0 10px">A switch that answers neither ping nor SSH on the scheduled reachability checks. Pressing "Check" yourself never brings the email forward.</p>
+      <div class="form-grid">
+        <div class="field">
+          <label>Failed checks in a row before emailing</label>
+          <input type="number" name="checks" min="1" max="100" value="{{ s.alert_down_checks }}">
+          <div class="help">{% if (s.ping_interval_min|int) > 0 %}Checks run every {{ s.ping_interval_min }} min, so {{ s.alert_down_checks }} ≈ {{ (s.alert_down_checks|int) * (s.ping_interval_min|int) }} min.{% else %}Scheduled reachability checks are off (Settings), so nothing is sent.{% endif %}</div>
+        </div>
+        <div class="field">
+          <label>Recovery</label>
+          <label class="check"><input type="checkbox" name="recovery" value="1" {{ 'checked' if s.alert_down_recovery == '1' }}> Email again when the switch comes back</label>
+        </div>
+      </div>
+    {% elif trig == 'backup_failed' %}
+      <p class="muted small" style="margin:0 0 10px">One email per backup run, listing the switches whose backup failed. A switch is reported once until its backup succeeds again.</p>
+    {% else %}
+      <p class="muted small" style="margin:0 0 10px">One email per backup run, listing switches whose configuration changed, with who committed it and the first lines of the difference.</p>
+      <div class="form-grid">
+        <div class="field">
+          <label>Diff lines shown in the email</label>
+          <input type="number" name="diff_lines" min="0" max="500" value="{{ s.alert_change_diff_lines }}">
+          <div class="help">0 shows no diff, only the summary and a link to the full comparison.</div>
+        </div>
+        <div class="field">
+          <label>Manual backups</label>
+          <label class="check"><input type="checkbox" name="manual" value="1" {{ 'checked' if s.alert_change_manual == '1' }}> Also report changes found by manual backups</label>
+        </div>
+      </div>
+    {% endif %}
+    <button class="btn sm" style="margin-top:10px">Save {{ label|lower }} settings</button>
+  </form>
+
+  <h3 style="margin:18px 0 8px;font-size:14px">Messages</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Name</th><th>Sends to</th><th>Sites</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for m in msgs if m.trigger == trig %}
+      <tr>
+        <td><b>{{ m.name }}</b></td>
+        <td>
+          {% set parts = [] %}
+          {% if m.to_group_admins %}{% set _ = parts.append('Group admins') %}{% endif %}
+          {% if m.to_site_admins %}{% set _ = parts.append('Site admins (own sites)') %}{% endif %}
+          {% if m.extra_list %}{% set _ = parts.append(m.extra_list|length ~ ' extra address' ~ ('' if m.extra_list|length == 1 else 'es')) %}{% endif %}
+          {{ parts|join(', ') if parts else '— nobody yet —' }}
+        </td>
+        <td>{% if m.site_ids %}{% for sid in m.site_ids %}<span class="badge blue" style="font-size:10px">{{ site_codes.get(sid, '?') }}</span> {% endfor %}{% else %}All sites{% endif %}</td>
+        <td>{% if m.enabled %}<span class="badge ok">enabled</span>{% else %}<span class="badge">disabled</span>{% endif %}</td>
+        <td class="num">
+          <button type="button" class="btn sm" onclick="openAlertEditor({{ m.id }})">Edit</button>
+          <form method="post" class="inline" action="{{ url_for('web.alerts_message_delete', mid=m.id) }}" data-confirm="Delete message {{ m.name }}?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn sm danger">Delete</button></form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="muted">No messages - nothing is sent for this trigger.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <form method="post" action="{{ url_for('web.alerts_message_new') }}" style="margin-top:10px">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="trigger" value="{{ trig }}">
+    <button class="btn sm">+ Add message</button>
+    <span class="muted small">for a different group of people or different wording</span>
+  </form>
+</div>
+{% endfor %}
+
+<!-- ── Recent alerts ───────────────────────────────────────────────────────── -->
+<div class="card flush">
+  <div class="card-head" style="padding:14px 16px 0"><h2>Recent alerts</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>When</th><th>Level</th><th>What</th></tr></thead>
+    <tbody>
+    {% for e in recent %}
+      <tr><td style="white-space:nowrap">{{ e.ts|dt }}</td>
+          <td>{% if e.level == 'WARN' %}<span class="badge warn">warn</span>{% elif e.level == 'ERROR' %}<span class="badge bad">error</span>{% else %}<span class="badge ok">sent</span>{% endif %}</td>
+          <td>{{ e.message }}</td></tr>
+    {% else %}
+      <tr><td colspan="3" class="muted">No alerts sent yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
+<!-- ── Message editor ──────────────────────────────────────────────────────── -->
+<div id="alertModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);align-items:flex-start;justify-content:center;z-index:1000;overflow:auto;padding:24px 12px">
+  <div class="card" style="max-width:1100px;width:100%;margin:0">
+    <form method="post" id="alertForm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="trigger" id="afTrigger">
+      <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+        <h2 id="afTitle">Edit message</h2>
+        <button type="button" class="btn sm" onclick="closeModal('alertModal')">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px" class="alert-editor-grid">
+        <div>
+          <div class="form-grid">
+            <div class="field"><label>Name</label><input type="text" name="name" id="afName" maxlength="64" required></div>
+            <div class="field"><label>&nbsp;</label><label class="check"><input type="checkbox" name="enabled" value="1" id="afEnabled"> Enabled</label></div>
+          </div>
+          <div class="field">
+            <label>Send to</label>
+            <label class="check"><input type="checkbox" name="to_group_admins" value="1" id="afGA"> Group administrators (all sites)</label>
+            <label class="check"><input type="checkbox" name="to_site_admins" value="1" id="afSA"> Site administrators (only their own sites)</label>
+            <input type="text" name="extra_emails" id="afExtra" placeholder="Extra addresses, e.g. noc@mgmhealthcare.in, it-head@mgmhealthcare.in" style="margin-top:6px">
+            <div class="help">Users need an email address on their account (Users page).</div>
+          </div>
+          <div class="field">
+            <label>Limit to sites <span class="muted small">(none ticked = all sites)</span></label>
+            <div style="display:flex;flex-wrap:wrap;gap:4px 14px">
+              {% for site in sites %}<label class="check" style="margin:0"><input type="checkbox" name="site_ids" value="{{ site.id }}" class="afSite"> {{ site.code }}</label>{% endfor %}
+            </div>
+          </div>
+
+          <div id="afKindTabs" style="display:flex;gap:6px;margin:14px 0 8px"></div>
+          <div class="field"><label>Subject</label>
+            <input type="text" name="subject" id="afSubject" maxlength="255" data-kind="main">
+            <input type="text" name="recovery_subject" id="afRecSubject" maxlength="255" data-kind="up" style="display:none">
+          </div>
+          <div class="field"><label>Opening paragraph</label>
+            <textarea name="intro" id="afIntro" rows="3" data-kind="main"></textarea>
+            <textarea name="recovery_intro" id="afRecIntro" rows="3" data-kind="up" style="display:none"></textarea>
+          </div>
+          <div class="field"><label>Closing line <span class="muted small">(optional)</span></label>
+            <textarea name="outro" id="afOutro" rows="2"></textarea>
+          </div>
+          <div class="field">
+            <label>Insert a field <span class="muted small">(click to add at the cursor)</span></label>
+            <div id="afChips" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+            <div class="help">The list of switches, error details and diff are added automatically below your opening paragraph.</div>
+          </div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <b>Preview</b> <span class="muted small">sample data</span>
+          </div>
+          <div class="muted small" style="margin-bottom:6px">Subject: <span id="afPrevSubject" style="color:var(--text)"></span></div>
+          <iframe id="afPreview" title="Email preview" style="width:100%;height:560px;border:1px solid var(--border, #e2e8f0);border-radius:8px;background:#fff"></iframe>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px">
+        <button class="btn primary" type="submit">Save</button>
+        <button class="btn" type="button" onclick="sendAlertTest(this)">Send test to me</button>
+        <button class="btn" type="button" onclick="resetAlertWording()">Reset wording to default</button>
+        <button class="btn" type="button" onclick="closeModal('alertModal')">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const ALERT_MSGS = {{ msg_data|tojson }};
+const ALERT_FIELDS = {{ fields|tojson }};
+const ALERT_DEFAULTS = {{ defaults|tojson }};
+const ALERT_KINDS = {{ kinds|tojson }};
+const KIND_LABEL = { down: 'Down email', up: 'Recovered email', failed: 'Failed email', changed: 'Changed email' };
+let afMsg = null, afKind = null, afLastField = null, afTimer = null;
+
+function afEl(id) { return document.getElementById(id); }
+
+function openAlertEditor(id) {
+  const m = ALERT_MSGS[String(id)];
+  if (!m) return;
+  afMsg = m;
+  const f = afEl('alertForm');
+  f.action = '/alerts/message/' + m.id;
+  afEl('afTrigger').value = m.trigger;
+  afEl('afTitle').textContent = 'Edit message - ' + m.name;
+  afEl('afName').value = m.name;
+  afEl('afEnabled').checked = !!m.enabled;
+  afEl('afGA').checked = !!m.to_group_admins;
+  afEl('afSA').checked = !!m.to_site_admins;
+  afEl('afExtra').value = m.extra_emails || '';
+  document.querySelectorAll('.afSite').forEach(c => { c.checked = (m.site_ids || []).includes(Number(c.value)); });
+  afEl('afSubject').value = m.subject || '';
+  afEl('afIntro').value = m.intro || '';
+  afEl('afOutro').value = m.outro || '';
+  afEl('afRecSubject').value = m.recovery_subject || '';
+  afEl('afRecIntro').value = m.recovery_intro || '';
+  // chips
+  afEl('afChips').innerHTML = '';
+  (ALERT_FIELDS[m.trigger] || []).forEach(name => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn sm'; b.textContent = '{' + name + '}';
+    b.addEventListener('mousedown', e => e.preventDefault());  // keep the cursor in the text box
+    b.addEventListener('click', () => insertAlertField(name));
+    afEl('afChips').appendChild(b);
+  });
+  // kind tabs (switch down has a Down and a Recovered wording)
+  const tabs = afEl('afKindTabs');
+  tabs.innerHTML = '';
+  const kinds = ALERT_KINDS[m.trigger] || [];
+  kinds.forEach(k => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn sm'; b.dataset.kind = k; b.textContent = KIND_LABEL[k] || k;
+    b.addEventListener('click', () => setAlertKind(k));
+    tabs.appendChild(b);
+  });
+  tabs.style.display = kinds.length > 1 ? 'flex' : 'none';
+  setAlertKind(kinds[0]);
+  afEl('alertModal').style.display = 'flex';
+}
+
+function setAlertKind(k) {
+  afKind = k;
+  const up = k === 'up';
+  afEl('afSubject').style.display = up ? 'none' : '';
+  afEl('afIntro').style.display = up ? 'none' : '';
+  afEl('afRecSubject').style.display = up ? '' : 'none';
+  afEl('afRecIntro').style.display = up ? '' : 'none';
+  document.querySelectorAll('#afKindTabs button').forEach(b => b.classList.toggle('primary', b.dataset.kind === k));
+  afLastField = up ? afEl('afRecIntro') : afEl('afIntro');
+  refreshAlertPreview();
+}
+
+function insertAlertField(name) {
+  const editable = ['afSubject', 'afIntro', 'afOutro', 'afRecSubject', 'afRecIntro'];
+  const ae = document.activeElement;
+  const el = ae && editable.includes(ae.id) ? ae
+    : (afLastField && afLastField.offsetParent !== null ? afLastField : (afKind === 'up' ? afEl('afRecIntro') : afEl('afIntro')));
+  const tok = '{' + name + '}';
+  const s = el.selectionStart ?? el.value.length, e = el.selectionEnd ?? el.value.length;
+  el.value = el.value.slice(0, s) + tok + el.value.slice(e);
+  el.focus();
+  el.setSelectionRange(s + tok.length, s + tok.length);
+  refreshAlertPreview();
+}
+
+function alertFormData() {
+  const fd = new FormData(afEl('alertForm'));
+  fd.set('kind', afKind);
+  return fd;
+}
+
+async function refreshAlertPreview() {
+  if (!afMsg) return;
+  try {
+    const r = await fetch('/alerts/preview', { method: 'POST', headers: { 'X-CSRF-Token': CSRF }, body: alertFormData() });
+    if (!r.ok) return;
+    const d = await r.json();
+    afEl('afPrevSubject').textContent = d.subject;
+    afEl('afPreview').srcdoc = d.html;
+  } catch (e) { /* preview is best-effort */ }
+}
+
+async function sendAlertTest(btn) {
+  btn.disabled = true;
+  try {
+    const r = await fetch('/alerts/test', { method: 'POST', headers: { 'X-CSRF-Token': CSRF }, body: alertFormData() });
+    const d = await r.json().catch(() => ({}));
+    if (d.ok) toast('Test email sent to ' + escapeHtml(d.to), 'ok');
+    else toast('Test failed: ' + escapeHtml(d.error || ('HTTP ' + r.status)), 'bad', 8000);
+  } finally { btn.disabled = false; }
+}
+
+function resetAlertWording() {
+  const d = ALERT_DEFAULTS[afMsg.trigger] || {};
+  afEl('afSubject').value = d.subject || '';
+  afEl('afIntro').value = d.intro || '';
+  afEl('afOutro').value = d.outro || '';
+  afEl('afRecSubject').value = d.recovery_subject || '';
+  afEl('afRecIntro').value = d.recovery_intro || '';
+  refreshAlertPreview();
+  toast('Wording reset - press Save to keep it', 'ok');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  ['afSubject', 'afIntro', 'afOutro', 'afRecSubject', 'afRecIntro'].forEach(id => {
+    const el = afEl(id);
+    el.addEventListener('focus', () => { afLastField = el; });
+    el.addEventListener('input', () => { clearTimeout(afTimer); afTimer = setTimeout(refreshAlertPreview, 300); });
+  });
+  // open the editor for a message just added (#edit-<id>) or the newest one after "+ Add message"
+  const m = location.hash.match(/^#edit-(\d+)$/);
+  if (m) openAlertEditor(m[1]);
+});
+</script>
+<style>
+@media (max-width: 900px) { .alert-editor-grid { grid-template-columns: minmax(0,1fr) !important; } }
+</style>
+{% endblock %}
