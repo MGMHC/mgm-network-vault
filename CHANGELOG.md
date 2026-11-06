@@ -1,9 +1,20 @@
 ## [Unreleased]
 
+## [1.18.0] - 2026-11-07
+
 ### Added
 - **Glass / Normal and Day / Night switches**, remembered per user. Choose the look (Glass or Normal solid panels) and the mode (Dark or Light) in the top bar; your choice follows you to other browsers.
 - **Liquid glass redone**: aurora (dark) and daylight (light) backgrounds, clear glass panels with light-catching edges, and a floating menu bar with a glass lens on the current page. Dropdowns, dialogs and the locator dock use stronger blur.
 - **Status as dot + text** and **softer badges and buttons** (no outlines) across all pages.
+
+### Changed
+- **Back link moved next to the page title**: the menu bar no longer gains a Back button off the Dashboard, so it stays the same on every page and nothing shifts. Detail pages show a small link above the title that goes to their parent page:
+  - device page → Devices; edit device → that device; add device → Devices;
+  - backup view and compare → Backups.
+
+### Security
+- The theme cookie is marked `Secure` on HTTPS (it follows the session cookie setting and the reverse proxy's `X-Forwarded-Proto`).
+- The theme API rejects a malformed request body with 400 instead of failing with 500.
 
 ### Fixed
 - Text contrast in all four looks: selected calendar day, blue badges, role avatars on the Users page, and the sticky table header over scrolling rows in glass now meet WCAG AA.
