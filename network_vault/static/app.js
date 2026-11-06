@@ -1030,7 +1030,7 @@ function initLiquidDatepickers() {
       // Empty lead days
       for (let i = 0; i < firstDay; i++) {
         const emptyCell = document.createElement('div');
-        emptyCell.className = 'lg-cal-day empty';
+        emptyCell.className = 'lg-cal-day lg-cal-blank';
         daysGrid.appendChild(emptyCell);
       }
 

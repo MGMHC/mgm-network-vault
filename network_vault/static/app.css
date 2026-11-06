@@ -2796,8 +2796,8 @@ pre.code {
 /* Weekday Grid */
 .lg-cal-weekdays {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
   margin-bottom: 6px;
   text-align: center;
 }
@@ -2814,12 +2814,14 @@ pre.code {
 /* Days Grid */
 .lg-cal-days {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
 }
 
 .lg-cal-day {
   height: 32px;
+  min-width: 0;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2844,7 +2846,8 @@ pre.code {
   transform: scale(0.95);
 }
 
-.lg-cal-day.empty {
+/* Blank cells before the 1st. Not ".empty": that is the app's empty-state class (28px padding). */
+.lg-cal-day.lg-cal-blank {
   cursor: default;
   pointer-events: none;
 }
