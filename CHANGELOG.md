@@ -1,4 +1,4 @@
-## [Unreleased]
+## [1.17.0] - 2026-11-06
 
 ### Added
 - **Port Locator traces like you would by hand**: it looks the MAC up on the site's distribution and core switches, then follows the port it is learned on to the next switch using LLDP (bundle `ae` ports included), until it reaches a normal access port. A typical search now talks to 2-3 switches instead of every switch in the site, and the result shows the path, e.g. `DIST-EX3300-VC · ae12 → 10F-RACK1-ACC-SW3 · ge-0/0/14`.
