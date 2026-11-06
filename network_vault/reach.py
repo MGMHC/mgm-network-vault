@@ -48,7 +48,9 @@ def probe(host, port):
     return status, rtt
 
 
-def check_devices(app, device_ids=None):
+def check_devices(app, device_ids=None, scheduled=True):
+    """Probe switches and record their status. `scheduled` is False for checks a user starts
+    from the UI: those update the status but don't count toward the switch-down alert threshold."""
     with app.app_context():
         q = Device.query.filter_by(enabled=True)
         if device_ids:
@@ -62,6 +64,7 @@ def check_devices(app, device_ids=None):
     down, recovered = [], []  # switch-down alerts due after this check
     with app.app_context():
         limit = alerts.threshold()
+        sending = alerts.enabled()
         for dev_id, (status, rtt) in results.items():
             d = db.session.get(Device, dev_id)
             if d is None:
@@ -78,7 +81,7 @@ def check_devices(app, device_ids=None):
                     text = {"up": "Device reachable (ping + SSH OK)", "down": "Device UNREACHABLE (no ping, no SSH)",
                             "ssh-down": "Device pings but SSH port is closed"}[status]
                     log_event(f"{text} [was {old}]", "reachability", level, d, commit=False, user="monitor")
-            due = alerts.collect(d, old, status, old_since, limit)
+            due = alerts.collect(d, old, status, old_since, limit, scheduled=scheduled, sending=sending)
             if due:
                 (down if due[0] == "down" else recovered).append(due[1])
         db.session.commit()

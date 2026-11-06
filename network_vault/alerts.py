@@ -21,6 +21,11 @@ def threshold():
         return 2
 
 
+def enabled():
+    """True when alert emails can actually go out (alerts on and outbound email on)."""
+    return get_setting("alert_down_enabled") == "1" and get_smtp_config()["enabled"]
+
+
 def _info(device, since):
     minutes = int((now() - since).total_seconds() // 60) if since else None
     return {
@@ -34,15 +39,21 @@ def _info(device, since):
     }
 
 
-def collect(device, old_status, new_status, old_since, limit=None):
+def collect(device, old_status, new_status, old_since, limit=None, scheduled=True, sending=True):
     """Update the switch's alert counters for one check result.
 
-    Returns ("down", info) or ("up", info) when an email is due, otherwise None. Counters update
-    even when alerts are switched off; dispatch() decides whether anything is sent."""
+    Returns ("down", info) or ("up", info) when an email is due, otherwise None.
+    - Only scheduled checks count toward the threshold: someone pressing "Check" on a red switch
+      must not turn a short blip into an email. Any check can end an outage (recovery email).
+    - While emails can't go out (`sending` False) the switch is not marked as alerted, so nobody
+      later gets a "recovered" email for an outage they never heard about; if it is still down
+      when alerts come back on, the next scheduled check reports it."""
     limit = limit or threshold()
     if new_status == "down":
+        if not scheduled:
+            return None
         device.down_checks = (device.down_checks or 0) + 1
-        if device.down_checks >= limit and not device.down_alerted:
+        if device.down_checks >= limit and not device.down_alerted and sending:
             device.down_alerted = True
             return "down", _info(device, device.status_since)
         return None
@@ -85,7 +96,7 @@ def dispatch(app, down, recovered):
     if not down and not recovered:
         return
     with app.app_context():
-        if get_setting("alert_down_enabled") != "1" or not get_smtp_config()["enabled"]:
+        if not enabled():
             return
     _spawn(_send_all, app, list(down), list(recovered))
 

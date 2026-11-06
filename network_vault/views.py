@@ -938,7 +938,7 @@ def api_check():
     else:
         ids = _ids(data.get("ids", []))
     ids = _authorized_device_ids(ids)
-    res = reach.check_devices(current_app._get_current_object(), ids)
+    res = reach.check_devices(current_app._get_current_object(), ids, scheduled=False)
     return jsonify({str(k): {"status": s, "ping_ms": r} for k, (s, r) in res.items()})
 
 

@@ -10,6 +10,8 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
   - Group Administrators are told about every switch; Site Administrators only about switches in their sites. Users need an email address on their account.
   - Switches that go down in the same check are listed in one email per person, so a building outage is one message.
   - Short blips are ignored: in the last 30 days, 82% of "down" events were back by the next check.
+  - Only the scheduled checks count. Pressing "Check" on a red switch updates its status but doesn't bring the email forward; a manual check that finds it back up does send the recovery email.
+  - After upgrading, any switch that is already down is reported at the next scheduled checks, in one email per person.
   - Settings → Switch-down Alerts turns this on or off and sets how many failed checks trigger it (Group Administrators only). Outbound email must be enabled. Every alert sent, and any delivery failure, is recorded in Logs under Reachability.
 
 ### Changed
