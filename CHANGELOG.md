@@ -1,5 +1,11 @@
 ## [Unreleased]
 
+## [1.18.2] - 2026-11-07
+
+### Fixed
+- **Port Locator shows live progress behind IIS**: an IP or MAC trace sat on "Tracing '…'" and then jumped straight to the result after 20-40 seconds, because the reverse proxy held the live progress stream back until the trace ended. While a trace runs, the page now also checks the trace's status once a second, so the bar, the current step (e.g. "Following LLDP, hop 1: …"), the switch count and the log lines update as the trace runs. Log lines are never shown twice and the bar never moves backwards when the held-back stream arrives.
+- The "Starting trace…" line was printed twice in the trace log.
+
 ## [1.18.1] - 2026-11-07
 
 ### Fixed
