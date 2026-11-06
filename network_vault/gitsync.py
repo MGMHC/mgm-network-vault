@@ -214,7 +214,7 @@ def device_url(device):
 # ──────────────────────────────────────────────────────── secret masking ────
 
 _JUNOS_RULES = [
-    (re.compile(r'"\\$\\d+\\$[^"]*"'), '"<masked>"'),                         # $9$ / $1$ / $5$ / $6$ secrets
+    (re.compile(r'"\$\d+\$[^"]*"'), '"<masked>"'),                             # $9$ / $1$ / $5$ / $6$ secrets
     (re.compile(r'(\bcommunity\s+)("[^"]*"|[^\s{;]+)'), r"\1<masked>"),    # SNMP community names
 ]
 _CISCO_RULES = [

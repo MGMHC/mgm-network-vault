@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security
+- **Juniper secrets were not masked in the GitHub copy**: the masking rule for Junos `$9$`/`$1$`/`$5$`/`$6$` secrets (RADIUS/TACACS keys, local user passwords, authentication keys) never matched, so with GitHub sync and "Mask secrets" on these were still pushed in clear. Fixed; the next backup of each Juniper switch pushes a masked copy. Earlier commits in the repository's history still contain them - rotate those secrets or rewrite the repository history.
+- **Config-changed emails never contain secrets**: diff lines are masked the same way before they are emailed, and very long lines are cut at 300 characters.
+
 ### Added
 - **Alerts page** (Admin → Alerts, Group Administrators only): one place for every email alert, separate from the mail-server settings.
   - **Three triggers**, each with an on/off switch and its own settings: Switch down / recovered (moved here from Settings, current values kept), **Backup failed** and **Config changed**.

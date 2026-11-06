@@ -533,7 +533,7 @@ def backup_device(device_id, trigger="manual", user=None, alert=None):
             device.last_backup_at = now()
             if (alert and alert["failed"] is not None and not device.backup_fail_alerted
                     and alerts.would_reach(device.site_id, alert["failed"])):
-                device.backup_fail_alerted = True  # once per failure streak
+                # marked as reported (backup_fail_alerted) only when the job sends it - see start_backup_job
                 with alert["lock"]:
                     alert["events"].append(_alert_item(device, kind="failed", error=err))
             log_event(f"Backup failed ({trigger})", "backup", "ERROR", device, details=err, user=actor)
@@ -559,7 +559,9 @@ def backup_device(device_id, trigger="manual", user=None, alert=None):
                 else:
                     continue
                 if len(diff_lines) < 500:
-                    diff_lines.append(l)
+                    # for the alert email: secrets masked like the GitHub copy, very long lines cut
+                    body = gitsync.mask(l[1:], device.is_juniper)
+                    diff_lines.append(l[0] + (body[:300] + "…" if len(body) > 300 else body))
 
         device.last_backup_at = now()
         device.last_backup_status = "ok"
@@ -692,8 +694,22 @@ def start_backup_job(app, device_ids, trigger="manual", wait=False, user=None):
             label = ("scheduled" if trigger.startswith("schedule") else
                      "commit-triggered" if trigger.startswith("syslog") else "manual")
         ev = alert["events"]
-        alerts.dispatch(app, "backup_failed", {"failed": [e for e in ev if e["kind"] == "failed"]},
-                        {"trigger_label": label})
+        failed = [e for e in ev if e["kind"] == "failed"]
+        if failed:
+            # Mark switches as reported (once per failure streak) only now that the email goes out, and only
+            # those someone will still hear about - so a restart mid-job or a settings change loses nothing.
+            with app.app_context():
+                if alerts.trigger_enabled("backup_failed"):
+                    tg = alerts.targets("backup_failed")
+                    failed = [e for e in failed if alerts.would_reach(e["site_id"], tg)]
+                    for e in failed:
+                        d = db.session.get(Device, e["id"])
+                        if d:
+                            d.backup_fail_alerted = True
+                    db.session.commit()
+                else:
+                    failed = []
+        alerts.dispatch(app, "backup_failed", {"failed": failed}, {"trigger_label": label})
         alerts.dispatch(app, "config_changed", {"changed": [e for e in ev if e["kind"] == "changed"]},
                         {"trigger_label": label})
         with app.app_context():
