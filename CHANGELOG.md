@@ -5,6 +5,13 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 
 ## [Unreleased]
 
+### Added
+- **Switch-down email alerts**: when a switch fails 2 reachability checks in a row (no ping and no SSH, about 10 minutes at the default 5-minute interval), an email goes out. A second email follows when it recovers, with how long it was down.
+  - Group Administrators are told about every switch; Site Administrators only about switches in their sites. Users need an email address on their account.
+  - Switches that go down in the same check are listed in one email per person, so a building outage is one message.
+  - Short blips are ignored: in the last 30 days, 82% of "down" events were back by the next check.
+  - Settings → Switch-down Alerts turns this on or off and sets how many failed checks trigger it (Group Administrators only). Outbound email must be enabled. Every alert sent, and any delivery failure, is recorded in Logs under Reachability.
+
 ### Changed
 - **Instant menu navigation**: removed the 140 ms fade-out delay before every page change and the fade-in after it. Pages now switch with the browser's native cross-fade (Chrome/Edge; the top bar stays still) and other browsers switch instantly. Turned off when Windows is set to reduce motion.
 - **Menu pages start loading on press**: pressing a menu link starts fetching the page before the click completes (Chrome/Edge). Only menu links are fetched early; Logout, downloads and exports never are. Hovering fetches nothing, so a page is never shown stale.

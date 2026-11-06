@@ -2074,7 +2074,8 @@ def credential_delete(cid):
 
 
 GROUP_ADMIN_SETTINGS = {"smtp_enabled", "smtp_host", "smtp_port", "smtp_encryption", "smtp_user",
-                        "smtp_pass_enc", "smtp_from_name", "smtp_from", "app_url"}
+                        "smtp_pass_enc", "smtp_from_name", "smtp_from", "app_url",
+                        "alert_down_enabled", "alert_down_checks"}
 
 
 @bp.route("/settings", methods=["GET", "POST"])
@@ -2087,8 +2088,13 @@ def settings():
                 continue  # mail server and public URL affect every site's password resets
             if k == "skip_unchanged":
                 set_setting(k, "1" if _bool(k) else "0")
-            elif k == "smtp_enabled":
-                set_setting(k, "1" if request.form.get("smtp_enabled") == "1" else "0")
+            elif k in ("smtp_enabled", "alert_down_enabled"):
+                set_setting(k, "1" if request.form.get(k) == "1" else "0")
+            elif k == "alert_down_checks":
+                try:
+                    set_setting(k, str(max(1, int(request.form.get(k, "")))))
+                except ValueError:
+                    set_setting(k, DEFAULT_SETTINGS[k])
             elif k == "smtp_pass_enc":
                 new_pw = request.form.get("smtp_password", "").strip()
                 if new_pw:
