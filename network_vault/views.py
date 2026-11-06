@@ -11,7 +11,7 @@ from flask import (Blueprint, Response, abort, current_app, flash, jsonify, redi
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import selectinload
 
-from . import config, engine, gitsync, lifecycle, mailer, operations, portable, reach, updater
+from . import config, engine, gitsync, lifecycle, mailer, operations, portable, reach, theme, updater
 from .diffing import side_by_side, stats, unified
 from .models import (DEFAULT_SETTINGS, MODELS, PLATFORMS, ROLES, USER_ROLES, Backup, Credential, Device, Job,
                      LogEntry, Schedule, Site, User, db, get_int, get_setting, now, password_version,
@@ -407,6 +407,22 @@ def _site_admin_can_manage(me, u):
     u_sites = set(u.allowed_site_ids or [])
     my_sites = set(me.allowed_site_ids or [])
     return bool(u_sites) and u_sites.issubset(my_sites)
+
+
+@bp.route("/api/account/theme", methods=["POST"])
+def account_theme():
+    """Save the signed-in user's look and mode (any role may; it is a personal display setting)."""
+    data = request.get_json(silent=True) or {}
+    look, mode = data.get("look"), data.get("mode")
+    if not theme.valid(look, mode):
+        return jsonify(error="Invalid theme."), 400
+    me = _current_user()
+    me.theme_look, me.theme_mode = look, mode
+    db.session.commit()
+    resp = jsonify(ok=True, look=look, mode=mode)
+    resp.set_cookie(theme.COOKIE, theme.cookie_value(look, mode), max_age=365 * 24 * 3600,
+                    samesite="Lax", path="/", httponly=False)
+    return resp
 
 
 @bp.route("/account", methods=["GET", "POST"])

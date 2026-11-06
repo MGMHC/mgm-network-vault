@@ -6,7 +6,7 @@ from datetime import timedelta
 from flask import Flask, abort, redirect, request, session, url_for
 from sqlalchemy import event, pool
 
-from . import config
+from . import config, theme
 from .models import Site, User, db, password_version
 from .util import BASE_DIR, FLASK_SECRET, RESTORED, log_event
 from .version import __version__
@@ -197,6 +197,8 @@ def create_app():
         if request.endpoint in PUBLIC_ENDPOINTS:
             return None
         if "user" not in session:
+            if request.path == "/api/account/theme":
+                abort(401, "Not signed in.")
             return redirect(url_for("web.login", next=request.full_path))
         # The session cookie is signed but stateless: re-check that the account still exists and
         # that its password has not changed since this session logged in (deleted users and
@@ -227,6 +229,21 @@ def create_app():
                 resp.cache_control.immutable = True
             else:
                 resp.cache_control.max_age = 86400
+        return resp
+
+    @app.after_request
+    def theme_cookie(resp):
+        # Keep the theme cookie in step with a logged-in user's saved choice, so the login page
+        # (and a fresh browser tab) can already show it.
+        if request.path.startswith("/static/") or not session.get("user"):
+            return resp
+        if any(c.startswith(theme.COOKIE + "=") for c in resp.headers.getlist("Set-Cookie")):
+            return resp
+        user = User.query.filter_by(username=session["user"]).first()
+        look, mode = theme.resolve(user, request.cookies.get(theme.COOKIE))
+        want = theme.cookie_value(look, mode)
+        if user and request.cookies.get(theme.COOKIE) != want:
+            resp.set_cookie(theme.COOKIE, want, max_age=365 * 24 * 3600, samesite="Lax", path="/", httponly=False)
         return resp
 
     @app.context_processor
@@ -284,7 +301,10 @@ def create_app():
                     except (ValueError, TypeError):
                         current_site_id = "all"
 
+        theme_look, theme_mode = theme.resolve(user_obj, request.cookies.get(theme.COOKIE))
         return {
+            "theme_look": theme_look,
+            "theme_mode": theme_mode,
             "csrf_token": session["csrf"],
             "current_user": uname,
             "current_user_obj": user_obj,

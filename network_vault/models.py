@@ -53,6 +53,8 @@ class User(db.Model):
     role = db.Column(db.String(24), default="group-admin")  # group-admin | site-admin | read-write | read-only
     site_id = db.Column(db.Integer, db.ForeignKey("site.id"), nullable=True)  # primary / fallback site
     last_login_at = db.Column(db.DateTime, nullable=True)
+    theme_look = db.Column(db.String(8), nullable=True)  # glass | normal
+    theme_mode = db.Column(db.String(8), nullable=True)  # dark | light
 
     assigned_sites = db.relationship(
         "Site",
