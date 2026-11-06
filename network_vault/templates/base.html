@@ -399,12 +399,13 @@ document.addEventListener('keydown', (e) => {
   }
 });
 </script>
-<!-- Hover a menu link and the browser fetches that page early (Chrome/Edge). Prefetch only - page
-     scripts never run early. Logout, downloads and exports are never fetched ahead of a click. -->
+<!-- Pressing a menu link starts fetching the page before the click completes (Chrome/Edge).
+     "conservative" (on press, not hover) so a page is never served stale from an earlier hover.
+     Prefetch only - page scripts never run early. Logout, downloads and exports are never fetched. -->
 <script type="speculationrules">
 {
   "prefetch": [{
-    "eagerness": "moderate",
+    "eagerness": "conservative",
     "where": {"and": [
       {"selector_matches": ".nav-brand, .nav-item, .dd-item, .subnav-link, .mobile-nav-drawer a"},
       {"not": {"selector_matches": "[download], [data-no-transition], [target=_blank]"}},

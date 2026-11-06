@@ -7,11 +7,11 @@ All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](
 
 ### Changed
 - **Instant menu navigation**: removed the 140 ms fade-out delay before every page change and the fade-in after it. Pages now switch with the browser's native cross-fade (Chrome/Edge; the top bar stays still) and other browsers switch instantly. Turned off when Windows is set to reduce motion.
-- **Menu pages load ahead of the click**: hovering a menu link for a moment fetches that page in the background (Chrome/Edge), so it opens almost immediately. Only menu links are fetched; Logout, downloads and exports never are.
-- **CSS and JavaScript are cached until the next release**: they were re-checked with the server on every page load. Their URLs already carry the version number, so an update still loads the new files. Images are cached for a day.
+- **Menu pages start loading on press**: pressing a menu link starts fetching the page before the click completes (Chrome/Edge). Only menu links are fetched early; Logout, downloads and exports never are. Hovering fetches nothing, so a page is never shown stale.
+- **Static file caching when running without IIS**: versioned CSS and JavaScript are cached until the next release and images for a day. Behind IIS, `deploy/iis/web.config` already caches them for 7 days and its headers take precedence, so nothing changes there.
 
 ### Fixed
-- **IPAM and Rack Elevations pages**: a duplicate script variable stopped the shared app script from loading on these two pages, so its popups, toasts and menus didn't work there.
+- **IPAM and Rack Elevations pages**: a duplicate script variable stopped the shared app script from loading on these two pages. The shared `closeModal` and `escapeHtml` now also accept the way these pages call them (closing a named modal; empty values), which also stops Hardware Health and the device pages throwing on empty fields.
 
 ## [1.14.0] - 2026-11-06
 

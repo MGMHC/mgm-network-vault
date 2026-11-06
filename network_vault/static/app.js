@@ -196,8 +196,11 @@ async function runDetect(ids, btn) {
   }
 }
 
+// Shared by every page. Some page scripts define their own escapeHtml/closeModal too; this file
+// loads after them and replaces them, so these must accept every way the pages call them.
 function escapeHtml(s) {
-  return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 function colorDiff(text) {
@@ -216,7 +219,15 @@ function openModal(title, html) {
   m.querySelector('.body').innerHTML = html;
   m.classList.add('open');
 }
-function closeModal() { document.getElementById('modal').classList.remove('open'); }
+function closeModal(id) {
+  // closeModal('rackModal') etc. hides a page's own modal; closeModal() closes the shared one
+  if (typeof id === 'string' && id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+    return;
+  }
+  document.getElementById('modal')?.classList.remove('open');
+}
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
 async function runTool(devId, kind, btn, a, b) {
