@@ -3,6 +3,53 @@
 All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](https://semver.org):
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 
+## [1.14.0] - 2026-11-06
+
+### Security
+- **Role checks fail closed**: `require_write`, `require_admin` and `require_group_admin` now refuse requests when the user record cannot be found, instead of letting them through.
+- **Sessions follow the account**: every request re-checks the signed-in user. Deleting a user ends their sessions immediately, and a password change or reset signs out the account's other sessions (the session that made the change stays signed in).
+- **Group Administrator only**:
+  - Export & migrate (`/migrate*`: full export with encryption keys, restore, restart, app package).
+  - Software update check and install.
+  - GitHub sync settings, test, sync, push and re-download (any user can still view the page).
+  - Log purge.
+  - SMTP and *Application Public Web URL* settings, and the test-email button. Site administrators keep backup, retention, SSH and log settings.
+- **Device credentials can no longer be redirected**:
+  - CSV import requires write access, imports into a site the user can access, and skips devices that belong to other sites.
+  - *Backup*, *Check reachability* and *Detect model* check the user's role and site access for every selected device.
+  - A device cannot be linked to a credential profile from a site the user has no access to.
+- **Site-scoped backups**: viewing, downloading, comparing and ZIP downloads only include backups from the user's sites. Pinning and deleting backups require write access.
+- **Write access required** for saving, running, toggling and deleting schedules and for deleting credential profiles.
+- **User management**: site administrators can no longer delete, demote or reset the password of group administrators, or of users who also belong to sites outside their own.
+- **Password reset links** are built only from the configured *Application Public Web URL*, never from the request's Host / X-Forwarded-Host header. Reset emails are not sent while it is blank.
+- **First-login lockdown**: while a password change is pending, the Users page only accepts the password change.
+- CSRF tokens are compared in constant time.
+
+### Fixed
+- **Lifecycle "Fetch all"** never contacted a switch: worker threads read the login session outside the request, and `get_int` was not imported.
+- **Restarts no longer undo edits**: the one-off start-up fixes (Malar devices and credential to MGM-Malar, Malar Cisco models, `Floor-N` to `Level-N` groups, default sites) now run once and are recorded in the settings table.
+- **Missing database indexes** declared in the models (e.g. `device.site_id`, `credential.site_id`) are created at start-up on older databases.
+- **Downloads blanked the page**: the page fade-out no longer runs for CSV, ZIP, `.diff`, config and package downloads, and pages restored with the browser's Back button are no longer faded out.
+- **Duplicate backup jobs**: *Backup now* / *Backup selected* stay disabled until the job finishes.
+- **Stuck progress toast**: job polling stops when the session expires, the job is missing or the server is unreachable for about a minute.
+- *Check reachability* with nothing selected now asks for a selection instead of reporting "0/0 reachable".
+
+### Changed
+- **Smoother Liquid Glass UI**:
+  - Background is now static, fixed layers: no infinite animated 80px blur and no `background-attachment: fixed`, which repainted every glass panel on each frame and on scroll.
+  - Page load is a short fade and slide without a page-wide blur filter or a permanent `will-change` layer; page change delay reduced from 220 ms to 140 ms.
+  - Backdrop blur kept on the navigation bar, cards, modals and popovers, removed from buttons, badges, table headers, inputs and filter bars.
+  - Cards no longer lift on hover (removes the jitter when moving the pointer over tables); buttons no longer scale on hover.
+  - Dropdown and calendar popovers reposition at most once per animation frame while scrolling.
+- **Faster pages**:
+  - Devices: site and credential loaded up front and backup counts in one grouped query (88 to 18 database queries).
+  - Dashboard: 14-day chart from one grouped query instead of 28 counts (122 to 45 queries).
+  - Backups: previous-backup lookup for all rows in one query (143 to 47 queries).
+
+### Upgrade notes
+- Every user is signed out once after the upgrade.
+- Set *Settings → Application Public Web URL* before relying on *Forgot password*.
+
 ## [1.13.7] - 2026-11-05
 
 ### Fixed
