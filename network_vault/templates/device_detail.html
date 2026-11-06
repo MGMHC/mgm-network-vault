@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
-{% from '_macros.html' import icon, status_badge, backup_badge %}
+{% from '_macros.html' import icon, status_badge, backup_badge, back_link %}
 {% block title %}{{ d.name }}{% endblock %}
 {% block content %}
 <div class="topbar">
-  <div><h1>{{ d.name }} {{ status_badge(d.status) }}</h1>
+  <div>{{ back_link(url_for('web.devices'), 'Devices') }}<h1>{{ d.name }} {{ status_badge(d.status) }}</h1>
     <div class="sub mono">{{ d.host }}:{{ d.port }} · {{ PLATFORMS[d.platform] }}{% if not d.enabled %} · <b>disabled</b>{% endif %}</div></div>
   <div class="actions">
     <button class="btn" onclick="runCheck([{{ d.id }}], this)">{{ icon('pulse') }}Check</button>

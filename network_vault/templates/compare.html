@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
-{% from '_macros.html' import icon %}
+{% from '_macros.html' import icon, back_link %}
 {% block title %}Compare{% endblock %}
 {% block content %}
 <div class="topbar">
-  <div><h1>Compare configurations</h1>
+  <div>{{ back_link(url_for('web.backups'), 'Backups') }}<h1>Compare configurations</h1>
     <div class="sub"><span class="badge ok">+{{ added }} added</span> <span class="badge bad">-{{ removed }} removed</span>
       {% if a.device_id != b.device_id %} <span class="badge warn">different devices</span>{% endif %}</div></div>
   <div class="actions"><a class="btn" href="{{ url_for('web.compare_download', a=a.id, b=b.id, fmt=fmt) }}">{{ icon('download') }}Download .diff</a></div>

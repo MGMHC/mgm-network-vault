@@ -49,12 +49,6 @@
           <img src="{{ url_for('static', filename='mgm-logo.png') }}" alt="MGM Healthcare" class="nav-brand-logo">
           <span class="nav-brand-text">Network Vault</span>
         </a>
-        {% if request.endpoint != 'web.dashboard' %}
-        <button class="back-btn" onclick="history.back()" title="Go back">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-          Back
-        </button>
-        {% endif %}
       </div>
 
       {% set ep = request.endpoint or '' %}

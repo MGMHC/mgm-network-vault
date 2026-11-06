@@ -1,8 +1,9 @@
 {% extends 'base.html' %}
+{% from '_macros.html' import back_link %}
 {% block title %}{{ 'Edit ' ~ d.name if d.id else 'Add device' }}{% endblock %}
 {% block content %}
 <div class="topbar">
-  <div><h1>{{ 'Edit ' ~ d.name if d.id else 'Add device' }}</h1></div>
+  <div>{% if d.id %}{{ back_link(url_for('web.device_detail', dev_id=d.id), d.name) }}{% else %}{{ back_link(url_for('web.devices'), 'Devices') }}{% endif %}<h1>{{ 'Edit ' ~ d.name if d.id else 'Add device' }}</h1></div>
   {% if d.id %}
   <form method="post" action="{{ url_for('web.device_delete', dev_id=d.id) }}" data-confirm="Delete {{ d.name }} and ALL its backups? This cannot be undone.">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn danger">Delete device</button>
