@@ -8,7 +8,7 @@
 </div>
 
 {% if pending %}
-<div class="card" style="border-left:4px solid var(--mgm-chrome)">
+<div class="card" style="border-left:4px solid var(--accent-2)">
   <h2>Restore ready — restart to apply</h2>
   <p>The export from <b>{{ pending.source_host }}</b> ({{ pending.created }}) has been checked and unpacked:
     {{ pending.counts.device }} devices, {{ pending.counts.backup }} backups, {{ pending.counts.user }} users.

@@ -1506,7 +1506,7 @@ h3 {
   position: absolute;
   inset: 0;
   border-radius: 8px;
-  background: var(--side-accent);
+  background: var(--accent);
   animation: nav-ripple .5s ease-out forwards;
   pointer-events: none;
 }
@@ -3203,7 +3203,7 @@ pre.code {
 }
 
 .fb-ssh {
-  background: var(--mgm-chrome);
+  background: var(--accent-2);
 }
 
 .fb-down {
@@ -3273,7 +3273,7 @@ pre.code {
 }
 
 .dc-ssh {
-  border-left-color: var(--mgm-chrome);
+  border-left-color: var(--accent-2);
 }
 
 .dc-unknown {
@@ -3346,14 +3346,14 @@ pre.code {
 }
 
 .site-switcher-pill:hover {
-  border-color: var(--mgm-gold);
+  border-color: var(--accent);
   box-shadow: 0 2px 8px var(--drop);
 }
 
 .site-switcher-pill .s-icon {
   display: flex;
   align-items: center;
-  color: var(--mgm-gold);
+  color: var(--accent);
 }
 
 .site-switcher-pill .s-icon svg {
@@ -3389,7 +3389,7 @@ pre.code {
 }
 
 .site-badge-single b {
-  color: var(--mgm-blue);
+  color: var(--accent);
 }
 
 /* ── Role badges ─────────────────────────────────────────────────────────── */
@@ -3575,7 +3575,7 @@ h2 svg.icon {
 }
 
 .input-lg:focus {
-  border-color: var(--mgm-gold);
+  border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
@@ -3600,7 +3600,7 @@ h2 svg.icon {
 }
 
 .edge-port-card {
-  border: 2px solid var(--mgm-gold);
+  border: 2px solid var(--accent);
   background: var(--panel);
   box-shadow: 0 4px 16px var(--accent-soft);
   border-radius: var(--radius);
@@ -3828,7 +3828,7 @@ h2 svg.icon {
   width: 32px;
   height: 32px;
   border: 3px solid var(--border);
-  border-top-color: var(--mgm-gold);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin .8s linear infinite;
 }
@@ -4192,7 +4192,7 @@ h2 svg.icon {
 }
 
 .gld-icon {
-  color: var(--mgm-gold);
+  color: var(--accent);
   display: flex;
   align-items: center;
   flex-shrink: 0;

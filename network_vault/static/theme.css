@@ -8,21 +8,6 @@
 :root {
   --radius: 16px;
   --mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
-
-  /* Retired names, kept as aliases until their last uses are converted (Task 6). */
-  --mgm-blue: var(--accent);
-  --mgm-gold: var(--accent);
-  --mgm-light-gold: var(--accent);
-  --mgm-chrome: var(--accent-2);
-  --mgm-yellow: var(--warn);
-  --mgm-grey: var(--muted);
-  --side: var(--panel-strong);
-  --side-2: var(--panel-strong);
-  --side-text: var(--text);
-  --side-active: var(--accent-soft);
-  --side-accent: var(--accent);
-  --gold: var(--accent);
-  --gold-soft: var(--accent-soft);
 }
 
 :root[data-mode="dark"] { color-scheme: dark; }
@@ -53,6 +38,9 @@
   --warn-soft: rgba(251, 191, 36, .18);
   --bad: #f87171;
   --bad-soft: rgba(248, 113, 113, .18);
+  --violet: #a78bfa;
+  --violet-soft: rgba(167, 139, 250, .18);
+  --scrim: rgba(4, 8, 20, .62);
   --info-soft: rgba(56, 189, 248, .14);
   --add: rgba(16, 185, 129, .22);
   --add-strong: rgba(16, 185, 129, .42);
@@ -109,6 +97,9 @@
   --warn-soft: rgba(217, 119, 6, .14);
   --bad: #dc2626;
   --bad-soft: rgba(220, 38, 38, .12);
+  --violet: #7c3aed;
+  --violet-soft: rgba(124, 58, 237, .12);
+  --scrim: rgba(15, 23, 42, .38);
   --info-soft: rgba(2, 132, 199, .10);
   --add: rgba(22, 163, 74, .16);
   --add-strong: rgba(22, 163, 74, .32);
@@ -165,6 +156,9 @@
   --warn-soft: rgba(251, 191, 36, .16);
   --bad: #f87171;
   --bad-soft: rgba(248, 113, 113, .16);
+  --violet: #a78bfa;
+  --violet-soft: rgba(167, 139, 250, .16);
+  --scrim: rgba(0, 0, 0, .62);
   --info-soft: rgba(56, 189, 248, .12);
   --add: rgba(16, 185, 129, .22);
   --add-strong: rgba(16, 185, 129, .42);
@@ -221,6 +215,9 @@
   --warn-soft: rgba(217, 119, 6, .12);
   --bad: #dc2626;
   --bad-soft: rgba(220, 38, 38, .10);
+  --violet: #7c3aed;
+  --violet-soft: rgba(124, 58, 237, .10);
+  --scrim: rgba(15, 23, 42, .45);
   --info-soft: rgba(2, 132, 199, .08);
   --add: rgba(22, 163, 74, .16);
   --add-strong: rgba(22, 163, 74, .32);

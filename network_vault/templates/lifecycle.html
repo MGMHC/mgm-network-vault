@@ -214,7 +214,7 @@
     <div class="op-modal-header" onclick="restoreLcModal(event)">
       <div>
         <h3 id="lcModalTitle" class="op-modal-title">
-          <span style="color:var(--mgm-gold);">{{ icon('refresh') }}</span>
+          <span style="color:var(--accent);">{{ icon('refresh') }}</span>
           Fetching Live Switch Inventory &amp; EOL Lifecycle
         </h3>
         <div class="op-modal-sub">Live SSH model, serial number, and firmware detection across campus switches</div>
@@ -242,7 +242,7 @@
     <div class="op-terminal">
       <div class="op-terminal-header">
         <div style="display:flex;align-items:center;gap:6px;">
-          <span style="color:#38bdf8;">●</span>
+          <span style="color:var(--accent);">●</span>
           <span>Live Switch SSH Inventory Stream</span>
         </div>
       </div>
@@ -280,12 +280,12 @@
 }
 .lifecycle-kpi-box:hover {
   transform: translateY(-2px);
-  border-color: var(--primary);
+  border-color: var(--accent);
 }
 .lifecycle-kpi-box.active {
-  border-color: var(--primary);
+  border-color: var(--accent);
   background: var(--panel);
-  box-shadow: 0 0 0 1px var(--primary);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 .lifecycle-kpi-icon {
   width: 40px;
@@ -295,11 +295,11 @@
   align-items: center;
   justify-content: center;
 }
-.lifecycle-kpi-icon.blue { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
-.lifecycle-kpi-icon.ok { background: rgba(34, 197, 94, 0.15); color: var(--ok); }
-.lifecycle-kpi-icon.warn { background: rgba(245, 158, 11, 0.15); color: var(--warn); }
-.lifecycle-kpi-icon.bad { background: rgba(239, 68, 68, 0.15); color: var(--bad); }
-.lifecycle-kpi-icon.purple { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+.lifecycle-kpi-icon.blue { background: var(--accent-soft); color: var(--accent); }
+.lifecycle-kpi-icon.ok { background: var(--ok-soft); color: var(--ok); }
+.lifecycle-kpi-icon.warn { background: var(--warn-soft); color: var(--warn); }
+.lifecycle-kpi-icon.bad { background: var(--bad-soft); color: var(--bad); }
+.lifecycle-kpi-icon.purple { background: var(--violet-soft); color: var(--violet); }
 
 .lifecycle-kpi-val {
   font-size: 1.5rem;

@@ -31,7 +31,7 @@
 <div class="card vlan-summary-card">
   <div class="vlan-summary-strip">
     <div class="vlan-kpi-item">
-      <div class="vlan-kpi-icon" style="background:rgba(59,130,246,0.12);color:var(--accent,#3b82f6);">
+      <div class="vlan-kpi-icon" style="background:var(--accent-soft);color:var(--accent);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
       </div>
       <div class="vlan-kpi-content">
@@ -41,27 +41,27 @@
     </div>
 
     <div class="vlan-kpi-item">
-      <div class="vlan-kpi-icon" style="background:rgba(16,185,129,0.12);color:var(--ok,#10b981);">
+      <div class="vlan-kpi-icon" style="background:var(--ok-soft);color:var(--ok);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polyline points="20 6 9 17 4 12"/></svg>
       </div>
       <div class="vlan-kpi-content">
-        <div class="vlan-kpi-val" style="color:var(--ok,#10b981);"><span id="kpiActivePorts">0</span></div>
+        <div class="vlan-kpi-val" style="color:var(--ok);"><span id="kpiActivePorts">0</span></div>
         <div class="vlan-kpi-label">Active / Provisioned</div>
       </div>
     </div>
 
     <div class="vlan-kpi-item">
-      <div class="vlan-kpi-icon" style="background:rgba(245,158,11,0.12);color:#f59e0b;">
+      <div class="vlan-kpi-icon" style="background:var(--warn-soft);color:var(--warn);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       </div>
       <div class="vlan-kpi-content">
-        <div class="vlan-kpi-val" style="color:#f59e0b;"><span id="kpiDormantPorts">0</span></div>
+        <div class="vlan-kpi-val" style="color:var(--warn);"><span id="kpiDormantPorts">0</span></div>
         <div class="vlan-kpi-label">Dormant (Unused)</div>
       </div>
     </div>
 
     <div class="vlan-kpi-item">
-      <div class="vlan-kpi-icon" style="background:rgba(100,116,139,0.12);color:var(--muted,#64748b);">
+      <div class="vlan-kpi-icon" style="background:var(--chip);color:var(--muted);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
       </div>
       <div class="vlan-kpi-content">
@@ -71,7 +71,7 @@
     </div>
 
     <div class="vlan-kpi-item">
-      <div class="vlan-kpi-icon" style="background:rgba(139,92,246,0.12);color:#8b5cf6;">
+      <div class="vlan-kpi-icon" style="background:var(--violet-soft);color:var(--violet);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
       </div>
       <div class="vlan-kpi-content">
@@ -81,11 +81,11 @@
     </div>
 
     <div class="vlan-kpi-item" id="kpiMismatchBox">
-      <div class="vlan-kpi-icon" style="background:rgba(239,68,68,0.12);color:var(--bad,#ef4444);">
+      <div class="vlan-kpi-icon" style="background:var(--bad-soft);color:var(--bad);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       </div>
       <div class="vlan-kpi-content">
-        <div class="vlan-kpi-val" style="color:var(--bad,#ef4444);"><span id="kpiVlanMismatches">0</span></div>
+        <div class="vlan-kpi-val" style="color:var(--bad);"><span id="kpiVlanMismatches">0</span></div>
         <div class="vlan-kpi-label">Name Conflicts</div>
       </div>
     </div>
@@ -168,7 +168,7 @@
         <span class="muted small">Configured interfaces, VLAN memberships, patch tags, and live operational status</span>
       </div>
       <div id="liveBadgeStatus" style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;">
-        <span class="status-indicator-dot" style="background:#10b981;"></span>
+        <span class="status-indicator-dot" style="background:var(--ok);"></span>
         <span>Source: <b>Vault Configuration Backups</b></span>
       </div>
     </div>
@@ -197,7 +197,7 @@
 <!-- ========================================================================= TAB 2: VLAN Matrix Grid -->
 <div id="tabContentMatrix" class="tab-pane" style="display:none;">
   <!-- Inconsistency Banner -->
-  <div id="mismatchBanner" class="card" style="display:none;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);margin-bottom:16px;">
+  <div id="mismatchBanner" class="card" style="display:none;background:var(--bad-soft);border:1px solid color-mix(in srgb, var(--bad) 25%, transparent);margin-bottom:16px;">
     <div style="display:flex;align-items:center;gap:12px;">
       <div style="font-size:24px;color:var(--bad);">⚠️</div>
       <div>
@@ -217,7 +217,7 @@
         <span class="muted small">Configured VLANs, access port counts, and switch trunk distribution</span>
       </div>
       <div>
-        <input type="search" id="vlanSearch" placeholder="Filter VLAN ID or name..." oninput="applyVlanFilters()" style="padding:6px 10px;font-size:13px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--fg);">
+        <input type="search" id="vlanSearch" placeholder="Filter VLAN ID or name..." oninput="applyVlanFilters()" style="padding:6px 10px;font-size:13px;border-radius:6px;border:1px solid var(--border);background:var(--input);color:var(--text);">
       </div>
     </div>
     <div class="table-wrap">
@@ -292,7 +292,7 @@
     <div class="op-modal-header" onclick="restoreProbeModal(event)">
       <div>
         <h3 id="probeModalTitle" class="op-modal-title">
-          <span style="color:#10b981;">
+          <span style="color:var(--ok);">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
           </span>
           Probing Live Switch Port Operational Status
@@ -319,7 +319,7 @@
       <div class="op-progress-stats">
         <span>Switches Probed: <b id="modalStatSwitches">0 / 0</b></span>
         <span>Connected: <b id="modalStatConnected" style="color:var(--ok);">0</b></span>
-        <span>Dormant (Unused): <b id="modalStatDormant" style="color:#f59e0b;">0</b></span>
+        <span>Dormant (Unused): <b id="modalStatDormant" style="color:var(--warn);">0</b></span>
       </div>
     </div>
 
@@ -389,7 +389,7 @@
 }
 .vlan-kpi-label {
   font-size: 11px;
-  color: var(--muted, #94a3b8);
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -397,7 +397,7 @@
   display: flex;
   gap: 6px;
   margin-bottom: 14px;
-  border-bottom: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-bottom: 1px solid var(--border);
   padding-bottom: 2px;
 }
 .audit-tab-btn {
@@ -409,20 +409,20 @@
   font-weight: 600;
   border: none;
   background: transparent;
-  color: var(--muted, #94a3b8);
+  color: var(--muted);
   border-bottom: 2px solid transparent;
   cursor: pointer;
   border-radius: 6px 6px 0 0;
   transition: all 0.15s;
 }
 .audit-tab-btn:hover {
-  color: var(--fg, #f8fafc);
-  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  background: var(--chip);
 }
 .audit-tab-btn.active {
-  color: var(--accent, #3b82f6);
-  border-bottom: 2px solid var(--accent, #3b82f6);
-  background: rgba(59,130,246,0.08);
+  color: var(--accent);
+  border-bottom: 2px solid var(--accent);
+  background: var(--accent-soft);
 }
 .audit-controls-card {
   margin-bottom: 16px;
@@ -444,16 +444,16 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--muted, #94a3b8);
+  color: var(--muted);
 }
 .audit-control-group select,
 .audit-control-group input {
   padding: 6px 10px;
   font-size: 13px;
   border-radius: 6px;
-  border: 1px solid var(--border, #334155);
-  background: var(--card, #1e293b);
-  color: var(--fg, #f8fafc);
+  border: 1px solid var(--border);
+  background: var(--input);
+  color: var(--text);
   min-width: 140px;
 }
 .status-indicator-dot {
@@ -463,45 +463,45 @@
   display: inline-block;
 }
 .badge-dormant {
-  background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: var(--warn-soft);
+  color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
   font-size: 11px;
   font-weight: 700;
   padding: 2px 7px;
   border-radius: 4px;
 }
 .badge-connected {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: var(--ok-soft);
+  color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
   font-size: 11px;
   font-weight: 700;
   padding: 2px 7px;
   border-radius: 4px;
 }
 .badge-disabled {
-  background: rgba(100, 116, 139, 0.15);
-  color: #94a3b8;
-  border: 1px solid rgba(100, 116, 139, 0.3);
+  background: var(--chip);
+  color: var(--muted);
+  border: 1px solid color-mix(in srgb, var(--muted) 30%, transparent);
   font-size: 11px;
   font-weight: 700;
   padding: 2px 7px;
   border-radius: 4px;
 }
 .badge-trunk {
-  background: rgba(139, 92, 246, 0.15);
-  color: #8b5cf6;
-  border: 1px solid rgba(139, 92, 246, 0.3);
+  background: var(--violet-soft);
+  color: var(--violet);
+  border: 1px solid color-mix(in srgb, var(--violet) 30%, transparent);
   font-size: 11px;
   font-weight: 700;
   padding: 2px 7px;
   border-radius: 4px;
 }
 .badge-access {
-  background: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
   font-size: 11px;
   font-weight: 700;
   padding: 2px 7px;
@@ -510,7 +510,7 @@
 .capacity-bar {
   width: 100%;
   height: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--chip);
   border-radius: 4px;
   overflow: hidden;
   display: flex;
@@ -534,15 +534,15 @@
 .matrix-grid-table td {
   padding: 8px 10px;
   text-align: center;
-  border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
-  border-right: 1px solid var(--border, rgba(255,255,255,0.06));
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
   white-space: nowrap;
 }
 .matrix-grid-table th:first-child,
 .matrix-grid-table td:first-child {
   position: sticky;
   left: 0;
-  background: var(--card, #1e293b);
+  background: var(--bg);
   z-index: 2;
   text-align: left;
   font-weight: 700;
@@ -550,32 +550,32 @@
 .matrix-grid-table thead th {
   position: sticky;
   top: 0;
-  background: var(--card, #1e293b);
+  background: var(--bg);
   z-index: 3;
 }
 .matrix-grid-table thead th:first-child {
   z-index: 4;
 }
 .cell-access {
-  background: rgba(59, 130, 246, 0.18);
-  color: #60a5fa;
+  background: var(--accent-soft);
+  color: var(--accent);
   font-weight: 700;
   border-radius: 4px;
 }
 .cell-trunk {
-  background: rgba(139, 92, 246, 0.18);
-  color: #c084fc;
+  background: var(--violet-soft);
+  color: var(--violet);
   font-weight: 700;
   border-radius: 4px;
 }
 .cell-both {
-  background: rgba(16, 185, 129, 0.18);
-  color: #34d399;
+  background: var(--ok-soft);
+  color: var(--ok);
   font-weight: 700;
   border-radius: 4px;
 }
 .cell-empty {
-  color: rgba(255, 255, 255, 0.15);
+  color: var(--muted);
 }
 </style>
 {% endblock %}
@@ -768,7 +768,7 @@ function renderPortsTable() {
 
   if (_filteredPorts.length > 300) {
     const noticeTr = document.createElement('tr');
-    noticeTr.innerHTML = `<td colspan="8" style="text-align:center;padding:12px;background:rgba(255,255,255,0.02);color:var(--muted);font-size:12px;">
+    noticeTr.innerHTML = `<td colspan="8" style="text-align:center;padding:12px;background:var(--panel-2);color:var(--muted);font-size:12px;">
       Showing first 300 of ${_filteredPorts.length.toLocaleString()} matching switchports. Use filters or Export CSV for full list.
     </td>`;
     tbody.appendChild(noticeTr);
@@ -899,13 +899,13 @@ function renderSwitchSummaries() {
       <td>${escapeHtml(s.site_code)}</td>
       <td class="num font-bold">${s.total_ports}</td>
       <td class="num font-bold" style="color:var(--ok);">${s.active_ports}</td>
-      <td class="num font-bold" style="color:#f59e0b;">${s.dormant_ports}</td>
+      <td class="num font-bold" style="color:var(--warn);">${s.dormant_ports}</td>
       <td class="num">${s.disabled_ports}</td>
       <td>
         <div style="display:flex;align-items:center;gap:8px;">
           <div class="capacity-bar">
             <div class="capacity-fill" style="width:${s.utilization_pct}%;background:var(--ok);"></div>
-            <div class="capacity-fill" style="width:${100 - s.utilization_pct}%;background:rgba(245, 158, 11, 0.4);"></div>
+            <div class="capacity-fill" style="width:${100 - s.utilization_pct}%;background:color-mix(in srgb, var(--warn) 40%, transparent);"></div>
           </div>
           <span class="mono small font-bold" style="min-width:44px;">${s.utilization_pct}%</span>
         </div>
@@ -1114,7 +1114,7 @@ async function startLiveProbe() {
 
           // Update UI live badge and re-render
           document.getElementById('liveBadgeStatus').innerHTML = `
-            <span class="status-indicator-dot" style="background:#10b981;"></span>
+            <span class="status-indicator-dot" style="background:var(--ok);"></span>
             <span>Source: <b>Live Hardware Interrogation</b></span>
           `;
           const totalPorts = _auditData?.kpis?.total_ports || (totalConnected + totalDormant);

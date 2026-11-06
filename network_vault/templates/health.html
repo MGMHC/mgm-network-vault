@@ -164,7 +164,7 @@
     <div class="op-modal-header" onclick="restoreHealthModal(event)">
       <div>
         <h3 id="healthModalTitle" class="op-modal-title">
-          <span style="color:var(--mgm-gold);">
+          <span style="color:var(--accent);">
             <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
           </span>
           Scanning Fleet Hardware Health (CPU, Mem, Temp)
@@ -200,7 +200,7 @@
     <div class="op-terminal">
       <div class="op-terminal-header">
         <div style="display:flex;align-items:center;gap:6px;">
-          <span style="color:#38bdf8;">●</span>
+          <span style="color:var(--accent);">●</span>
           <span>Live Switch SSH Telemetry Stream</span>
         </div>
         <div style="display:flex;gap:12px;align-items:center;">
@@ -287,7 +287,7 @@ function updateSortIndicators() {
     if (!el) return;
     if (c === currentSortColumn) {
       el.textContent = currentSortDirection === "asc" ? "▲" : "▼";
-      el.style.color = "var(--mgm-gold)";
+      el.style.color = "var(--accent)";
       el.style.opacity = "1";
     } else {
       el.textContent = "↕";
@@ -427,7 +427,7 @@ function renderHealthTable() {
 
     // Site column
     const siteHtml = `
-      <span class="badge" style="background:rgba(255,255,255,0.06);font-size:11px;">
+      <span class="badge" style="background:var(--chip);font-size:11px;">
         <b>${escapeHtml(d.site_code)}</b> · ${escapeHtml(d.site_name)}
       </span>
     `;
@@ -474,14 +474,14 @@ function renderHealthTable() {
     let tempHtml = `<span style="color:var(--muted);font-size:12px;">Pending</span>`;
     if (d.overall_status !== "pending" && d.overall_status !== "error") {
       let tempLabel = "";
-      let tempBadgeStyle = "background:rgba(16,185,129,0.15);color:var(--ok);";
+      let tempBadgeStyle = "background:var(--ok-soft);color:var(--ok);";
 
       if (d.temp_c !== null) {
         tempLabel = `${d.temp_c}°C`;
         if (d.temp_c >= 65 || d.temp_status === "bad") {
-          tempBadgeStyle = "background:rgba(239,68,68,0.2);color:var(--bad);";
+          tempBadgeStyle = "background:var(--bad-soft);color:var(--bad);";
         } else if (d.temp_c >= 52 || d.temp_status === "warn") {
-          tempBadgeStyle = "background:rgba(245,158,11,0.2);color:var(--warn);";
+          tempBadgeStyle = "background:var(--warn-soft);color:var(--warn);";
         }
       } else {
         tempLabel = d.temp_status === "ok" ? "Normal (OK)" : (d.temp_status === "warn" ? "Thermal Warn" : "Normal");

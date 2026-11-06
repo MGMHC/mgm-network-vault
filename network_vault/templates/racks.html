@@ -36,23 +36,69 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 20px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+  box-shadow: var(--shadow);
 }
+/* theme-exempt:start */
+/* Rack hardware: drawn like real equipment, the same in all four looks. Defined once here. */
+.rack-frame {
+  --rack-body: #14171f;
+  --rack-edge: #2b313f;
+  --rack-head: #202531;
+  --rack-head-text: #94a3b8;
+  --rack-row-line: #1e2430;
+  --rack-rail: #181c25;
+  --rack-rail-text: #64748b;
+  --rack-slot: #11141c;
+  --rack-empty-text: #475569;
+  --rack-face-text: #f8fafc;
+  --rack-face-line: rgba(255,255,255,0.15);
+  --rack-face-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 2px 4px rgba(0,0,0,0.4);
+  --rack-frame-shadow: inset 0 0 20px rgba(0,0,0,0.8), 0 8px 24px rgba(0,0,0,0.3);
+  --rack-link-hover: #7dd3fc;
+  --rack-badge: rgba(255,255,255,0.12);
+  --rack-badge-dark: rgba(0,0,0,0.3);
+  --rack-core: linear-gradient(180deg, #1e3a8a 0%, #172554 100%);
+  --rack-core-edge: #3b82f6;
+  --rack-dist: linear-gradient(180deg, #3730a3 0%, #1e1b4b 100%);
+  --rack-dist-edge: #6366f1;
+  --rack-access: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+  --rack-access-edge: #4b5563;
+  --rack-fw: linear-gradient(180deg, #7f1d1d 0%, #450a0a 100%);
+  --rack-fw-edge: #ef4444;
+  --rack-server: linear-gradient(180deg, #064e3b 0%, #022c22 100%);
+  --rack-server-edge: #10b981;
+  --rack-led-up: #10b981;
+  --rack-led-down: #ef4444;
+  --rack-led-warn: #f59e0b;
+  --rack-led-unknown: #94a3b8;
+  --rack-resv-a: rgba(245, 158, 11, 0.08);
+  --rack-resv-b: rgba(245, 158, 11, 0.16);
+  --rack-resv-edge: rgba(245, 158, 11, 0.5);
+  --rack-resv-text: #fbbf24;
+  --rack-resv-btn: rgba(245,158,11,0.2);
+  --rack-resv-btn-text: #fef08a;
+  --rack-unmount-btn: rgba(239,68,68,0.2);
+  --rack-unmount-btn-text: #fca5a5;
+  --rack-add-btn: #1e293b;
+  --rack-add-btn-edge: #334155;
+}
+/* theme-exempt:end */
+/* theme-exempt:start */
 .rack-frame {
   width: 100%;
   max-width: 640px;
   margin: 0 auto;
-  background: #14171f;
-  border: 4px solid #2b313f;
+  background: var(--rack-body);
+  border: 4px solid var(--rack-edge);
   border-radius: 6px;
-  box-shadow: inset 0 0 20px rgba(0,0,0,0.8), 0 8px 24px rgba(0,0,0,0.3);
+  box-shadow: var(--rack-frame-shadow);
   position: relative;
   user-select: none;
 }
 .rack-frame-header {
-  background: #202531;
+  background: var(--rack-head);
   padding: 8px 16px;
-  color: #94a3b8;
+  color: var(--rack-head-text);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -60,7 +106,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 2px solid #2b313f;
+  border-bottom: 2px solid var(--rack-edge);
 }
 .rack-units-container {
   display: flex;
@@ -69,7 +115,7 @@
 .rack-unit-row {
   display: flex;
   height: 28px;
-  border-bottom: 1px solid #1e2430;
+  border-bottom: 1px solid var(--rack-row-line);
   position: relative;
   transition: background 0.15s ease;
 }
@@ -82,27 +128,27 @@
 
 .rack-rail {
   width: 32px;
-  background: #181c25;
-  color: #64748b;
-  font-family: var(--font-mono, monospace);
+  background: var(--rack-rail);
+  color: var(--rack-rail-text);
+  font-family: var(--mono);
   font-size: 10px;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-right: 1px solid #2b313f;
+  border-right: 1px solid var(--rack-edge);
   flex-shrink: 0;
 }
 .rack-rail.rail-right {
   border-right: none;
-  border-left: 1px solid #2b313f;
+  border-left: 1px solid var(--rack-edge);
 }
 .rack-slot-content {
   flex: 1;
   display: flex;
   align-items: center;
   padding: 0 8px;
-  background: #11141c;
+  background: var(--rack-slot);
   position: relative;
   overflow: hidden;
 }
@@ -116,31 +162,31 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 10px;
-  color: #f8fafc;
+  color: var(--rack-face-text);
   font-size: 11px;
-  border: 1px solid rgba(255,255,255,0.15);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 2px 4px rgba(0,0,0,0.4);
+  border: 1px solid var(--rack-face-line);
+  box-shadow: var(--rack-face-shadow);
   position: relative;
 }
 .rack-device.role-core {
-  background: linear-gradient(180deg, #1e3a8a 0%, #172554 100%);
-  border-color: #3b82f6;
+  background: var(--rack-core);
+  border-color: var(--rack-core-edge);
 }
 .rack-device.role-distribution {
-  background: linear-gradient(180deg, #3730a3 0%, #1e1b4b 100%);
-  border-color: #6366f1;
+  background: var(--rack-dist);
+  border-color: var(--rack-dist-edge);
 }
 .rack-device.role-access {
-  background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
-  border-color: #4b5563;
+  background: var(--rack-access);
+  border-color: var(--rack-access-edge);
 }
 .rack-device.role-firewall {
-  background: linear-gradient(180deg, #7f1d1d 0%, #450a0a 100%);
-  border-color: #ef4444;
+  background: var(--rack-fw);
+  border-color: var(--rack-fw-edge);
 }
 .rack-device.role-server {
-  background: linear-gradient(180deg, #064e3b 0%, #022c22 100%);
-  border-color: #10b981;
+  background: var(--rack-server);
+  border-color: var(--rack-server-edge);
 }
 
 .rack-device-info {
@@ -154,21 +200,21 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #ffffff;
+  color: var(--rack-face-text);
 }
 .rack-device-name a {
-  color: #ffffff;
+  color: var(--rack-face-text);
   text-decoration: none;
 }
 .rack-device-name a:hover {
   text-decoration: underline;
-  color: var(--gold, #C3A275);
+  color: var(--rack-link-hover);
 }
 .rack-device-badge {
   font-size: 9px;
   padding: 1px 5px;
   border-radius: 3px;
-  background: rgba(255,255,255,0.12);
+  background: var(--rack-badge);
   text-transform: uppercase;
   font-weight: 600;
 }
@@ -179,27 +225,27 @@
   flex-shrink: 0;
   box-shadow: 0 0 6px currentColor;
 }
-.led-up { color: #10b981; background: #10b981; }
-.led-down { color: #ef4444; background: #ef4444; }
-.led-warn { color: #f59e0b; background: #f59e0b; }
-.led-unknown { color: #94a3b8; background: #94a3b8; }
+.led-up { color: var(--rack-led-up); background: var(--rack-led-up); }
+.led-down { color: var(--rack-led-down); background: var(--rack-led-down); }
+.led-warn { color: var(--rack-led-warn); background: var(--rack-led-warn); }
+.led-unknown { color: var(--rack-led-unknown); background: var(--rack-led-unknown); }
 
 .rack-reservation-slot {
   width: 100%;
   height: 100%;
   background: repeating-linear-gradient(
     45deg,
-    rgba(245, 158, 11, 0.08),
-    rgba(245, 158, 11, 0.08) 8px,
-    rgba(245, 158, 11, 0.16) 8px,
-    rgba(245, 158, 11, 0.16) 16px
+    var(--rack-resv-a),
+    var(--rack-resv-a) 8px,
+    var(--rack-resv-b) 8px,
+    var(--rack-resv-b) 16px
   );
-  border: 1px dashed rgba(245, 158, 11, 0.5);
+  border: 1px dashed var(--rack-resv-edge);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 10px;
-  color: #fbbf24;
+  color: var(--rack-resv-text);
   font-size: 11px;
   font-weight: 600;
 }
@@ -210,7 +256,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #475569;
+  color: var(--rack-empty-text);
   font-size: 10px;
 }
 .unit-hover-actions {
@@ -219,6 +265,7 @@
   display: flex;
   gap: 4px;
 }
+/* theme-exempt:end */
 
 /* Sidebar Rack List */
 .rack-list-item {
@@ -231,17 +278,17 @@
   transition: all 0.15s ease;
 }
 .rack-list-item:hover {
-  border-color: var(--accent, #25366C);
+  border-color: var(--accent);
   background: var(--panel-2);
 }
 .rack-list-item.active {
-  border-color: var(--accent, #25366C);
-  background: rgba(37, 54, 108, 0.08);
-  box-shadow: inset 3px 0 0 var(--accent, #25366C);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 .rack-meter-bar {
   height: 6px;
-  background: rgba(0,0,0,0.1);
+  background: var(--chip);
   border-radius: 3px;
   overflow: hidden;
   margin-top: 6px;
@@ -257,7 +304,7 @@
 <div class="rack-page-header">
   <div class="rack-page-title">
     <h1>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" style="color:var(--accent,#25366C);"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="16" y2="18"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" style="color:var(--accent);"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="16" y2="18"/></svg>
       DCIM Visual Rack Elevations
     </h1>
     <div class="sub">42U/48U physical equipment cabinets, rack units, mounting allocations, and space utilization.</div>
@@ -278,7 +325,7 @@
 <div class="card vlan-summary-card" style="margin-bottom: 20px;">
   <div class="vlan-summary-strip">
     <div class="vlan-kpi-item">
-      <div class="vlan-kpi-icon" style="background:rgba(37,54,108,0.12);color:var(--accent,#25366C);">
+      <div class="vlan-kpi-icon" style="background:var(--accent-soft);color:var(--accent);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="14" x2="16" y2="14"/></svg>
       </div>
       <div class="vlan-kpi-content">
@@ -287,7 +334,7 @@
       </div>
     </div>
     <div class="vlan-kpi-item">
-      <div class="vlan-kpi-icon" style="background:rgba(16,185,129,0.12);color:var(--ok,#10b981);">
+      <div class="vlan-kpi-icon" style="background:var(--ok-soft);color:var(--ok);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
       </div>
       <div class="vlan-kpi-content">
@@ -296,7 +343,7 @@
       </div>
     </div>
     <div class="vlan-kpi-item">
-      <div class="vlan-kpi-icon" style="background:rgba(245,158,11,0.12);color:var(--warn,#f59e0b);">
+      <div class="vlan-kpi-icon" style="background:var(--warn-soft);color:var(--warn);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       </div>
       <div class="vlan-kpi-content">
@@ -305,7 +352,7 @@
       </div>
     </div>
     <div class="vlan-kpi-item">
-      <div class="vlan-kpi-icon" style="background:rgba(217,185,138,0.2);color:var(--gold,#C3A275);">
+      <div class="vlan-kpi-icon" style="background:var(--warn-soft);color:var(--warn);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
       </div>
       <div class="vlan-kpi-content">
@@ -314,7 +361,7 @@
       </div>
     </div>
     <div class="vlan-kpi-item">
-      <div class="vlan-kpi-icon" style="background:rgba(139,92,246,0.12);color:#8b5cf6;">
+      <div class="vlan-kpi-icon" style="background:var(--violet-soft);color:var(--violet);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
       </div>
       <div class="vlan-kpi-content">
@@ -393,7 +440,7 @@
         <span style="color:var(--muted);"><span id="currentRackUtilUnits">0 / 42 RUs</span> (<span id="currentRackAvailUnits">42 Available</span>)</span>
       </div>
       <div class="rack-meter-bar" style="height:8px;">
-        <div id="currentRackUtilFill" class="rack-meter-fill" style="width:0%;background:var(--ok,#10b981);"></div>
+        <div id="currentRackUtilFill" class="rack-meter-fill" style="width:0%;background:var(--ok);"></div>
       </div>
     </div>
 
@@ -412,8 +459,8 @@
 </div>
 
 <!-- Modal: Mount Device -->
-<div id="mountModal" class="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;z-index:1000;">
-  <div class="card" style="width:100%;max-width:480px;box-shadow:0 12px 32px rgba(0,0,0,0.4);">
+<div id="mountModal" class="modal" style="display:none;position:fixed;inset:0;background:var(--scrim);align-items:center;justify-content:center;z-index:1000;">
+  <div class="card" style="width:100%;max-width:480px;box-shadow:var(--shadow);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);">
       <h3 style="margin:0;">Mount Equipment in Rack</h3>
       <button class="btn btn-sm" onclick="closeModal('mountModal')">✕</button>
@@ -457,8 +504,8 @@
 </div>
 
 <!-- Modal: Add Cabinet Rack -->
-<div id="rackModal" class="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;z-index:1000;">
-  <div class="card" style="width:100%;max-width:520px;box-shadow:0 12px 32px rgba(0,0,0,0.4);">
+<div id="rackModal" class="modal" style="display:none;position:fixed;inset:0;background:var(--scrim);align-items:center;justify-content:center;z-index:1000;">
+  <div class="card" style="width:100%;max-width:520px;box-shadow:var(--shadow);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);">
       <h3 style="margin:0;">Add Cabinet Rack</h3>
       <button class="btn btn-sm" onclick="closeModal('rackModal')">✕</button>
@@ -514,8 +561,8 @@
 </div>
 
 <!-- Modal: Add Room / Closet -->
-<div id="groupModal" class="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;z-index:1000;">
-  <div class="card" style="width:100%;max-width:440px;box-shadow:0 12px 32px rgba(0,0,0,0.4);">
+<div id="groupModal" class="modal" style="display:none;position:fixed;inset:0;background:var(--scrim);align-items:center;justify-content:center;z-index:1000;">
+  <div class="card" style="width:100%;max-width:440px;box-shadow:var(--shadow);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);">
       <h3 style="margin:0;">Add Room / IDF Closet</h3>
       <button class="btn btn-sm" onclick="closeModal('groupModal')">✕</button>
@@ -538,8 +585,8 @@
 </div>
 
 <!-- Modal: Add Reservation -->
-<div id="reserveModal" class="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;z-index:1000;">
-  <div class="card" style="width:100%;max-width:440px;box-shadow:0 12px 32px rgba(0,0,0,0.4);">
+<div id="reserveModal" class="modal" style="display:none;position:fixed;inset:0;background:var(--scrim);align-items:center;justify-content:center;z-index:1000;">
+  <div class="card" style="width:100%;max-width:440px;box-shadow:var(--shadow);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);">
       <h3 style="margin:0;">Reserve Rack Space</h3>
       <button class="btn btn-sm" onclick="closeModal('reserveModal')">✕</button>
@@ -651,7 +698,7 @@ function renderRackList() {
   container.innerHTML = '';
   filtered.forEach(r => {
     const u = r.utilization;
-    const barColor = u.pct > 80 ? 'var(--bad, #ef4444)' : (u.pct > 50 ? 'var(--warn, #f59e0b)' : 'var(--ok, #10b981)');
+    const barColor = u.pct > 80 ? 'var(--bad)' : (u.pct > 50 ? 'var(--warn)' : 'var(--ok)');
     const div = document.createElement('div');
     div.className = 'rack-list-item' + (r.id === currentRackId ? ' active' : '');
     div.onclick = () => selectRack(r.id);
@@ -710,7 +757,7 @@ async function selectRack(rackId) {
     document.getElementById('currentRackAvailUnits').innerText = `${u.available} Available`;
     const uFill = document.getElementById('currentRackUtilFill');
     uFill.style.width = `${u.pct}%`;
-    uFill.style.background = u.pct > 80 ? 'var(--bad, #ef4444)' : (u.pct > 50 ? 'var(--warn, #f59e0b)' : 'var(--ok, #10b981)');
+    uFill.style.background = u.pct > 80 ? 'var(--bad)' : (u.pct > 50 ? 'var(--warn)' : 'var(--ok)');
 
     document.getElementById('frameTitleLeft').innerText = `19" STANDARD ${r.u_height}U CABINET — ${r.name}`;
     document.getElementById('frameTitleRight').innerText = `${currentFace.toUpperCase()} ELEVATION`;
@@ -743,7 +790,7 @@ function renderElevation(elevation) {
   container.innerHTML = '';
 
   if (!elevation || elevation.length === 0) {
-    container.innerHTML = '<div style="padding:24px;text-align:center;color:#64748b;">No units in this elevation.</div>';
+    container.innerHTML = '<div style="padding:24px;text-align:center;color:var(--rack-rail-text);">No units in this elevation.</div>';
     return;
   }
 
@@ -771,13 +818,13 @@ function renderElevation(elevation) {
               ${d.host ? `<span class="mono" style="font-size:10px;opacity:0.8;">${escapeHtml(d.host)}</span>` : ''}
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
-              <span class="rack-device-badge" style="background:rgba(0,0,0,0.3);">${escapeHtml(d.role || 'device')}</span>
-              <button class="btn btn-sm" style="padding:1px 6px;font-size:10px;background:rgba(239,68,68,0.2);color:#fca5a5;border:none;" onclick="unmountDevice(${d.id})" title="Unmount from rack">✕</button>
+              <span class="rack-device-badge" style="background:var(--rack-badge-dark);">${escapeHtml(d.role || 'device')}</span>
+              <button class="btn btn-sm" style="padding:1px 6px;font-size:10px;background:var(--rack-unmount-btn);color:var(--rack-unmount-btn-text);border:none;" onclick="unmountDevice(${d.id})" title="Unmount from rack">✕</button>
             </div>
           </div>
         `;
       } else {
-        contentHtml = '<div style="width:100%;height:100%;background:rgba(0,0,0,0.3);"></div>';
+        contentHtml = '<div style="width:100%;height:100%;background:var(--rack-badge-dark);"></div>';
       }
     } else if (slot.reserved && slot.reservation) {
       const res = slot.reservation;
@@ -785,7 +832,7 @@ function renderElevation(elevation) {
         contentHtml = `
           <div class="rack-reservation-slot">
             <span>RESERVED: ${escapeHtml(res.description)} ${res.user ? '(' + escapeHtml(res.user) + ')' : ''}</span>
-            <button class="btn btn-sm" style="padding:1px 6px;font-size:10px;background:rgba(245,158,11,0.2);color:#fef08a;border:none;" onclick="deleteReservation(${res.id})" title="Remove reservation">✕</button>
+            <button class="btn btn-sm" style="padding:1px 6px;font-size:10px;background:var(--rack-resv-btn);color:var(--rack-resv-btn-text);border:none;" onclick="deleteReservation(${res.id})" title="Remove reservation">✕</button>
           </div>
         `;
       } else {
@@ -796,8 +843,8 @@ function renderElevation(elevation) {
         <div class="rack-empty-slot">
           <span></span>
           <div class="unit-hover-actions">
-            <button class="btn btn-sm" style="padding:2px 6px;font-size:9px;background:#1e293b;border:1px solid #334155;color:#94a3b8;" onclick="quickMountAt(${slot.unit})">+ Mount at U${slot.unit}</button>
-            <button class="btn btn-sm" style="padding:2px 6px;font-size:9px;background:#1e293b;border:1px solid #334155;color:#94a3b8;" onclick="quickReserveAt(${slot.unit})">Reserve</button>
+            <button class="btn btn-sm" style="padding:2px 6px;font-size:9px;background:var(--rack-add-btn);border:1px solid var(--rack-add-btn-edge);color:var(--rack-head-text);" onclick="quickMountAt(${slot.unit})">+ Mount at U${slot.unit}</button>
+            <button class="btn btn-sm" style="padding:2px 6px;font-size:9px;background:var(--rack-add-btn);border:1px solid var(--rack-add-btn-edge);color:var(--rack-head-text);" onclick="quickReserveAt(${slot.unit})">Reserve</button>
           </div>
         </div>
       `;

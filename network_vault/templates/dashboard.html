@@ -83,7 +83,7 @@
             <span class="muted" style="font-variant-numeric:tabular-nums">{{ count }} ({{ pct }}%)</span>
           </div>
           <div style="height:3px;background:var(--panel-2);border-radius:2px;overflow:hidden">
-            <div style="height:100%;width:{{ pct }}%;background:{% if '2200' in fam or '3750' in fam or '3300' in fam %}var(--bad){% elif '2300' in fam or '1300' in fam %}var(--ok){% else %}var(--blue){% endif %};border-radius:2px"></div>
+            <div style="height:100%;width:{{ pct }}%;background:{% if '2200' in fam or '3750' in fam or '3300' in fam %}var(--bad){% elif '2300' in fam or '1300' in fam %}var(--ok){% else %}var(--accent){% endif %};border-radius:2px"></div>
           </div>
         </div>
         {% endfor %}
