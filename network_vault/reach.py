@@ -5,6 +5,7 @@ import socket
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 
+from . import alerts
 from .models import Device, db, now
 from .util import log_event
 
@@ -58,12 +59,15 @@ def check_devices(app, device_ids=None):
     with ThreadPoolExecutor(max_workers=min(48, len(targets))) as pool:
         results = dict(zip([t[0] for t in targets], pool.map(lambda t: probe(t[1], t[2]), targets)))
 
+    down, recovered = [], []  # switch-down alerts due after this check
     with app.app_context():
+        limit = alerts.threshold()
         for dev_id, (status, rtt) in results.items():
             d = db.session.get(Device, dev_id)
             if d is None:
                 continue
             old = d.status
+            old_since = d.status_since
             d.ping_ms = rtt
             d.last_checked = now()
             if old != status:
@@ -74,5 +78,9 @@ def check_devices(app, device_ids=None):
                     text = {"up": "Device reachable (ping + SSH OK)", "down": "Device UNREACHABLE (no ping, no SSH)",
                             "ssh-down": "Device pings but SSH port is closed"}[status]
                     log_event(f"{text} [was {old}]", "reachability", level, d, commit=False, user="monitor")
+            due = alerts.collect(d, old, status, old_since, limit)
+            if due:
+                (down if due[0] == "down" else recovered).append(due[1])
         db.session.commit()
+    alerts.dispatch(app, down, recovered)
     return results

@@ -152,6 +152,8 @@ class Device(db.Model):
     ping_ms = db.Column(db.Float)
     last_checked = db.Column(db.DateTime)
     status_since = db.Column(db.DateTime)
+    down_checks = db.Column(db.Integer, default=0)     # consecutive 'down' results (switch-down alerts)
+    down_alerted = db.Column(db.Boolean, default=False)  # a down email went out for the current outage
 
     # facts gathered during backup
     sw_version = db.Column(db.String(128))
@@ -317,6 +319,9 @@ DEFAULT_SETTINGS = {
     "smtp_from_name": "MGM Networkvault",
     "smtp_from": "donotreply@mgmhealthcare.in",
     "app_url": "",                  # external base URL (e.g. https://networkvault.mgmhealthcare.in)
+    # Switch-down email alerts
+    "alert_down_enabled": "1",
+    "alert_down_checks": "2",       # consecutive failed reachability checks before emailing
 }
 
 
