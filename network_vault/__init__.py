@@ -185,6 +185,19 @@ def create_app():
             return redirect(url_for("web.account"))
         return None
 
+    @app.after_request
+    def static_cache_headers(resp):
+        # CSS/JS are linked with ?v=<app version>, so a release changes the URL: let browsers keep
+        # them instead of re-checking on every page load. Unversioned files (images) get one day.
+        if request.path.startswith("/static/") and resp.status_code in (200, 304):
+            resp.cache_control.public = True
+            if "v" in request.args:
+                resp.cache_control.max_age = 31536000
+                resp.cache_control.immutable = True
+            else:
+                resp.cache_control.max_age = 86400
+        return resp
+
     @app.context_processor
     def inject():
         if "csrf" not in session:
