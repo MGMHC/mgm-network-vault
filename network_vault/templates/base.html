@@ -399,6 +399,29 @@ document.addEventListener('keydown', (e) => {
   }
 });
 </script>
+<!-- Hover a menu link and the browser fetches that page early (Chrome/Edge). Prefetch only - page
+     scripts never run early. Logout, downloads and exports are never fetched ahead of a click. -->
+<script type="speculationrules">
+{
+  "prefetch": [{
+    "eagerness": "moderate",
+    "where": {"and": [
+      {"selector_matches": ".nav-brand, .nav-item, .dd-item, .subnav-link, .mobile-nav-drawer a"},
+      {"not": {"selector_matches": "[download], [data-no-transition], [target=_blank]"}},
+      {"not": {"href_matches": "/logout"}},
+      {"not": {"href_matches": "/api/*"}},
+      {"not": {"href_matches": "/*.csv"}},
+      {"not": {"href_matches": "/*.diff"}},
+      {"not": {"href_matches": "/*.zip"}},
+      {"not": {"href_matches": "/*/zip"}},
+      {"not": {"href_matches": "/*/download"}},
+      {"not": {"href_matches": "/*/export*"}},
+      {"not": {"href_matches": "/*/package"}},
+      {"not": {"href_matches": "/*/config-from-export"}}
+    ]}
+  }]
+}
+</script>
 <script src="{{ url_for('static', filename='app.js') }}?v={{ app_version }}"></script>
 {% block scripts %}{% endblock %}
 </body>

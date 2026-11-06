@@ -3,6 +3,16 @@
 All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](https://semver.org):
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 
+## [Unreleased]
+
+### Changed
+- **Instant menu navigation**: removed the 140 ms fade-out delay before every page change and the fade-in after it. Pages now switch with the browser's native cross-fade (Chrome/Edge; the top bar stays still) and other browsers switch instantly. Turned off when Windows is set to reduce motion.
+- **Menu pages load ahead of the click**: hovering a menu link for a moment fetches that page in the background (Chrome/Edge), so it opens almost immediately. Only menu links are fetched; Logout, downloads and exports never are.
+- **CSS and JavaScript are cached until the next release**: they were re-checked with the server on every page load. Their URLs already carry the version number, so an update still loads the new files. Images are cached for a day.
+
+### Fixed
+- **IPAM and Rack Elevations pages**: a duplicate script variable stopped the shared app script from loading on these two pages, so its popups, toasts and menus didn't work there.
+
 ## [1.14.0] - 2026-11-06
 
 ### Security

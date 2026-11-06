@@ -305,7 +305,7 @@
 <script>
 let ipamData = { prefixes: [], ips: [], vlans: [], vrfs: [], fhrps: [], hierarchy: [] };
 
-const CSRF = document.querySelector('meta[name="csrf"]')?.getAttribute('content') || '';
+// CSRF comes from app.js (a second `const CSRF` here stopped app.js from loading on this page)
 
 async function api(url, data) {
   const res = await fetch(url, {

@@ -1485,18 +1485,6 @@ h3 {
   }
 }
 
-@keyframes page-fade-out {
-  0% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  100% {
-    opacity: 0;
-    transform: translateY(-12px);
-  }
-}
-
 @keyframes card-enter {
   0% {
     opacity: 0;
@@ -1531,14 +1519,6 @@ h3 {
   }
 }
 
-.main {
-  animation: page-enter .28s cubic-bezier(0.16, 1, 0.3, 1) backwards;
-}
-
-.layout.page-leaving .main {
-  animation: page-fade-out .14s cubic-bezier(0.4, 0, 1, 1) forwards;
-}
-
 .login-wrap .card {
   animation: card-enter .42s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -1564,8 +1544,6 @@ h3 {
 
 @media (prefers-reduced-motion: reduce) {
 
-  .main,
-  .layout.page-leaving .main,
   .login-wrap .card {
     animation: none !important;
   }
@@ -4618,5 +4596,34 @@ h2 svg {
     overflow: hidden !important;
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
+  }
+}
+/* ── Page-to-page transitions (Chrome/Edge; other browsers just navigate) ───── */
+@view-transition {
+  navigation: auto;
+}
+
+/* The top bar is identical on every page: keep it still instead of cross-fading it */
+.top-nav-bar {
+  view-transition-name: topnav;
+}
+
+::view-transition-group(topnav),
+::view-transition-old(topnav),
+::view-transition-new(topnav) {
+  animation: none;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 150ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }

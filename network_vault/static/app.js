@@ -260,7 +260,7 @@ function toggleSidebar() {
   }
 })();
 
-// ── Page transition & nav ripple ──────────────────────────────────────────
+// ── Nav ripple (page-to-page transitions are native CSS view transitions) ───────────────────────────────────────────
 (function () {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (reduced) return;
@@ -275,59 +275,6 @@ function toggleSidebar() {
       this.appendChild(r);
       r.addEventListener('animationend', () => r.remove());
     });
-  });
-
-  // Fade-out main content before navigating to a new page
-  function shouldAnimate(href) {
-    if (!href) return false;
-    try {
-      const url = new URL(href, location.href);
-      // Same origin only; skip hash-only changes and logout (instant redirect)
-      if (url.origin !== location.origin) return false;
-      if (url.pathname === location.pathname && url.hash) return false;
-      // Downloads don't leave the page: fading out would leave it blank until a reload
-      if (/(\.csv|\.diff|\.zip|\/zip|\/download|\/export[^/]*|\/package|\/config-from-export|\/logout)$/i.test(url.pathname)) return false;
-      return true;
-    } catch { return false; }
-  }
-
-  document.addEventListener('click', function (e) {
-    // Walk up to find an <a> tag
-    const a = e.target.closest('a[href]');
-    if (!a) return;
-    if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    if (a.target === '_blank' || a.hasAttribute('download') || a.hasAttribute('data-no-transition')) return;
-    if (!shouldAnimate(a.href)) return;
-
-    const layout = document.getElementById('layout');
-    const loginWrap = document.querySelector('.login-wrap');
-    const target = layout || loginWrap;
-    if (!target) return;
-
-    e.preventDefault();
-    const dest = a.href;
-
-    if (layout) {
-      layout.classList.add('page-leaving');
-    } else {
-      // login page — fade out the card
-      const card = loginWrap.querySelector('.card');
-      if (card) {
-        card.style.transition = 'opacity .22s cubic-bezier(0.4, 0, 1, 1), transform .22s cubic-bezier(0.4, 0, 1, 1)';
-        card.style.opacity = '0';
-        card.style.transform = 'scale(.92) translateY(-10px)';
-      }
-    }
-    setTimeout(() => { location.href = dest; }, 140);
-  });
-
-  // Back/forward restores the page from the browser cache in its faded-out state: undo it
-  window.addEventListener('pageshow', (e) => {
-    if (!e.persisted) return;
-    const layout = document.getElementById('layout');
-    if (layout) layout.classList.remove('page-leaving');
-    const card = document.querySelector('.login-wrap .card');
-    if (card) { card.style.opacity = ''; card.style.transform = ''; }
   });
 })();
 
