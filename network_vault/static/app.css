@@ -1872,6 +1872,10 @@ th.num {
   color: var(--accent);
 }
 
+.badge.violet {
+  color: var(--violet);
+}
+
 .dot {
   width: 8px;
   height: 8px;
