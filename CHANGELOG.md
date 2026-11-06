@@ -1,4 +1,4 @@
-## [Unreleased]
+## [1.16.0] - 2026-11-06
 
 ### Security
 - **Juniper secrets were not masked in the GitHub copy**: the masking rule for Junos `$9$`/`$1$`/`$5$`/`$6$` secrets (RADIUS/TACACS keys, local user passwords, authentication keys) never matched, so with GitHub sync and "Mask secrets" on these were still pushed in clear. Fixed; the next backup of each Juniper switch pushes a masked copy. Earlier commits in the repository's history still contain them - rotate those secrets or rewrite the repository history.
