@@ -676,168 +676,28 @@ def match_neighbor(nb, candidates):
 
 # --------------------------------------------------------------------------- Parallel Port Locator Engine
 
-def locate_host(devices, query_str, user=None, app=None):
-    """
-    Search across switches for a host by IP or MAC address.
-    Thread-safe with Flask application context.
-    """
-    app = app or (current_app._get_current_object() if current_app else None)
-    q = (query_str or "").strip()
-    if not q:
-        raise ValueError("Please provide an IP address or MAC address to locate.")
+LOCATOR_WORKERS = 16   # parallel SSH sessions for a Port Locator scan (independent of backup max_workers)
+MAX_TRACE_HOPS = 4     # LLDP hops followed from the distribution/core switch
 
-    target_ip = None
-    target_mac_clean = None
 
-    if is_ip(q):
-        target_ip = q
-        q_type = "ip"
-    else:
-        target_mac_clean = clean_mac(q)
-        if not target_mac_clean:
-            raise ValueError(f"'{q}' is neither a valid IPv4 address nor a recognized MAC address.")
-        q_type = "mac"
+def _is_firewall(d):
+    return (d.role or "") == "firewall" or (d.platform or "").startswith("sonicwall")
 
-    # Only query enabled devices that have credentials
-    target_devices = [d for d in devices if d.enabled and d.credential_id]
-    if not target_devices:
-        return {
-            "query": q,
-            "query_type": q_type,
-            "resolved_ip": target_ip,
-            "resolved_mac": format_mac(target_mac_clean, "colon") if target_mac_clean else None,
-            "vendor": lookup_oui(target_mac_clean) if target_mac_clean else "Unknown",
-            "best_match": None,
-            "all_matches": [],
-            "switches_queried": 0,
-            "switches_responding": 0,
-            "message": "No reachable switches available with credentials in this scope.",
-        }
 
-    workers = min(len(target_devices), max(2, get_int("max_workers") if app else 4))
-
-    # Step 1: If searching by IP, query ARP table on core/distribution switches first
-    resolved_ip = target_ip
-    resolved_mac = format_mac(target_mac_clean, "colon") if target_mac_clean else None
-
-    if target_ip and not target_mac_clean:
-        core_dev_ids = [d.id for d in sorted(target_devices, key=lambda d: 0 if d.role in ("core", "distribution") else 1)]
-
-        def arp_worker(did):
-            if not app:
-                return []
-            with app.app_context():
-                d = db.session.get(Device, did)
-                if not d or not d.credential_id:
-                    return []
-                return query_arp(d, target_ip=target_ip)
-
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            arp_results = list(pool.map(arp_worker, core_dev_ids))
-
-        for entries in arp_results:
-            if entries:
-                target_mac_clean = entries[0]["clean_mac"]
-                resolved_mac = entries[0]["mac"]
-                break
-
-    if not target_mac_clean:
-        return {
-            "query": q,
-            "query_type": q_type,
-            "resolved_ip": target_ip,
-            "resolved_mac": None,
-            "vendor": "Unknown",
-            "best_match": None,
-            "all_matches": [],
-            "switches_queried": len(target_devices),
-            "switches_responding": len(target_devices),
-            "message": f"Host IP {target_ip} not found in ARP tables on campus switches. Host may be offline or in another subnet.",
-        }
-
-    # If searched by MAC directly, attempt to resolve its IP from ARP as well
-    if not resolved_ip and target_mac_clean:
-        try:
-            core_dev_ids = [d.id for d in sorted(target_devices, key=lambda d: 0 if d.role in ("core", "distribution") else 1)]
-
-            def arp_mac_worker(did):
-                if not app:
-                    return []
-                with app.app_context():
-                    d = db.session.get(Device, did)
-                    if not d or not d.credential_id:
-                        return []
-                    return query_arp(d, target_mac_clean=target_mac_clean)
-
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                arp_results = list(pool.map(arp_mac_worker, core_dev_ids))
-
-            for entries in arp_results:
-                if entries:
-                    resolved_ip = entries[0]["ip"]
-                    break
-        except Exception:
-            pass
-
-    # Step 2: Now that we have the target MAC, search MAC forwarding tables across all devices
-    vendor = lookup_oui(target_mac_clean)
-    all_dev_ids = [d.id for d in target_devices]
-
-    def mac_worker(did):
-        if not app:
-            return []
-        with app.app_context():
-            d = db.session.get(Device, did)
-            if not d or not d.credential_id:
-                return []
-            return query_mac_table(d, target_mac_clean=target_mac_clean)
-
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        mac_results_nested = list(pool.map(mac_worker, all_dev_ids))
-
-    all_matches = []
-    responding_count = 0
-    for res_list in mac_results_nested:
-        if res_list is not None:
-            responding_count += 1
-            all_matches.extend(res_list)
-
-    global _APP_REF
-    if app:
-        _APP_REF = app
-
-    # Step 3: Classify each match as Edge Port vs Uplink / LAG
-    for m in all_matches:
-        is_uplink = is_uplink_port(m["interface"], device_id=m.get("switch_id"), app=app)
-        m["is_uplink"] = is_uplink
-        m["link_type"] = "Uplink / Trunk" if is_uplink else "Edge (Access Port)"
-        m["vendor"] = vendor
-        m["resolved_ip"] = resolved_ip
-
-    def match_score(m):
-        score = 0
-        if not m["is_uplink"]:
-            score += 100
-        if m["switch_role"] == "access":
-            score += 50
-        elif m["switch_role"] == "distribution":
-            score += 20
-        return score
-
-    all_matches.sort(key=match_score, reverse=True)
-    best_match = all_matches[0] if all_matches else None
-
-    return {
-        "query": q,
-        "query_type": q_type,
-        "resolved_ip": resolved_ip,
-        "resolved_mac": resolved_mac or format_mac(target_mac_clean, "colon"),
-        "vendor": vendor,
-        "best_match": best_match,
-        "all_matches": all_matches,
-        "switches_queried": len(target_devices),
-        "switches_responding": responding_count,
-    }
+def locate_host(devices, query_str, user=None, app=None, full=False, user_site_ids=None):
+    """Non-streaming Port Locator: runs the same engine as stream_locate_host and returns its result."""
+    import json
+    app = app or current_app._get_current_object()
+    result, err = None, None
+    for line in stream_locate_host(app, devices, query_str, full=full, user_site_ids=user_site_ids):
+        ev = json.loads(line)
+        if ev.get("type") == "complete":
+            result = ev["result"]
+        elif ev.get("type") == "error":
+            err = ev.get("msg")
+    if result is None:
+        raise ValueError(err or "Search failed")
+    return result
 
 
 _LOCATOR_RUNS = {}
@@ -878,48 +738,57 @@ def cancel_locator_run(run_id):
         return False
 
 
-def stream_locate_host(app, devices, query_str, run_id=None):
-    """
-    Generator yielding newline-delimited JSON events with real-time logging and progress for port locator.
-    Maintains persistent background state in _LOCATOR_RUNS so the trace continues across page navigation.
+def stream_locate_host(app, devices, query_str, run_id=None, full=False, user_site_ids=None):
+    """Find which switch port a MAC/IP is on. Generator of newline-delimited JSON events.
+
+    1. Resolve on the site's distribution/core switches (ARP for an IP search, MAC table for both).
+    2. Trace: follow the port the MAC is learned on to the next switch via LLDP, until a non-uplink
+       (access) port is reached - usually 2-3 switches in total.
+    3. If the trace breaks, scan the switches in scope in parallel and stop at the first access-port
+       hit (unless `full`). Cancel stops scheduling more switches.
+
+    devices: switch ids (or Device objects) in scope. user_site_ids: sites the user may query (None = all).
+    Read-only show commands only. Background state lives in _LOCATOR_RUNS so a trace survives page navigation.
     """
     import json
+    from concurrent.futures import as_completed
+    from types import SimpleNamespace
+
     q_str = (query_str or "").strip()
-    raw_ids = [d if isinstance(d, int) else getattr(d, "id", None) for d in devices]
-    raw_ids = [i for i in raw_ids if i is not None]
+    scope_ids_in = [d if isinstance(d, int) else getattr(d, "id", None) for d in devices]
+    scope_ids_in = [i for i in scope_ids_in if i is not None]
+    allowed_sites = set(user_site_ids) if user_site_ids is not None else None
+
+    def _ok_site(site_id):
+        return allowed_sites is None or site_id in allowed_sites
+
+    def _snap(d):
+        return SimpleNamespace(id=d.id, name=d.name, hostname=d.hostname, host=d.host, site_id=d.site_id,
+                               role=d.role, group=d.group, location=d.location)
 
     with app.app_context():
-        valid_devs = Device.query.filter(Device.id.in_(raw_ids), Device.enabled == True, Device.credential_id.isnot(None)).all() if raw_ids else []
-        core_devs = [d.id for d in valid_devs if d.role in ("core", "distribution")]
-        core_dev_ids = core_devs if core_devs else [d.id for d in valid_devs]
-        all_dev_ids = [d.id for d in valid_devs]
-        total = len(all_dev_ids)
+        usable = (Device.query.filter(Device.enabled.is_(True), Device.credential_id.isnot(None)).all())
+        usable = [d for d in usable if not _is_firewall(d) and _ok_site(d.site_id)]
+        by_id = {d.id: _snap(d) for d in usable}
+        scope = [by_id[i] for i in scope_ids_in if i in by_id]
+        scope_sites = {d.site_id for d in scope}
+        # Distribution/core of the sites in scope - used for ARP and as the trace start, whatever the filters
+        cores = [s for s in by_id.values() if s.role in ("core", "distribution") and s.site_id in scope_sites]
+        cores.sort(key=lambda s: 0 if s.role == "distribution" else 1)
+        candidates = list(by_id.values())
+        firewall_skipped = len([i for i in scope_ids_in if i not in by_id])
 
-    run_id = run_id or f"trace_{int(time.time()*1000)}"
-
+    total = len(scope)
+    run_id = run_id or f"trace_{int(time.time() * 1000)}"
+    started = time.time()
     with _LOCATOR_LOCK:
-        # Purge runs older than 2 hours to avoid memory leaks
-        now_ts = time.time()
         for k in list(_LOCATOR_RUNS.keys()):
-            if now_ts - _LOCATOR_RUNS[k].get("started_at", now_ts) > 7200:
+            if started - _LOCATOR_RUNS[k].get("started_at", started) > 7200:
                 _LOCATOR_RUNS.pop(k, None)
-
         _LOCATOR_RUNS[run_id] = {
-            "id": run_id,
-            "query": q_str,
-            "status": "running",
-            "is_running": True,
-            "percent": 0,
-            "done": 0,
-            "total": total,
-            "device": "",
-            "matches_found": 0,
-            "resolved_ip": None,
-            "resolved_mac": None,
-            "logs": [],
-            "result": None,
-            "error": None,
-            "started_at": now_ts,
+            "id": run_id, "query": q_str, "status": "running", "is_running": True, "percent": 0, "done": 0,
+            "total": total, "device": "", "matches_found": 0, "resolved_ip": None, "resolved_mac": None,
+            "logs": [], "result": None, "error": None, "started_at": started,
         }
 
     q = queue.Queue()
@@ -927,296 +796,295 @@ def stream_locate_host(app, devices, query_str, run_id=None):
     def timestamp():
         return datetime.now().strftime("%H:%M:%S")
 
-    def emit_log(level, msg, ts=None):
-        t_str = ts or timestamp()
-        entry = {
-            "type": "log",
-            "level": level,
-            "timestamp": t_str,
-            "msg": msg,
-        }
+    def emit_log(level, msg):
+        t_str = timestamp()
         with _LOCATOR_LOCK:
             if run_id in _LOCATOR_RUNS:
-                _LOCATOR_RUNS[run_id]["logs"].append({
-                    "timestamp": t_str,
-                    "level": level,
-                    "msg": msg,
-                })
-        q.put(entry)
+                _LOCATOR_RUNS[run_id]["logs"].append({"timestamp": t_str, "level": level, "msg": msg})
+        q.put({"type": "log", "level": level, "timestamp": t_str, "msg": msg})
+
+    def update(**kw):
+        with _LOCATOR_LOCK:
+            if run_id in _LOCATOR_RUNS:
+                _LOCATOR_RUNS[run_id].update(kw)
+
+    def cancelled():
+        with _LOCATOR_LOCK:
+            return _LOCATOR_RUNS.get(run_id, {}).get("status") == "cancelled"
+
+    def finish(result):
+        update(status="complete", is_running=False, percent=100, result=result,
+               matches_found=len(result.get("all_matches") or []),
+               resolved_ip=result.get("resolved_ip"), resolved_mac=result.get("resolved_mac"))
+        q.put({"type": "complete", "run_id": run_id, "result": result, "timestamp": timestamp()})
+
+    def fail(msg):
+        emit_log("error", msg)
+        update(status="error", is_running=False, error=msg)
+        q.put({"type": "error", "run_id": run_id, "timestamp": timestamp(), "msg": msg})
 
     global _APP_REF
     _APP_REF = app
 
+    def device(did):
+        return db.session.get(Device, did)
+
+    def mac_hits(did, mac_clean):
+        """MAC table hits on one switch, each tagged with whether its port is an uplink."""
+        with app.app_context():
+            d = device(did)
+            hits = query_mac_table(d, target_mac_clean=mac_clean) if d else []
+            for h in hits:
+                h["is_uplink"] = is_uplink_port(h["interface"], device=d, device_id=did, app=app)
+        return hits
+
     def run_tracer():
         ctx = app.app_context()
         ctx.push()
+        queried = set()
+        all_matches = []
+        path = []
+        method = "trace"
+        stopped_early = False
+        resolved_ip = resolved_mac = None
         try:
-            init_msg = f"Starting trace for '{q_str}' across {total} campus switches..."
-            with _LOCATOR_LOCK:
-                if run_id in _LOCATOR_RUNS:
-                    _LOCATOR_RUNS[run_id]["logs"].append({
-                        "timestamp": timestamp(),
-                        "level": "info",
-                        "msg": init_msg,
-                    })
-
-            q.put({
-                "type": "init",
-                "run_id": run_id,
-                "total": total,
-                "timestamp": timestamp(),
-                "msg": init_msg,
-            })
-
+            q.put({"type": "init", "run_id": run_id, "total": total, "timestamp": timestamp(),
+                   "msg": f"Starting trace for '{q_str}' ({total} switches in scope)..."})
+            emit_log("info", f"Starting trace for '{q_str}' ({total} switches in scope)...")
+            if firewall_skipped:
+                emit_log("info", f"Skipping {firewall_skipped} firewall / non-switch device(s).")
             if not q_str:
-                emit_log("error", "Search target is empty.")
-                q.put({
-                    "type": "error",
-                    "timestamp": timestamp(),
-                    "msg": "Search target is empty.",
-                })
-                q.put(None)
-                return
+                return fail("Search target is empty.")
+            if not scope:
+                return fail("No reachable switches available with credentials in this scope.")
 
-            if not all_dev_ids:
-                emit_log("error", "No reachable switches available with credentials in this scope.")
-                q.put({
-                    "type": "error",
-                    "timestamp": timestamp(),
-                    "msg": "No reachable switches available with credentials in this scope.",
-                })
-                q.put(None)
-                return
-
-            if is_ip(q_str):
-                target_ip = q_str
-                target_mac_clean = None
-                with _LOCATOR_LOCK:
-                    if run_id in _LOCATOR_RUNS:
-                        _LOCATOR_RUNS[run_id]["resolved_ip"] = target_ip
-                emit_log("info", f"[Step 1/2] IP target detected: {target_ip}. Querying ARP on Core & Distribution switches...")
-            else:
-                target_ip = None
-                target_mac_clean = clean_mac(q_str)
-                if not target_mac_clean:
-                    err_msg = f"'{q_str}' is neither a valid IPv4 address nor a recognized MAC address."
-                    emit_log("error", err_msg)
-                    q.put({
-                        "type": "error",
-                        "timestamp": timestamp(),
-                        "msg": err_msg,
-                    })
-                    q.put(None)
-                    return
-                with _LOCATOR_LOCK:
-                    if run_id in _LOCATOR_RUNS:
-                        _LOCATOR_RUNS[run_id]["resolved_mac"] = format_mac(target_mac_clean, "colon")
-                emit_log("info", f"[Step 1/2] MAC target detected: {format_mac(target_mac_clean)}. Querying ARP to resolve assigned IP...")
-
-            with app.app_context():
-                workers = min(total, max(2, get_int("max_workers")))
+            target_ip = q_str if is_ip(q_str) else None
+            mac_clean = None if target_ip else clean_mac(q_str)
+            if not target_ip and not mac_clean:
+                return fail(f"'{q_str}' is neither a valid IPv4 address nor a recognized MAC address.")
+            if mac_clean:
+                resolved_mac = format_mac(mac_clean, "colon")
             resolved_ip = target_ip
-            resolved_mac = format_mac(target_mac_clean, "colon") if target_mac_clean else None
+            update(resolved_ip=resolved_ip, resolved_mac=resolved_mac)
+            core_pool = cores or scope  # no distribution/core in these sites: use the scope itself
+            workers = max(1, min(LOCATOR_WORKERS, len(core_pool)))
 
-            # Step 1: ARP resolution
-            def arp_worker(did):
-                with app.app_context():
-                    d = db.session.get(Device, did)
-                    if not d or not d.credential_id:
-                        return None, []
-                    return d.name, query_arp(d, target_ip=target_ip, target_mac_clean=target_mac_clean)
+            # Step 1a: an IP needs its MAC first - ask distribution/core ARP, take the first answer
+            if target_ip:
+                emit_log("info", f"[Step 1] Resolving {target_ip} via ARP on {len(core_pool)} distribution/core switch(es)...")
 
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                arp_results = list(pool.map(arp_worker, core_dev_ids))
-
-            for dev_name, entries in arp_results:
-                if entries:
-                    if not target_mac_clean:
-                        target_mac_clean = entries[0]["clean_mac"]
-                        resolved_mac = entries[0]["mac"]
-                    if not resolved_ip:
-                        resolved_ip = entries[0]["ip"]
-                    with _LOCATOR_LOCK:
-                        if run_id in _LOCATOR_RUNS:
-                            _LOCATOR_RUNS[run_id]["resolved_ip"] = resolved_ip
-                            _LOCATOR_RUNS[run_id]["resolved_mac"] = resolved_mac
-                    emit_log("ok", f"[{dev_name}] ARP Resolved: IP {entries[0]['ip']} <-> MAC {entries[0]['mac']} (Interface: {entries[0]['interface']})")
-                    break
-
-            if not target_mac_clean:
-                emit_log("warn", f"Target IP {target_ip} not found in campus ARP tables. Switch forwarding table lookup will not proceed.")
-                not_found_res = {
-                    "query": q_str,
-                    "query_type": "ip",
-                    "resolved_ip": target_ip,
-                    "resolved_mac": None,
-                    "vendor": "Unknown",
-                    "best_match": None,
-                    "all_matches": [],
-                    "switches_queried": total,
-                    "switches_responding": total,
-                    "message": f"Host IP {target_ip} not found in ARP tables on campus switches.",
-                }
-                with _LOCATOR_LOCK:
-                    if run_id in _LOCATOR_RUNS:
-                        _LOCATOR_RUNS[run_id]["status"] = "complete"
-                        _LOCATOR_RUNS[run_id]["is_running"] = False
-                        _LOCATOR_RUNS[run_id]["percent"] = 100
-                        _LOCATOR_RUNS[run_id]["done"] = total
-                        _LOCATOR_RUNS[run_id]["resolved_ip"] = target_ip
-                        _LOCATOR_RUNS[run_id]["resolved_mac"] = None
-                        _LOCATOR_RUNS[run_id]["result"] = not_found_res
-
-                q.put({
-                    "type": "complete",
-                    "run_id": run_id,
-                    "result": not_found_res,
-                    "timestamp": timestamp(),
-                })
-                q.put(None)
-                return
-
-            vendor = lookup_oui(target_mac_clean)
-            emit_log("ok", f"Hardware Vendor identified: {vendor} ({format_mac(target_mac_clean)})")
-            emit_log("info", f"[Step 2/2] Scanning MAC forwarding tables across {total} switches...")
-
-            # Step 2: MAC Forwarding table search across all devices
-            done_cnt = 0
-            cnt_lock = threading.Lock()
-            all_matches = []
-
-            def mac_worker(did):
-                nonlocal done_cnt
-                with app.app_context():
-                    d = db.session.get(Device, did)
-                    if not d or not d.credential_id:
-                        return
-                    d_name = d.name
-                    d_host = d.host
-
-                try:
+                def arp_one(s):
+                    if cancelled():
+                        return s, []
                     with app.app_context():
-                        d = db.session.get(Device, did)
-                        matches = query_mac_table(d, target_mac_clean=target_mac_clean)
-                except Exception as e:
-                    matches = []
-                    emit_log("error", f"[{d_name}] Query error: {e}")
+                        d = device(s.id)
+                        return s, (query_arp(d, target_ip=target_ip) if d else [])
 
-                with cnt_lock:
-                    done_cnt += 1
-                    cur_done = done_cnt
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    futs = [pool.submit(arp_one, s) for s in core_pool]
+                    for f in as_completed(futs):
+                        s, entries = f.result()
+                        if entries and not mac_clean:
+                            mac_clean = entries[0]["clean_mac"]
+                            resolved_mac = entries[0]["mac"]
+                            emit_log("ok", f"[{s.name}] ARP: {target_ip} -> {resolved_mac} ({entries[0]['interface']})")
+                            for other in futs:
+                                other.cancel()
+                update(resolved_mac=resolved_mac)
+                if not mac_clean:
+                    emit_log("warn", f"{target_ip} is not in the ARP table of the distribution/core switches.")
+                    return finish({
+                        "query": q_str, "query_type": "ip", "resolved_ip": target_ip, "resolved_mac": None,
+                        "vendor": "Unknown", "best_match": None, "all_matches": [], "path": [], "method": "trace",
+                        "stopped_early": False, "scanned": 0, "in_scope": total, "switches_queried": 0,
+                        "switches_responding": 0,
+                        "message": f"Host IP {target_ip} not found in the ARP tables of the distribution/core switches.",
+                    })
 
-                pct = int((cur_done / total) * 100)
+            vendor = lookup_oui(mac_clean)
+            emit_log("ok", f"Hardware vendor: {vendor} ({format_mac(mac_clean)})")
 
-                if matches:
-                    all_matches.extend(matches)
-                    for m in matches:
-                        is_up = is_uplink_port(m["interface"], device=d, device_id=did, app=app)
-                        lvl = "warn" if is_up else "ok"
-                        port_kind = "Uplink / Trunk" if is_up else "⭐ Access Edge Port"
-                        emit_log(lvl, f"[{d_name}] Found MAC on {m['interface']} (VLAN {m['vlan']}) -> {port_kind}")
+            # Step 1b: where do distribution/core switches learn the MAC? (and the IP, for a MAC search)
+            emit_log("info", f"[Step 2] Looking up {format_mac(mac_clean)} on {len(core_pool)} distribution/core switch(es)...")
 
-                with _LOCATOR_LOCK:
-                    if run_id in _LOCATOR_RUNS:
-                        _LOCATOR_RUNS[run_id]["percent"] = pct
-                        _LOCATOR_RUNS[run_id]["done"] = cur_done
-                        _LOCATOR_RUNS[run_id]["device"] = d_name
-                        _LOCATOR_RUNS[run_id]["matches_found"] = len(all_matches)
+            def core_one(s):
+                if cancelled():
+                    return s, [], []
+                with app.app_context():
+                    d = device(s.id)
+                    if not d:
+                        return s, [], []
+                    try:
+                        conn = engine.connect(d)
+                    except Exception as e:  # noqa: BLE001
+                        emit_log("error", f"[{s.name}] Unreachable: {e}")
+                        return s, [], []
+                    try:
+                        hits = query_mac_table(d, target_mac_clean=mac_clean, conn=conn)
+                        arp = [] if target_ip else query_arp(d, target_mac_clean=mac_clean, conn=conn)
+                    finally:
+                        try:
+                            conn.disconnect()
+                        except Exception:  # noqa: BLE001
+                            pass
+                    for h in hits:
+                        h["is_uplink"] = is_uplink_port(h["interface"], device=d, device_id=s.id, app=app)
+                    return s, hits, arp
 
-                q.put({
-                    "type": "progress",
-                    "run_id": run_id,
-                    "done": cur_done,
-                    "total": total,
-                    "percent": pct,
-                    "device": d_name,
-                    "matches_found": len(all_matches),
-                    "resolved_ip": resolved_ip,
-                    "resolved_mac": resolved_mac or (format_mac(target_mac_clean, "colon") if target_mac_clean else None),
-                    "timestamp": timestamp(),
-                })
-
+            core_hits = []
             with ThreadPoolExecutor(max_workers=workers) as pool:
-                list(pool.map(mac_worker, all_dev_ids))
+                for s, hits, arp in pool.map(core_one, core_pool):
+                    queried.add(s.id)
+                    if arp and not resolved_ip:
+                        resolved_ip = arp[0]["ip"]
+                        emit_log("ok", f"[{s.name}] ARP: {resolved_mac} -> {resolved_ip}")
+                    for h in hits:
+                        emit_log("ok", f"[{s.name}] MAC learned on {h['interface']} (VLAN {h['vlan']})")
+                    core_hits += [(s, h) for h in hits]
+                    all_matches += hits
+            update(resolved_ip=resolved_ip)
+
+            # Step 2: trace hop by hop over LLDP
+            found = None
+            start = next(((s, h) for s, h in core_hits if not h["is_uplink"]), None)
+            if start:
+                found = start[1]
+                path.append({"switch_id": start[0].id, "switch_name": start[0].name, "port": start[1]["interface"]})
+                emit_log("ok", f"[{start[0].name}] Host is directly on {start[1]['interface']}.")
+            elif core_hits:
+                cur, hit = core_hits[0]
+                path.append({"switch_id": cur.id, "switch_name": cur.name, "port": hit["interface"]})
+                visited = {cur.id}
+                reason = None
+                for _hop in range(MAX_TRACE_HOPS):
+                    if cancelled():
+                        reason = "cancelled"
+                        break
+                    with app.app_context():
+                        d = device(cur.id)
+                        nb = query_lldp_neighbor(d, hit["interface"]) if d else None
+                        nxt = match_neighbor(nb, candidates)
+                        if nb and not nxt:
+                            nb = query_lldp_neighbor(d, hit["interface"], want_ip=True) or nb
+                            nxt = match_neighbor(nb, candidates)
+                    if not nb:
+                        reason = f"no LLDP neighbour on {cur.name} {hit['interface']}"
+                        break
+                    if not nxt:
+                        reason = (f"LLDP neighbour '{nb.get('system_name')}' on {cur.name} {hit['interface']} "
+                                  f"is not a switch in the Vault you can access")
+                        break
+                    if nxt.id in visited:
+                        reason = f"loop back to {nxt.name}"
+                        break
+                    emit_log("info", f"[{cur.name}] {hit['interface']} -> LLDP neighbour {nxt.name}")
+                    visited.add(nxt.id)
+                    queried.add(nxt.id)
+                    hits = mac_hits(nxt.id, mac_clean)
+                    all_matches += hits
+                    if not hits:
+                        reason = f"{nxt.name} has not learned the MAC"
+                        break
+                    hit = next((h for h in hits if not h["is_uplink"]), hits[0])
+                    cur = nxt
+                    path.append({"switch_id": cur.id, "switch_name": cur.name, "port": hit["interface"]})
+                    emit_log("ok", f"[{cur.name}] MAC learned on {hit['interface']} (VLAN {hit['vlan']})"
+                             + ("" if hit["is_uplink"] else " - access port"))
+                    if not hit["is_uplink"]:
+                        found = hit
+                        break
+                else:
+                    reason = f"more than {MAX_TRACE_HOPS} hops"
+                if not found:
+                    emit_log("warn", f"Trace stopped: {reason}. Falling back to scanning the switches in scope.")
+            else:
+                emit_log("warn", "No distribution/core switch has learned this MAC. Scanning the switches in scope.")
+
+            # Step 3: fallback scan with early stop
+            scanned = len(queried)
+            if (not found or full) and not cancelled():
+                method = "scan" if not found else method
+                todo = [s for s in scope if s.id not in queried]
+                stop = threading.Event()
+                done = [0]
+                lock = threading.Lock()
+                emit_log("info", f"[Step 3] Scanning {len(todo)} switch(es), {min(LOCATOR_WORKERS, max(1, len(todo)))} at a time"
+                         + ("" if full else " - stopping at the first access-port hit") + "...")
+
+                def scan_one(s):
+                    if stop.is_set() or cancelled():
+                        return s, None
+                    try:
+                        hits = mac_hits(s.id, mac_clean)
+                    except Exception as e:  # noqa: BLE001
+                        emit_log("error", f"[{s.name}] Query error: {e}")
+                        hits = []
+                    with lock:
+                        done[0] += 1
+                        n = done[0]
+                    for h in hits:
+                        emit_log("ok" if not h["is_uplink"] else "warn",
+                                 f"[{s.name}] Found on {h['interface']} (VLAN {h['vlan']}) - "
+                                 + ("uplink / trunk" if h["is_uplink"] else "access port"))
+                    if not full and any(not h["is_uplink"] and s.role == "access" for h in hits):
+                        stop.set()
+                    pct = int(n / max(1, len(todo)) * 100)
+                    update(percent=pct, done=n, device=s.name)
+                    q.put({"type": "progress", "run_id": run_id, "done": n, "total": len(todo), "percent": pct,
+                           "device": s.name, "matches_found": len(all_matches) + len(hits),
+                           "resolved_ip": resolved_ip, "resolved_mac": resolved_mac, "timestamp": timestamp()})
+                    return s, hits
+
+                with ThreadPoolExecutor(max_workers=max(1, min(LOCATOR_WORKERS, len(todo) or 1))) as pool:
+                    for s, hits in pool.map(scan_one, todo):
+                        if hits is None:
+                            continue
+                        queried.add(s.id)
+                        all_matches += hits
+                scanned = len(queried)
+                stopped_early = stop.is_set() and any(s.id not in queried for s in scope)
+                if cancelled():
+                    emit_log("warn", "Search cancelled.")
 
             for m in all_matches:
-                is_up = is_uplink_port(m["interface"], device_id=m.get("switch_id"), app=app)
-                m["is_uplink"] = is_up
-                m["link_type"] = "Uplink / Trunk" if is_up else "Edge (Access Port)"
+                m["link_type"] = "Uplink / Trunk" if m.get("is_uplink") else "Edge (Access Port)"
                 m["vendor"] = vendor
                 m["resolved_ip"] = resolved_ip
 
-            def match_score(m):
-                score = 0
-                if not m["is_uplink"]:
-                    score += 100
-                if m["switch_role"] == "access":
-                    score += 50
-                elif m["switch_role"] == "distribution":
-                    score += 20
-                return score
+            def score(m):
+                return (0 if m.get("is_uplink") else 100) + {"access": 50, "distribution": 20}.get(m.get("switch_role"), 0)
 
-            all_matches.sort(key=match_score, reverse=True)
-            best_match = all_matches[0] if all_matches else None
-
-            if best_match and not best_match["is_uplink"]:
-                emit_log("ok", f"🎯 Success! Host physical edge port pinpointed at {best_match['switch_name']} interface {best_match['interface']} (VLAN {best_match['vlan']}).")
-            elif best_match:
-                emit_log("warn", f"Host active on switch fabrics (seen on {len(all_matches)} ports), but only transit/uplink ports were reported.")
+            all_matches.sort(key=score, reverse=True)
+            best = found or (all_matches[0] if all_matches else None)
+            if best and not best.get("is_uplink"):
+                how = "traced via LLDP" if method == "trace" else "found by scanning"
+                emit_log("ok", f"Found: {best['switch_name']} {best['interface']} (VLAN {best['vlan']}), {how}"
+                         f" in {time.time() - started:.1f}s.")
+            elif best:
+                emit_log("warn", f"Seen on {len(all_matches)} port(s), but only on uplinks/trunks.")
             else:
-                emit_log("warn", f"Target MAC {format_mac(target_mac_clean)} not currently active in switch forwarding tables.")
+                emit_log("warn", f"{format_mac(mac_clean)} is not in the forwarding tables of the switches queried.")
+            if stopped_early:
+                emit_log("info", f"Stopped early after {scanned} of {total} switches. Use 'Show full path' to scan all.")
 
-            final_result = {
-                "query": q_str,
-                "query_type": "ip" if target_ip else "mac",
-                "resolved_ip": resolved_ip,
-                "resolved_mac": resolved_mac or (format_mac(target_mac_clean, "colon") if target_mac_clean else None),
-                "vendor": vendor,
-                "best_match": best_match,
-                "all_matches": all_matches,
-                "switches_queried": total,
-                "switches_responding": total,
-            }
-
-            with _LOCATOR_LOCK:
-                if run_id in _LOCATOR_RUNS:
-                    _LOCATOR_RUNS[run_id]["status"] = "complete"
-                    _LOCATOR_RUNS[run_id]["is_running"] = False
-                    _LOCATOR_RUNS[run_id]["percent"] = 100
-                    _LOCATOR_RUNS[run_id]["done"] = total
-                    _LOCATOR_RUNS[run_id]["matches_found"] = len(all_matches)
-                    _LOCATOR_RUNS[run_id]["resolved_ip"] = resolved_ip
-                    _LOCATOR_RUNS[run_id]["resolved_mac"] = resolved_mac or (format_mac(target_mac_clean, "colon") if target_mac_clean else None)
-                    _LOCATOR_RUNS[run_id]["result"] = final_result
-
-            q.put({
-                "type": "complete",
-                "run_id": run_id,
-                "result": final_result,
-                "timestamp": timestamp(),
+            finish({
+                "query": q_str, "query_type": "ip" if target_ip else "mac", "resolved_ip": resolved_ip,
+                "resolved_mac": resolved_mac or format_mac(mac_clean, "colon"), "vendor": vendor,
+                "best_match": best, "all_matches": all_matches, "path": path,
+                "method": method, "stopped_early": stopped_early, "scanned": scanned, "in_scope": total,
+                "switches_queried": scanned, "switches_responding": scanned,
+                "elapsed_sec": round(time.time() - started, 1),
             })
-
-        except Exception as e:
-            emit_log("error", f"Unexpected locator failure: {e}")
-            with _LOCATOR_LOCK:
-                if run_id in _LOCATOR_RUNS:
-                    _LOCATOR_RUNS[run_id]["status"] = "error"
-                    _LOCATOR_RUNS[run_id]["is_running"] = False
-                    _LOCATOR_RUNS[run_id]["error"] = str(e)
-            q.put({
-                "type": "error",
-                "run_id": run_id,
-                "timestamp": timestamp(),
-                "msg": f"Unexpected locator failure: {e}",
-            })
+        except Exception as e:  # noqa: BLE001
+            fail(f"Unexpected locator failure: {e}")
         finally:
             try:
                 ctx.pop()
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
             q.put(None)
 
-    threading.Thread(target=run_tracer, daemon=True).start()
+    threading.Thread(target=run_tracer, daemon=True, name=f"locator-{run_id}").start()
 
     while True:
         item = q.get()

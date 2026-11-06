@@ -988,15 +988,12 @@ def port_locator():
     return render_template("port_locator.html", devices=devs, sites=user_sites_list)
 
 
-@bp.route("/api/operations/port-locator", methods=["POST"])
-def api_port_locator():
+def _locator_scope(data):
+    """Switches a Port Locator search may scan: site / group / location / switch filters, within site access."""
     u = _current_user()
-    data = request.get_json(silent=True) or {}
-    query_str = data.get("query", "").strip()
-    if not query_str:
-        return jsonify(error="Search target is required (IP or MAC address)."), 400
-
     q_devs = _site_filter(Device.query, Device)
+    if u and not u.is_group_admin:
+        q_devs = q_devs.filter(Device.site_id.in_(u.allowed_site_ids or [-1]))
     site_id = data.get("site_id")
     if site_id and site_id != "all":
         try:
@@ -1006,14 +1003,29 @@ def api_port_locator():
             q_devs = q_devs.filter(Device.site_id == sid)
         except (ValueError, TypeError):
             pass
-
+    group = (data.get("group") or "").strip()
+    if group:
+        q_devs = q_devs.filter(Device.group == group)
+    location = (data.get("location") or "").strip()
+    if location:
+        q_devs = q_devs.filter(Device.location == location)
     device_ids = data.get("device_ids")
     if device_ids and isinstance(device_ids, list):
         q_devs = q_devs.filter(Device.id.in_([int(i) for i in device_ids if str(i).isdigit()]))
+    user_site_ids = None if (not u or u.is_group_admin) else list(u.allowed_site_ids or [])
+    return [d.id for d in q_devs.filter_by(enabled=True).all() if d.credential_id], user_site_ids
 
-    devs = q_devs.filter_by(enabled=True).all()
+
+@bp.route("/api/operations/port-locator", methods=["POST"])
+def api_port_locator():
+    data = request.get_json(silent=True) or {}
+    query_str = data.get("query", "").strip()
+    if not query_str:
+        return jsonify(error="Search target is required (IP or MAC address)."), 400
+    dev_ids, user_site_ids = _locator_scope(data)
     try:
-        result = operations.locate_host(devs, query_str, user=session.get("user"))
+        result = operations.locate_host(dev_ids, query_str, user=session.get("user"), full=bool(data.get("full")),
+                                        user_site_ids=user_site_ids)
         log_event(f"Port locator search: '{query_str}' ({len(result.get('all_matches', []))} matches)",
                   "device", user=session.get("user"))
         return jsonify(result)
@@ -1026,34 +1038,19 @@ def api_port_locator():
 
 @bp.route("/api/operations/port-locator/stream", methods=["POST"])
 def api_port_locator_stream():
-    u = _current_user()
     data = request.get_json(silent=True) or {}
     query_str = data.get("query", "").strip()
     if not query_str:
         return jsonify(error="Search target is required (IP or MAC address)."), 400
-
-    q_devs = _site_filter(Device.query, Device)
-    site_id = data.get("site_id")
-    if site_id and site_id != "all":
-        try:
-            sid = int(site_id)
-            if u and not u.has_site_access(sid):
-                abort(403, "Access to specified site is restricted.")
-            q_devs = q_devs.filter(Device.site_id == sid)
-        except (ValueError, TypeError):
-            pass
-
-    device_ids = data.get("device_ids")
-    if device_ids and isinstance(device_ids, list):
-        q_devs = q_devs.filter(Device.id.in_([int(i) for i in device_ids if str(i).isdigit()]))
-
-    devs = q_devs.filter_by(enabled=True).all()
-    dev_ids = [d.id for d in devs if d.credential_id]
+    dev_ids, user_site_ids = _locator_scope(data)
     app = current_app._get_current_object()
     run_id = data.get("run_id")
-    log_event(f"Port locator streaming search started for '{query_str}' ({len(dev_ids)} switches)", "device", user=session.get("user"))
+    full = bool(data.get("full"))
+    log_event(f"Port locator search started for '{query_str}' ({len(dev_ids)} switches in scope"
+              f"{', full scan' if full else ''})", "device", user=session.get("user"))
     return Response(
-        stream_with_context(operations.stream_locate_host(app, dev_ids, query_str, run_id=run_id)),
+        stream_with_context(operations.stream_locate_host(app, dev_ids, query_str, run_id=run_id, full=full,
+                                                          user_site_ids=user_site_ids)),
         mimetype="application/x-ndjson",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
     )
