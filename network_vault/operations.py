@@ -379,19 +379,27 @@ def is_uplink_port(port_name, device=None, device_id=None, learned_mac_count=1, 
 
 # --------------------------------------------------------------------------- ARP Table Discovery
 
+_CLI_ERROR = re.compile(
+    r"^\s*(%\s*(invalid|unrecognized|incomplete|ambiguous|bad parameter|unknown)|syntax error|error:|unknown command|"
+    r"invalid input|\^)", re.I | re.M)
+
+
+def _cli_rejected(out):
+    """The switch refused the command: netmiko returns the error text as output, it does not raise."""
+    head = "\n".join((out or "").strip().splitlines()[:4])
+    return bool(head) and bool(_CLI_ERROR.search(head))
+
+
 def _filtered_or_full(conn, filtered, full):
     """Run the filtered command and trust its answer, even when empty (= not on this switch).
-    The whole table is only fetched when the filtered command itself fails (unsupported syntax)."""
-    for cmd in filtered:
+    The whole table is only fetched when the filtered command itself fails or is rejected (unsupported syntax)."""
+    for cmd in list(filtered) + list(full):
         try:
-            return engine.run(conn, cmd)
+            out = engine.run(conn, cmd)
         except Exception:  # noqa: BLE001 - try the next form
             continue
-    for cmd in full:
-        try:
-            return engine.run(conn, cmd)
-        except Exception:  # noqa: BLE001
-            continue
+        if not _cli_rejected(out):
+            return out
     return ""
 
 
@@ -530,7 +538,7 @@ def query_mac_table(device, target_mac_clean=None, conn=None):
 
         # Detect interface (e.g. ge-3/0/13.0 or gi1/0/14)
         iface = "—"
-        for t in tokens:
+        for t in tokens[mac_idx + 1:] if mac_idx >= 0 else tokens:
             if t != raw_mac and iface_regex.search(t):
                 iface = t
                 break
@@ -582,37 +590,63 @@ def _base_port(p):
 
 
 def _parse_junos_lldp_table(out):
-    """Rows of 'show lldp neighbors' using the header's column positions (System Name may contain spaces)."""
+    """Rows of Junos 'show lldp neighbors'.
+
+    Split on whitespace, not on the header's column positions: a long Port info (a port description such
+    as UPLINK_TO_DISTRIBUTION) runs into the System Name column. The System Name is the last field
+    (hostnames have no spaces); Port info is whatever sits between the Chassis Id and it."""
     lines = (out or "").splitlines()
     hdr_i = next((i for i, l in enumerate(lines) if "Local Interface" in l and "System Name" in l), None)
     if hdr_i is None:
         return []
     h = lines[hdr_i]
-    cols = [("local", h.index("Local Interface")), ("parent", h.find("Parent Interface")),
-            ("chassis", h.find("Chassis Id")), ("port", h.find("Port info")), ("name", h.index("System Name"))]
-    cols = [c for c in cols if c[1] >= 0]
+    need = 3 if "Parent Interface" in h else 2
+    name_col = h.index("System Name")
     rows = []
     for l in lines[hdr_i + 1:]:
-        if not l.strip() or l.strip().startswith("{"):
+        t = l.split()
+        if len(t) < need or l.strip().startswith("{"):
             continue
-        row = {}
-        for i, (key, start) in enumerate(cols):
-            end = cols[i + 1][1] if i + 1 < len(cols) else None
-            row[key] = l[start:end].strip() if len(l) > start else ""
-        if row.get("local"):
-            rows.append(row)
+        row = {"local": t[0], "parent": t[1] if need == 3 else "", "chassis": t[need - 1]}
+        rest = t[need:]
+        if len(rest) >= 2:
+            row["port"], row["name"] = " ".join(rest[:-1]), rest[-1]
+        elif rest:  # one field: it is the System Name only if it sits in that column
+            is_name = l.rstrip().rfind(rest[0]) >= name_col - 1
+            row["port"], row["name"] = ("", rest[0]) if is_name else (rest[0], "")
+        else:
+            row["port"] = row["name"] = ""
+        rows.append(row)
     return rows
 
 
-def query_lldp_neighbor(device, port, conn=None, want_ip=False):
-    """Who is on the other end of `port` (a physical port or an ae/LAG bundle)?
+def _cisco_po_member(c, port):
+    """First bundled member of a Cisco port-channel ('Po1' -> 'Gi1/0/49') from 'show etherchannel summary'."""
+    m = re.match(r"^po(?:rt-channel)?\s*(\d+)$", _base_port(port))
+    if not m:
+        return None
+    for line in engine.run(c, "show etherchannel summary").splitlines():
+        if re.search(rf"\bPo{m.group(1)}\(", line):
+            members = re.findall(r"(\S+?)\(P\)", line) or re.findall(r"(\S+?)\(\w+\)", line)[1:]
+            return members[0] if members else None
+    return None
 
-    Returns {"local_port", "parent", "system_name", "mgmt_ip"} or None. Read-only show commands only."""
+
+def query_lldp_neighbor(device, port, conn=None, want_ip=False, cache=None):
+    """Who is on the other end of `port` (a physical port or an ae/Po bundle)?
+
+    Returns {"local_port", "parent", "system_name", "mgmt_ip"} or None. Read-only show commands only.
+    cache: optional dict shared by one search, so a Juniper LLDP table is fetched once per switch."""
     target = _base_port(port)
 
     def fetch(c):
         if device.is_juniper:
-            rows = _parse_junos_lldp_table(engine.run(c, "show lldp neighbors | no-more"))
+            key = ("junos-lldp", device.id)
+            rows = cache.get(key) if cache is not None else None
+            if rows is None:
+                rows = _parse_junos_lldp_table(engine.run(c, "show lldp neighbors | no-more"))
+                if cache is not None:
+                    cache[key] = rows
             hit = (next((r for r in rows if _base_port(r.get("local")) == target), None)
                    or next((r for r in rows if _base_port(r.get("parent")) == target), None))
             if not hit:
@@ -627,22 +661,31 @@ def query_lldp_neighbor(device, port, conn=None, want_ip=False):
                 except Exception:  # noqa: BLE001
                     pass
             return nb
-        # Cisco IOS / C1300: LLDP detail, else CDP detail
+        # Cisco IOS / C1300: LLDP detail, else CDP detail - on a member port when the MAC is on a port-channel
+        phys, parent = port, None
+        if target.startswith("po"):
+            try:
+                phys = _cisco_po_member(c, port)
+            except Exception:  # noqa: BLE001
+                phys = None
+            if not phys:
+                return None
+            parent = port
         try:
-            det = engine.run(c, f"show lldp neighbors {port} detail")
+            det = engine.run(c, f"show lldp neighbors {phys} detail")
             m_name = re.search(r"System Name:\s*(\S+)", det)
             if m_name:
                 m_ip = re.search(r"Management Address(?:es)?:?[\s\S]{0,80}?" + _IPV4, det)
-                return {"local_port": port, "parent": None, "system_name": m_name.group(1),
+                return {"local_port": phys, "parent": parent, "system_name": m_name.group(1),
                         "mgmt_ip": m_ip.group(1) if m_ip else None}
         except Exception:  # noqa: BLE001
             pass
         try:
-            det = engine.run(c, f"show cdp neighbors {port} detail")
+            det = engine.run(c, f"show cdp neighbors {phys} detail")
             m_name = re.search(r"Device ID:\s*(\S+)", det)
             if m_name:
                 m_ip = re.search(r"IP(?:v4)? [Aa]ddress:\s*" + _IPV4, det)
-                return {"local_port": port, "parent": None, "system_name": m_name.group(1),
+                return {"local_port": phys, "parent": parent, "system_name": m_name.group(1),
                         "mgmt_ip": m_ip.group(1) if m_ip else None}
         except Exception:  # noqa: BLE001
             pass
@@ -654,22 +697,59 @@ def query_lldp_neighbor(device, port, conn=None, want_ip=False):
         return None
 
 
-def match_neighbor(nb, candidates):
-    """Map an LLDP/CDP neighbour to a Vault switch: real hostname, then Vault name, then management IP."""
+def match_neighbor(nb, candidates, site_id=None):
+    """Map an LLDP/CDP neighbour to a Vault switch, most certain first:
+
+    1. real hostname or Vault name;  2. management IP;
+    3. an IP tail at the end of the name ('...-S1-S2-90.15', '..._90.9' -> a switch whose IP ends .90.15);
+    4. a Vault name the system name starts with ('4F-RACK2-ACC-VC2' for '4F-RACK2-ACC-VC2-S1-S2-90.15').
+    3 and 4 only count when they point at exactly one switch (switches in site_id preferred)."""
     if not nb:
         return None
     name = (nb.get("system_name") or "").strip().lower()
-    short = name if re.match(r"^\d+\.\d+\.\d+\.\d+$", name) else name.split(".")[0]
-    if short:
-        for d in candidates:
-            for cand in (d.hostname, d.name):
-                c = (cand or "").strip().lower()
-                if c and (c == name or c == short or c.split(".")[0] == short):
-                    return d
-    ip = nb.get("mgmt_ip")
+    ip = (nb.get("mgmt_ip") or "").strip()
+
+    def only(ms):
+        ms = list({d.id: d for d in ms}.values())
+        if len(ms) > 1 and ip:
+            ms = [d for d in ms if (d.host or "").strip() == ip] or ms
+        if site_id is not None and any(d.site_id == site_id for d in ms):
+            ms = [d for d in ms if d.site_id == site_id]
+        return ms[0] if len(ms) == 1 else None
+
+    def names(d):
+        return [(c or "").strip().lower() for c in (d.hostname, d.name) if (c or "").strip()]
+
+    if name:
+        d = only([d for d in candidates if name in names(d)])
+        if d:
+            return d
+        short = name.split(".")[0]
+        if short and short != name and not re.match(r"^\d+\.\d+\.\d+\.\d+$", name):  # FQDN -> host part
+            d = only([d for d in candidates if any(c.split(".")[0] == short for c in names(d))])
+            if d:
+                return d
     if ip:
+        d = only([d for d in candidates if (d.host or "").strip() == ip])
+        if d:
+            return d
+
+    if name:
+        m = re.search(r"[-_](\d{1,3})\.(\d{1,3})$", name)
+        if m:
+            tail = f".{m.group(1)}.{m.group(2)}"
+            d = only([d for d in candidates if (d.host or "").strip().endswith(tail)])
+            if d:
+                return d
+        pre = []
         for d in candidates:
-            if (d.host or "").strip() == ip:
+            c = (d.name or "").strip().lower()
+            if len(c) >= 4 and len(name) > len(c) and name.startswith(c) and name[len(c)] in "-_.":
+                pre.append(d)
+        if pre:
+            longest = max(len(d.name) for d in pre)
+            d = only([d for d in pre if len(d.name) == longest])
+            if d:
                 return d
     return None
 
@@ -813,7 +893,9 @@ def stream_locate_host(app, devices, query_str, run_id=None, full=False, user_si
             return _LOCATOR_RUNS.get(run_id, {}).get("status") == "cancelled"
 
     def finish(result):
-        update(status="complete", is_running=False, percent=100, result=result,
+        if cancelled():
+            result["cancelled"] = True
+        update(status="cancelled" if result.get("cancelled") else "complete", is_running=False, percent=100, result=result,
                matches_found=len(result.get("all_matches") or []),
                resolved_ip=result.get("resolved_ip"), resolved_mac=result.get("resolved_mac"))
         q.put({"type": "complete", "run_id": run_id, "result": result, "timestamp": timestamp()})
@@ -828,15 +910,6 @@ def stream_locate_host(app, devices, query_str, run_id=None, full=False, user_si
 
     def device(did):
         return db.session.get(Device, did)
-
-    def mac_hits(did, mac_clean):
-        """MAC table hits on one switch, each tagged with whether its port is an uplink."""
-        with app.app_context():
-            d = device(did)
-            hits = query_mac_table(d, target_mac_clean=mac_clean) if d else []
-            for h in hits:
-                h["is_uplink"] = is_uplink_port(h["interface"], device=d, device_id=did, app=app)
-        return hits
 
     def run_tracer():
         ctx = app.app_context()
@@ -904,75 +977,132 @@ def stream_locate_host(app, devices, query_str, run_id=None, full=False, user_si
             vendor = lookup_oui(mac_clean)
             emit_log("ok", f"Hardware vendor: {vendor} ({format_mac(mac_clean)})")
 
-            # Step 1b: where do distribution/core switches learn the MAC? (and the IP, for a MAC search)
-            emit_log("info", f"[Step 2] Looking up {format_mac(mac_clean)} on {len(core_pool)} distribution/core switch(es)...")
+            # The IP behind a MAC is for display only: look it up in the background (core first), never wait on it
+            arp_box = {}
 
-            def core_one(s):
-                if cancelled():
-                    return s, [], []
+            def arp_bg():
+                for s in sorted(cores, key=lambda s: 0 if s.role == "core" else 1):
+                    if cancelled() or arp_box:
+                        return
+                    try:
+                        with app.app_context():
+                            d = device(s.id)
+                            entries = query_arp(d, target_mac_clean=mac_clean) if d else []
+                    except Exception:  # noqa: BLE001
+                        entries = []
+                    if entries:
+                        arp_box.update(ip=entries[0]["ip"], switch=s.name)
+                        return
+
+            arp_thread = None
+            if not target_ip:
+                arp_thread = threading.Thread(target=arp_bg, daemon=True, name=f"locator-arp-{run_id}")
+                arp_thread.start()
+
+            lldp_cache = {}
+
+            def probe(s, lldp="always"):
+                """One SSH session on switch s: where the MAC is learned and the LLDP neighbour on that port.
+
+                Returns (hits, hit, nb, nxt). nxt is the Vault switch behind the port; when there is one the
+                port is an uplink, whatever its name or config says. lldp='edge' (scan) asks LLDP only when
+                the port looks like an access port."""
                 with app.app_context():
                     d = device(s.id)
                     if not d:
-                        return s, [], []
-                    try:
-                        conn = engine.connect(d)
-                    except Exception as e:  # noqa: BLE001
-                        emit_log("error", f"[{s.name}] Unreachable: {e}")
-                        return s, [], []
+                        return [], None, None, None
+                    conn = engine.connect(d)
                     try:
                         hits = query_mac_table(d, target_mac_clean=mac_clean, conn=conn)
-                        arp = [] if target_ip else query_arp(d, target_mac_clean=mac_clean, conn=conn)
+                        for h in hits:
+                            h["is_uplink"] = is_uplink_port(h["interface"], device=d, device_id=s.id, app=app)
+                        if not hits:
+                            return hits, None, None, None
+                        hit = next((h for h in hits if not h["is_uplink"]), hits[0])
+                        if lldp == "edge" and hit["is_uplink"]:
+                            return hits, hit, None, None
+                        nb = query_lldp_neighbor(d, hit["interface"], conn=conn, cache=lldp_cache)
+                        nxt = match_neighbor(nb, candidates, site_id=s.site_id)
+                        if nb and not nxt and d.is_juniper:
+                            nb = query_lldp_neighbor(d, hit["interface"], conn=conn, want_ip=True, cache=lldp_cache) or nb
+                            nxt = match_neighbor(nb, candidates, site_id=s.site_id)
+                        if nxt:
+                            hit["is_uplink"] = True
+                            hit["lldp_neighbor"] = nxt.name
+                        return hits, hit, nb, nxt
                     finally:
                         try:
                             conn.disconnect()
                         except Exception:  # noqa: BLE001
                             pass
-                    for h in hits:
-                        h["is_uplink"] = is_uplink_port(h["interface"], device=d, device_id=s.id, app=app)
-                    return s, hits, arp
 
-            core_hits = []
+            def port_note(h):
+                if h.get("lldp_neighbor"):
+                    return f"link to {h['lldp_neighbor']} (LLDP)"
+                return "uplink / trunk" if h["is_uplink"] else "access port"
+
+            # Step 2: where do the distribution/core switches learn the MAC?
+            if cores:
+                emit_log("info", f"[Step 2] Looking up {format_mac(mac_clean)} on {len(cores)} distribution/core switch(es)...")
+
+            def core_one(s):
+                if cancelled():
+                    return s, None
+                try:
+                    return s, probe(s)
+                except Exception as e:  # noqa: BLE001
+                    emit_log("error", f"[{s.name}] Unreachable: {e}")
+                    return s, None
+
+            core_res = []
             with ThreadPoolExecutor(max_workers=workers) as pool:
-                for s, hits, arp in pool.map(core_one, core_pool):
+                for s, r in pool.map(core_one, cores):
                     queried.add(s.id)
-                    if arp and not resolved_ip:
-                        resolved_ip = arp[0]["ip"]
-                        emit_log("ok", f"[{s.name}] ARP: {resolved_mac} -> {resolved_ip}")
+                    if not r or not r[0]:
+                        continue
+                    hits, hit, nb, nxt = r
                     for h in hits:
-                        emit_log("ok", f"[{s.name}] MAC learned on {h['interface']} (VLAN {h['vlan']})")
-                    core_hits += [(s, h) for h in hits]
+                        emit_log("ok", f"[{s.name}] MAC learned on {h['interface']} (VLAN {h['vlan']}) - {port_note(h)}")
                     all_matches += hits
-            update(resolved_ip=resolved_ip)
+                    core_res.append((s, hit, nb, nxt))
 
-            # Step 2: trace hop by hop over LLDP
+            # Start from the switch whose port leads down to an access switch (distribution before core)
+            core_ids = {s.id for s in cores}
+
+            def start_rank(e):
+                _s, hit, _nb, nxt = e
+                if nxt and nxt.id not in core_ids:
+                    return 0
+                if not hit["is_uplink"]:
+                    return 1
+                return 3 if nxt else 2
+
+            core_res.sort(key=start_rank)
+
+            # Step 3: trace hop by hop over LLDP until a port with no switch behind it
             found = None
-            start = next(((s, h) for s, h in core_hits if not h["is_uplink"]), None)
-            if start:
-                found = start[1]
-                path.append({"switch_id": start[0].id, "switch_name": start[0].name, "port": start[1]["interface"]})
-                emit_log("ok", f"[{start[0].name}] Host is directly on {start[1]['interface']}.")
-            elif core_hits:
-                cur, hit = core_hits[0]
+            if core_res:
+                cur, hit, nb, nxt = core_res[0]
                 path.append({"switch_id": cur.id, "switch_name": cur.name, "port": hit["interface"]})
                 visited = {cur.id}
                 reason = None
-                for _hop in range(MAX_TRACE_HOPS):
+                for hop in range(MAX_TRACE_HOPS + 1):
+                    if not nxt:
+                        if not hit["is_uplink"]:
+                            found = hit
+                            seen = f" (LLDP neighbour: {nb.get('system_name')})" if nb and nb.get("system_name") else ""
+                            emit_log("ok", f"[{cur.name}] {hit['interface']} is an access port{seen}.")
+                        elif not nb:
+                            reason = f"no LLDP neighbour on {cur.name} {hit['interface']}"
+                        else:
+                            reason = (f"LLDP neighbour '{nb.get('system_name')}' on {cur.name} {hit['interface']} "
+                                      f"is not a switch in the Vault you can access")
+                        break
+                    if hop == MAX_TRACE_HOPS:
+                        reason = f"more than {MAX_TRACE_HOPS} hops"
+                        break
                     if cancelled():
                         reason = "cancelled"
-                        break
-                    with app.app_context():
-                        d = device(cur.id)
-                        nb = query_lldp_neighbor(d, hit["interface"]) if d else None
-                        nxt = match_neighbor(nb, candidates)
-                        if nb and not nxt:
-                            nb = query_lldp_neighbor(d, hit["interface"], want_ip=True) or nb
-                            nxt = match_neighbor(nb, candidates)
-                    if not nb:
-                        reason = f"no LLDP neighbour on {cur.name} {hit['interface']}"
-                        break
-                    if not nxt:
-                        reason = (f"LLDP neighbour '{nb.get('system_name')}' on {cur.name} {hit['interface']} "
-                                  f"is not a switch in the Vault you can access")
                         break
                     if nxt.id in visited:
                         reason = f"loop back to {nxt.name}"
@@ -980,27 +1110,26 @@ def stream_locate_host(app, devices, query_str, run_id=None, full=False, user_si
                     emit_log("info", f"[{cur.name}] {hit['interface']} -> LLDP neighbour {nxt.name}")
                     visited.add(nxt.id)
                     queried.add(nxt.id)
-                    hits = mac_hits(nxt.id, mac_clean)
+                    try:
+                        hits, hit2, nb, nxt2 = probe(nxt)
+                    except Exception as e:  # noqa: BLE001
+                        reason = f"{nxt.name} is unreachable ({e})"
+                        break
                     all_matches += hits
                     if not hits:
                         reason = f"{nxt.name} has not learned the MAC"
                         break
-                    hit = next((h for h in hits if not h["is_uplink"]), hits[0])
-                    cur = nxt
+                    cur, hit, nxt = nxt, hit2, nxt2
                     path.append({"switch_id": cur.id, "switch_name": cur.name, "port": hit["interface"]})
-                    emit_log("ok", f"[{cur.name}] MAC learned on {hit['interface']} (VLAN {hit['vlan']})"
-                             + ("" if hit["is_uplink"] else " - access port"))
-                    if not hit["is_uplink"]:
-                        found = hit
-                        break
-                else:
-                    reason = f"more than {MAX_TRACE_HOPS} hops"
+                    emit_log("ok", f"[{cur.name}] MAC learned on {hit['interface']} (VLAN {hit['vlan']}) - {port_note(hit)}")
                 if not found:
                     emit_log("warn", f"Trace stopped: {reason}. Falling back to scanning the switches in scope.")
-            else:
+            elif cores:
                 emit_log("warn", "No distribution/core switch has learned this MAC. Scanning the switches in scope.")
+            else:
+                emit_log("info", "No distribution/core switch in these sites to trace from. Scanning the switches in scope.")
 
-            # Step 3: fallback scan with early stop
+            # Step 4: fallback scan with early stop
             scanned = len(queried)
             if (not found or full) and not cancelled():
                 method = "scan" if not found else method
@@ -1008,14 +1137,14 @@ def stream_locate_host(app, devices, query_str, run_id=None, full=False, user_si
                 stop = threading.Event()
                 done = [0]
                 lock = threading.Lock()
-                emit_log("info", f"[Step 3] Scanning {len(todo)} switch(es), {min(LOCATOR_WORKERS, max(1, len(todo)))} at a time"
+                emit_log("info", f"[Step 4] Scanning {len(todo)} switch(es), {min(LOCATOR_WORKERS, max(1, len(todo)))} at a time"
                          + ("" if full else " - stopping at the first access-port hit") + "...")
 
                 def scan_one(s):
                     if stop.is_set() or cancelled():
                         return s, None
                     try:
-                        hits = mac_hits(s.id, mac_clean)
+                        hits = probe(s, lldp="edge")[0]
                     except Exception as e:  # noqa: BLE001
                         emit_log("error", f"[{s.name}] Query error: {e}")
                         hits = []
@@ -1024,8 +1153,7 @@ def stream_locate_host(app, devices, query_str, run_id=None, full=False, user_si
                         n = done[0]
                     for h in hits:
                         emit_log("ok" if not h["is_uplink"] else "warn",
-                                 f"[{s.name}] Found on {h['interface']} (VLAN {h['vlan']}) - "
-                                 + ("uplink / trunk" if h["is_uplink"] else "access port"))
+                                 f"[{s.name}] Found on {h['interface']} (VLAN {h['vlan']}) - {port_note(h)}")
                     if not full and any(not h["is_uplink"] and s.role == "access" for h in hits):
                         stop.set()
                     pct = int(n / max(1, len(todo)) * 100)
@@ -1046,6 +1174,13 @@ def stream_locate_host(app, devices, query_str, run_id=None, full=False, user_si
                 if cancelled():
                     emit_log("warn", "Search cancelled.")
 
+            if arp_thread:
+                arp_thread.join(timeout=3)
+                if arp_box.get("ip"):
+                    resolved_ip = arp_box["ip"]
+                    emit_log("ok", f"[{arp_box['switch']}] ARP: {resolved_mac} -> {resolved_ip}")
+                    update(resolved_ip=resolved_ip)
+
             for m in all_matches:
                 m["link_type"] = "Uplink / Trunk" if m.get("is_uplink") else "Edge (Access Port)"
                 m["vendor"] = vendor
@@ -1065,14 +1200,15 @@ def stream_locate_host(app, devices, query_str, run_id=None, full=False, user_si
             else:
                 emit_log("warn", f"{format_mac(mac_clean)} is not in the forwarding tables of the switches queried.")
             if stopped_early:
-                emit_log("info", f"Stopped early after {scanned} of {total} switches. Use 'Show full path' to scan all.")
+                emit_log("info", f"Stopped early after {len([s for s in scope if s.id in queried])} of {total} switches. Use 'Show full path' to scan all.")
 
             finish({
                 "query": q_str, "query_type": "ip" if target_ip else "mac", "resolved_ip": resolved_ip,
                 "resolved_mac": resolved_mac or format_mac(mac_clean, "colon"), "vendor": vendor,
                 "best_match": best, "all_matches": all_matches, "path": path,
-                "method": method, "stopped_early": stopped_early, "scanned": scanned, "in_scope": total,
-                "switches_queried": scanned, "switches_responding": scanned,
+                "method": method, "stopped_early": stopped_early,
+                "scanned": len([s for s in scope if s.id in queried]), "in_scope": total,
+                "switches_queried": len(queried), "switches_responding": len(queried),
                 "elapsed_sec": round(time.time() - started, 1),
             })
         except Exception as e:  # noqa: BLE001

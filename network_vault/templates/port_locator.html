@@ -508,22 +508,22 @@ function narrowLocator(changed) {
 document.addEventListener('DOMContentLoaded', () => narrowLocator('init'));
 
 // "Show full path": same search, every switch in scope
-let lastLocatorQuery = null;
+let lastLocatorQuery = null;   // {q, siteId, devVal, group, location} of the last search
 function runFullPath() {
   if (!lastLocatorQuery) return;
-  document.getElementById('queryInput').value = lastLocatorQuery;
-  handleLocate(null, true);
+  document.getElementById('queryInput').value = lastLocatorQuery.q;
+  handleLocate(null, true, lastLocatorQuery);
 }
 
-async function handleLocate(e, full = false) {
+async function handleLocate(e, full = false, scope = null) {
   if (e) e.preventDefault();
   const q = document.getElementById('queryInput').value.trim();
-  const siteId = document.getElementById('siteFilter').value;
-  const devVal = document.getElementById('deviceFilter').value;
+  const siteId = scope ? scope.siteId : document.getElementById('siteFilter').value;
+  const devVal = scope ? scope.devVal : document.getElementById('deviceFilter').value;
   const device_ids = devVal !== 'all' ? [parseInt(devVal)] : null;
-  const group = document.getElementById('groupFilter').value;
-  const location = document.getElementById('locationFilter').value;
-  lastLocatorQuery = q;
+  const group = scope ? scope.group : document.getElementById('groupFilter').value;
+  const location = scope ? scope.location : document.getElementById('locationFilter').value;
+  lastLocatorQuery = {q, siteId, devVal, group, location};
   const btn = document.getElementById('searchBtn');
 
   if (!q) return;

@@ -2,7 +2,10 @@
 
 ### Added
 - **Port Locator traces like you would by hand**: it looks the MAC up on the site's distribution and core switches, then follows the port it is learned on to the next switch using LLDP (bundle `ae` ports included), until it reaches a normal access port. A typical search now talks to 2-3 switches instead of every switch in the site, and the result shows the path, e.g. `DIST-EX3300-VC · ae12 → 10F-RACK1-ACC-SW3 · ge-0/0/14`.
-  - Switches are recognised by their real hostname (read from `show version`, which often differs from the name in the Vault) or by management IP.
+  - Switches are recognised by their real hostname (read from `show version`, which often differs from the name in the Vault), by management IP, by the IP at the end of the LLDP name (`...-S1-S2-90.15`), or by a Vault name the LLDP name starts with.
+  - A port with a known switch behind it on LLDP is followed, even when it looks like an access port (a single-cable uplink), so the answer is the real edge port and not an uplink.
+  - Port descriptions that overflow the `show lldp neighbors` columns (e.g. `UPLINK_TO_DISTRIBUTION`) no longer break the trace. Port-channels on Cisco switches are followed through a member port.
+  - The IP behind a MAC is looked up on the core in the background and no longer holds up the trace.
   - If the trace can't continue, for example no LLDP neighbour on the port or a neighbour that isn't in the Vault, the log says why and the locator falls back to scanning.
 - **Group and Location filters** on the Port Locator. Choosing a site narrows the groups, choosing a group narrows the locations, and the switch list follows.
 - **Stop early, "Show full path"**: a fallback scan stops at the first access-port hit and says how many switches it checked. **Show full path** scans every switch in scope and lists every port that has seen the device.
@@ -13,6 +16,8 @@
 - **Port Locator Cancel** now stops the search; before, it only changed the status while every switch was still queried.
 - **The firewall is no longer queried** by the Port Locator. It was sent switch commands it doesn't understand.
 - Up to 16 switches are queried at once by the Port Locator (was the backup setting, 8).
+- **Port Locator on Cisco switches**: a rejected command (`% Invalid input`) was read as "MAC not here". The locator now tries the next command form.
+- **Port Locator**: a VLAN named like a port (e.g. `Telephony`) was shown as the interface.
 
 ## [1.16.0] - 2026-11-06
 
