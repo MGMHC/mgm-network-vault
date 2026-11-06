@@ -798,6 +798,7 @@ def get_locator_run(run_id):
             "done": run.get("done", 0),
             "total": run.get("total", 0),
             "device": run.get("device", ""),
+            "step": run.get("step", ""),
             "matches_found": run.get("matches_found", 0),
             "resolved_ip": run.get("resolved_ip"),
             "resolved_mac": run.get("resolved_mac"),
@@ -920,6 +921,18 @@ def stream_locate_host(app, devices, query_str, run_id=None, full=False, user_si
         method = "trace"
         stopped_early = False
         resolved_ip = resolved_mac = None
+        bar = [0]
+
+        def step(text, pct, done=None, device=""):
+            """Progress for the page: what the locator is doing now. A trace has no fixed number of switches,
+            so the bar follows the steps (resolve, distribution/core, each LLDP hop) and then the scan."""
+            bar[0] = max(bar[0], min(99, int(pct)))
+            n = len(queried) if done is None else done
+            update(percent=bar[0], done=n, device=device, step=text)
+            q.put({"type": "progress", "run_id": run_id, "step": text, "percent": bar[0], "done": n, "total": total,
+                   "device": device, "matches_found": len(all_matches), "resolved_ip": resolved_ip,
+                   "resolved_mac": resolved_mac, "timestamp": timestamp()})
+
         try:
             q.put({"type": "init", "run_id": run_id, "total": total, "timestamp": timestamp(),
                    "msg": f"Starting trace for '{q_str}' ({total} switches in scope)..."})
@@ -945,6 +958,7 @@ def stream_locate_host(app, devices, query_str, run_id=None, full=False, user_si
             # Step 1a: an IP needs its MAC first - ask distribution/core ARP, take the first answer
             if target_ip:
                 emit_log("info", f"[Step 1] Resolving {target_ip} via ARP on {len(core_pool)} distribution/core switch(es)...")
+                step(f"Resolving {target_ip} to a MAC on the distribution/core switches…", 5)
 
                 def arp_one(s):
                     if cancelled():
@@ -1044,6 +1058,7 @@ def stream_locate_host(app, devices, query_str, run_id=None, full=False, user_si
             # Step 2: where do the distribution/core switches learn the MAC?
             if cores:
                 emit_log("info", f"[Step 2] Looking up {format_mac(mac_clean)} on {len(cores)} distribution/core switch(es)...")
+                step(f"Looking up the MAC on {len(cores)} distribution/core switch{'' if len(cores) == 1 else 'es'}…", 10)
 
             def core_one(s):
                 if cancelled():
@@ -1065,6 +1080,8 @@ def stream_locate_host(app, devices, query_str, run_id=None, full=False, user_si
                         emit_log("ok", f"[{s.name}] MAC learned on {h['interface']} (VLAN {h['vlan']}) - {port_note(h)}")
                     all_matches += hits
                     core_res.append((s, hit, nb, nxt))
+            if cores:
+                step("Distribution/core switches checked", 35)
 
             # Start from the switch whose port leads down to an access switch (distribution before core)
             core_ids = {s.id for s in cores}
@@ -1108,6 +1125,8 @@ def stream_locate_host(app, devices, query_str, run_id=None, full=False, user_si
                         reason = f"loop back to {nxt.name}"
                         break
                     emit_log("info", f"[{cur.name}] {hit['interface']} -> LLDP neighbour {nxt.name}")
+                    step(f"Following LLDP, hop {hop + 1}: {cur.name} {hit['interface']} → {nxt.name}…",
+                         40 + 20 * hop, done=len(queried) + 1, device=nxt.name)
                     visited.add(nxt.id)
                     queried.add(nxt.id)
                     try:
@@ -1139,6 +1158,8 @@ def stream_locate_host(app, devices, query_str, run_id=None, full=False, user_si
                 lock = threading.Lock()
                 emit_log("info", f"[Step 4] Scanning {len(todo)} switch(es), {min(LOCATOR_WORKERS, max(1, len(todo)))} at a time"
                          + ("" if full else " - stopping at the first access-port hit") + "...")
+                base_pct, base_done = bar[0], len(queried)
+                step(f"Scanning {len(todo)} switch{'' if len(todo) == 1 else 'es'}…", base_pct)
 
                 def scan_one(s):
                     if stop.is_set() or cancelled():
@@ -1156,11 +1177,9 @@ def stream_locate_host(app, devices, query_str, run_id=None, full=False, user_si
                                  f"[{s.name}] Found on {h['interface']} (VLAN {h['vlan']}) - {port_note(h)}")
                     if not full and any(not h["is_uplink"] and s.role == "access" for h in hits):
                         stop.set()
-                    pct = int(n / max(1, len(todo)) * 100)
-                    update(percent=pct, done=n, device=s.name)
-                    q.put({"type": "progress", "run_id": run_id, "done": n, "total": len(todo), "percent": pct,
-                           "device": s.name, "matches_found": len(all_matches) + len(hits),
-                           "resolved_ip": resolved_ip, "resolved_mac": resolved_mac, "timestamp": timestamp()})
+                    with lock:
+                        step(f"Scanning switch {n} of {len(todo)}: {s.name}…",
+                             base_pct + (99 - base_pct) * n / max(1, len(todo)), done=base_done + n, device=s.name)
                     return s, hits
 
                 with ThreadPoolExecutor(max_workers=max(1, min(LOCATOR_WORKERS, len(todo) or 1))) as pool:

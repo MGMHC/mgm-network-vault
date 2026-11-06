@@ -6,6 +6,7 @@
   - A port with a known switch behind it on LLDP is followed, even when it looks like an access port (a single-cable uplink), so the answer is the real edge port and not an uplink.
   - Port descriptions that overflow the `show lldp neighbors` columns (e.g. `UPLINK_TO_DISTRIBUTION`) no longer break the trace. Port-channels on Cisco switches are followed through a member port.
   - The IP behind a MAC is looked up on the core in the background and no longer holds up the trace.
+  - The progress bar follows the trace: "Looking up the MAC on 2 distribution/core switches", then "Following LLDP, hop 1: DIST-EX3300-VC ae11 → 4F-RACK2-ACC-VC2", with the number of switches queried so far. It used to sit at 0% until the result.
   - If the trace can't continue, for example no LLDP neighbour on the port or a neighbour that isn't in the Vault, the log says why and the locator falls back to scanning.
 - **Group and Location filters** on the Port Locator. Choosing a site narrows the groups, choosing a group narrows the locations, and the switch list follows.
 - **Stop early, "Show full path"**: a fallback scan stops at the first access-port hit and says how many switches it checked. **Show full path** scans every switch in scope and lists every port that has seen the device.

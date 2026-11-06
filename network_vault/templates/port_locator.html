@@ -279,7 +279,9 @@ function syncLocatorModalData(data, queryStr) {
     doneBtn.disabled = false;
     cancelBtn.disabled = true;
   } else {
-    if (data.device) {
+    if (data.step) {
+      statusText.textContent = data.step;
+    } else if (data.device) {
       statusText.textContent = `Probing switch ${data.done} of ${data.total}: ${data.device}…`;
     } else {
       statusText.textContent = `Tracing '${queryStr || data.query || ''}'…`;
@@ -631,7 +633,7 @@ async function handleLocate(e, full = false, scope = null) {
         } else if (evt.type === 'progress') {
           barFill.style.width = `${evt.percent}%`;
           percentText.textContent = `${evt.percent}%`;
-          statusText.textContent = `Probing switch ${evt.done} of ${evt.total}: ${evt.device}…`;
+          statusText.textContent = evt.step || `Probing switch ${evt.done} of ${evt.total}: ${evt.device}…`;
           document.getElementById('modalLocSwitches').textContent = `${evt.done} / ${evt.total}`;
           if (evt.matches_found !== undefined) {
             document.getElementById('modalLocMatches').textContent = evt.matches_found;

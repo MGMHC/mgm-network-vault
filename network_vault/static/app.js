@@ -528,7 +528,7 @@ function pollGlobalLocatorStatus(runId) {
         percent: data.percent,
         done: data.done,
         total: data.total,
-        message: data.device ? `Probing switch ${data.done}/${data.total}: ${data.device}…` : trace.message,
+        message: data.step || (data.device ? `Probing switch ${data.done}/${data.total}: ${data.device}…` : trace.message),
         result: data.result || trace.result,
         error: data.error,
       });
