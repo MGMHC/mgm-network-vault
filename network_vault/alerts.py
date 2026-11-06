@@ -1,17 +1,28 @@
-"""Switch-down email alerts.
+"""Email alerts: who hears about which switch, and sending.
 
-The reachability poller (reach.check_devices) calls collect() for every switch it checks and
-dispatch() once per check. A switch is reported after `alert_down_checks` consecutive "down"
-results (no ping and no SSH) and again when it comes back. Group Administrators hear about every
-switch, Site Administrators about switches in their own sites. Each recipient gets one email per
-check, so a whole building going dark is one message, not one per switch.
+Triggers (configured on the Alerts page):
+- switch_down     - reach.check_devices: a switch failed `alert_down_checks` scheduled checks in a row
+                    (no ping and no SSH), and again when it recovers.
+- backup_failed   - engine.start_backup_job: a switch's backup failed (once per failure streak).
+- config_changed  - engine.start_backup_job: a backup found a configuration change.
+
+Each trigger has one or more AlertMessages (recipients + site limit + wording). For every address,
+each switch goes out once per run, through the first enabled message (by id) that covers it, so
+nobody gets duplicates and no switch is dropped. Sending runs in a background thread.
 """
+import re
 import threading
-from html import escape
 
+from .alert_render import TRIGGERS, render, style_from_settings
 from .mailer import get_smtp_config, send_email
-from .models import User, db, get_setting, now
+from .models import AlertMessage, User, db, get_int, get_setting, now
 from .util import log_event
+
+TRIGGER_SETTING = {
+    "switch_down": "alert_down_enabled",
+    "backup_failed": "alert_backup_enabled",
+    "config_changed": "alert_change_enabled",
+}
 
 
 def threshold():
@@ -21,9 +32,73 @@ def threshold():
         return 2
 
 
-def enabled():
-    """True when alert emails can actually go out (alerts on and outbound email on)."""
-    return get_setting("alert_down_enabled") == "1" and get_smtp_config()["enabled"]
+def trigger_enabled(trigger):
+    """True when this trigger is on and outbound email is on."""
+    return get_setting(TRIGGER_SETTING[trigger]) == "1" and get_smtp_config()["enabled"]
+
+
+def audience(msg, users):
+    """[(address, recipient_name, allowed_site_ids or None for all sites)] for one message."""
+    limit = set(msg.site_ids) or None
+    out = {}
+
+    def add(addr, name, allowed):
+        addr = (addr or "").strip().lower()
+        if not addr:
+            return
+        if addr in out:
+            prev = out[addr][1]
+            allowed = None if prev is None or allowed is None else prev | allowed
+            out[addr] = (out[addr][0], allowed)
+        else:
+            out[addr] = (name, allowed)
+
+    for u in users:
+        if not (u.email or "").strip():
+            continue
+        if msg.to_group_admins and u.is_group_admin:
+            add(u.email, u.username, limit)
+        elif msg.to_site_admins and u.role == "site-admin":
+            own = set(u.allowed_site_ids or [])
+            add(u.email, u.username, own & limit if limit is not None else own)
+    for e in msg.extra_list:
+        add(e, e, limit)
+    return [(a, n, s) for a, (n, s) in out.items()]
+
+
+def _covers(allowed, site_id):
+    return allowed is None or (site_id is not None and site_id in allowed)
+
+
+def targets(trigger):
+    """Enabled messages for a trigger with their audiences, ready for would_reach / plan_emails."""
+    msgs = AlertMessage.query.filter_by(trigger=trigger, enabled=True).order_by(AlertMessage.id).all()
+    users = User.query.all()
+    return [(m, audience(m, users)) for m in msgs]
+
+
+def would_reach(site_id, tgts):
+    return any(_covers(allowed, site_id) for _m, aud in tgts for _a, _n, allowed in aud)
+
+
+def plan_emails(items, tgts):
+    """[{address, name, msg, items}] - each switch once per address, via the first message covering it."""
+    seen, out = set(), {}
+    for msg, aud in tgts:
+        for addr, name, allowed in aud:
+            for it in items:
+                key = (addr, it.get("kind"), it["id"])
+                if key in seen or not _covers(allowed, it.get("site_id")):
+                    continue
+                seen.add(key)
+                out.setdefault((addr, msg.id), {"address": addr, "name": name, "msg": msg, "items": []})["items"].append(it)
+    return list(out.values())
+
+
+def parse_commit(last_commit):
+    """('mgm-admin', 'cli') from '2026-11-05 10:54:02 IST by mgm-admin via cli commit synchronize'."""
+    m = re.search(r"\bby (\S+) via (\S+)", last_commit or "")
+    return (m.group(1), m.group(2)) if m else ("unknown", "")
 
 
 def _info(device, since):
@@ -40,14 +115,15 @@ def _info(device, since):
 
 
 def collect(device, old_status, new_status, old_since, limit=None, scheduled=True, sending=True):
-    """Update the switch's alert counters for one check result.
+    """Update the switch's down counters for one check result.
 
     Returns ("down", info) or ("up", info) when an email is due, otherwise None.
     - Only scheduled checks count toward the threshold: someone pressing "Check" on a red switch
       must not turn a short blip into an email. Any check can end an outage (recovery email).
-    - While emails can't go out (`sending` False) the switch is not marked as alerted, so nobody
-      later gets a "recovered" email for an outage they never heard about; if it is still down
-      when alerts come back on, the next scheduled check reports it."""
+    - `sending` is False when no email could reach anyone about this switch (trigger or email
+      off, or no enabled message covers its site). It is then not marked as alerted, so nobody
+      later gets a "recovered" email for an outage they never heard about, and if it is still
+      down when that changes the next scheduled check reports it."""
     limit = limit or threshold()
     if new_status == "down":
         if not scheduled:
@@ -66,146 +142,51 @@ def collect(device, old_status, new_status, old_since, limit=None, scheduled=Tru
     return None
 
 
-def recipients_for(users, items):
-    """Map each email address to the alert items that user may see."""
-    out = {}
-    for u in users:
-        email = (u.email or "").strip()
-        if not email:
-            continue
-        if u.is_group_admin:
-            mine = list(items)
-        elif u.role == "site-admin":
-            allowed = set(u.allowed_site_ids or [])
-            mine = [i for i in items if i["site_id"] is not None and i["site_id"] in allowed]
-        else:
-            continue
-        if mine:
-            have = out.setdefault(email.lower(), [])
-            seen = {(i["kind"], i["id"]) for i in have}
-            have.extend(i for i in mine if (i["kind"], i["id"]) not in seen)
-    return out
-
-
 def _spawn(fn, *args):
-    threading.Thread(target=fn, args=args, daemon=True, name="switch-alert-mail").start()
+    threading.Thread(target=fn, args=args, daemon=True, name="alert-mail").start()
 
 
-def dispatch(app, down, recovered):
-    """Send this check's alerts in the background so a slow mail server never delays the poller."""
-    if not down and not recovered:
+def dispatch(app, trigger, by_kind, ctx=None):
+    """Send this run's alerts for one trigger in the background. by_kind: {"down": [...], "up": [...]} etc."""
+    by_kind = {k: list(v) for k, v in (by_kind or {}).items() if v}
+    if not by_kind:
         return
     with app.app_context():
-        if not enabled():
+        if trigger == "switch_down" and get_setting("alert_down_recovery") != "1":
+            by_kind.pop("up", None)
+        if not by_kind or not trigger_enabled(trigger):
             return
-    _spawn(_send_all, app, list(down), list(recovered))
+    _spawn(_send_all, app, trigger, by_kind, dict(ctx or {}))
 
 
-def _fmt_minutes(m):
-    if m is None:
-        return "unknown"
-    if m < 60:
-        return f"{m} min"
-    h, m = divmod(m, 60)
-    if h < 24:
-        return f"{h} h {m} min" if m else f"{h} h"
-    d, h = divmod(h, 24)
-    return f"{d} d {h} h" if h else f"{d} d"
-
-
-def _fmt_time(t):
-    return t.strftime("%d %b %Y %H:%M") if t else "unknown"
-
-
-def _plural(n):
-    return f"{n} switch" if n == 1 else f"{n} switches"
-
-
-def _subject(down, up):
-    parts = []
-    if down:
-        parts.append(f"{_plural(len(down))} DOWN" + (f" - {down[0]['name']}" if len(down) == 1 and not up else ""))
-    if up:
-        parts.append(f"{_plural(len(up))} recovered" + (f" - {up[0]['name']}" if len(up) == 1 and not down else ""))
-    return "[Network Vault] " + ", ".join(parts)
-
-
-def _render(down, up, checks, app_url):
-    def rows(items, last_col):
-        return "".join(
-            "<tr>"
-            f"<td style='padding:8px 10px;border-top:1px solid #e2e8f0'><b>{escape(i['name'])}</b></td>"
-            f"<td style='padding:8px 10px;border-top:1px solid #e2e8f0;font-family:Consolas,monospace'>{escape(i['host'])}</td>"
-            f"<td style='padding:8px 10px;border-top:1px solid #e2e8f0'>{escape(i['site'] or '-')}</td>"
-            f"<td style='padding:8px 10px;border-top:1px solid #e2e8f0'>{escape(last_col(i))}</td>"
-            "</tr>" for i in items)
-
-    def table(title, colour, items, last_head, last_col):
-        return (f"<h3 style='margin:22px 0 8px;color:{colour};font-size:15px'>{escape(title)}</h3>"
-                "<table role='presentation' cellpadding='0' cellspacing='0' width='100%' "
-                "style='border-collapse:collapse;font-size:13px;border:1px solid #e2e8f0;border-radius:6px'>"
-                "<tr style='background:#f4f6fa;text-align:left'>"
-                "<th style='padding:8px 10px'>Switch</th><th style='padding:8px 10px'>IP</th>"
-                f"<th style='padding:8px 10px'>Site</th><th style='padding:8px 10px'>{escape(last_head)}</th></tr>"
-                f"{rows(items, last_col)}</table>")
-
-    since = lambda i: _fmt_time(i["since"])  # noqa: E731
-    lasted = lambda i: _fmt_minutes(i["minutes"])  # noqa: E731
-    checks_txt = f"{checks} reachability check{'s' if checks != 1 else ''} in a row"
-    parts, text = [], []
-    if down:
-        parts.append(table(f"Down - no ping and no SSH for {checks_txt}", "#c0392b", down, "Down since", since))
-        text.append(f"DOWN (no ping and no SSH for {checks_txt}):")
-        text += [f"  - {i['name']}  {i['host']}  {i['site'] or '-'}  down since {since(i)}" for i in down]
-    if up:
-        parts.append(table("Recovered", "#1e8449", up, "Was down for", lasted))
-        text.append("RECOVERED:" if not down else "\nRECOVERED:")
-        text += [f"  - {i['name']}  {i['host']}  {i['site'] or '-'}  was down for {lasted(i)}" for i in up]
-    link_html = link_txt = ""
-    if app_url:
-        link_html = (f"<p style='margin:22px 0 0'><a href='{escape(app_url)}/devices' style='display:inline-block;"
-                     "background:#25366C;color:#fff;padding:9px 16px;border-radius:6px;text-decoration:none;"
-                     "font-weight:600'>Open Devices</a></p>")
-        link_txt = f"\nOpen Devices: {app_url}/devices"
-    html = f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>Network Vault switch alert</title></head>
-<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f4f6fa;margin:0;padding:24px 12px;color:#1b2547">
-  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px;margin:0 auto;background:#fff;border-radius:10px;border:1px solid #e2e8f0">
-    <tr><td style="padding:20px 24px;background:#25366C;color:#fff;border-radius:10px 10px 0 0;font-size:17px;font-weight:600">MGM Network Vault - switch alert</td></tr>
-    <tr><td style="padding:4px 24px 24px">
-      {''.join(parts)}
-      {link_html}
-      <p style="margin:22px 0 0;color:#64748b;font-size:12px">Sent by the reachability monitor. Turn these alerts off or change how many failed checks trigger them in Settings.</p>
-    </td></tr>
-  </table>
-</body></html>"""
-    return html, "\n".join(text) + "\n" + link_txt + "\n"
-
-
-def _send_all(app, down, recovered):
+def _send_all(app, trigger, by_kind, ctx):
     with app.app_context():
-        items = [dict(i, kind="down") for i in down] + [dict(i, kind="up") for i in recovered]
-        recips = recipients_for(User.query.all(), items)
-        if not recips:
-            return
-        cfg = get_smtp_config()
-        checks = threshold()
-        sent, failed = [], []
-        for email, mine in recips.items():
-            d = [i for i in mine if i["kind"] == "down"]
-            u = [i for i in mine if i["kind"] == "up"]
-            html, text = _render(d, u, checks, cfg["app_url"])
-            try:
-                ok, err = send_email(email, _subject(d, u), html, text)
-            except Exception as e:  # noqa: BLE001 - one bad recipient must not stop the rest
-                ok, err = False, str(e)
-            (sent if ok else failed).append((email, err))
-        names = ", ".join(i["name"] for i in down + recovered)[:300]
-        what = ", ".join(p for p in (f"{len(down)} down" if down else "", f"{len(recovered)} recovered" if recovered else "") if p)
-        if sent:
-            log_event(f"Switch alert emailed to {len(sent)} recipient(s) ({what}): {names}", "reachability",
-                      "INFO", commit=False, user="monitor")
-        for email, err in failed:
-            log_event(f"Switch alert email to {email} failed: {err}", "reachability", "WARN",
-                      commit=False, user="monitor")
+        tgts = targets(trigger)
+        base = dict(ctx, style=style_from_settings(), app_url=get_smtp_config()["app_url"], checks=threshold(),
+                    diff_lines=max(0, get_int("alert_change_diff_lines") or 0))
+        if trigger == "switch_down":
+            base.setdefault("down_count", len(by_kind.get("down", [])))
+            base.setdefault("recovered_count", len(by_kind.get("up", [])))
+        for kind, items in by_kind.items():
+            items = [dict(i, kind=kind) for i in items]
+            per_msg = {}
+            for e in plan_emails(items, tgts):
+                subject, html, text, images = render(trigger, kind, e["msg"], e["items"],
+                                                     dict(base, recipient_name=e["name"]))
+                try:
+                    ok, err = send_email(e["address"], subject, html, text, inline_images=images)
+                except Exception as ex:  # noqa: BLE001 - one bad recipient must not stop the rest
+                    ok, err = False, str(ex)
+                rec = per_msg.setdefault(e["msg"].id, {"name": e["msg"].name, "sent": 0, "names": set()})
+                if ok:
+                    rec["sent"] += 1
+                    rec["names"].update(i["name"] for i in e["items"])
+                else:
+                    log_event(f"{TRIGGERS[trigger]} alert ({kind}) to {e['address']} failed: {err}", "alert", "WARN",
+                              commit=False, user="monitor")
+            for rec in per_msg.values():
+                if rec["sent"]:
+                    names = ", ".join(sorted(rec["names"]))[:300]
+                    log_event(f"{TRIGGERS[trigger]} alert ({kind}) '{rec['name']}' emailed to {rec['sent']} "
+                              f"recipient(s): {names}", "alert", "INFO", commit=False, user="monitor")
         db.session.commit()

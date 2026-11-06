@@ -64,7 +64,8 @@ def check_devices(app, device_ids=None, scheduled=True):
     down, recovered = [], []  # switch-down alerts due after this check
     with app.app_context():
         limit = alerts.threshold()
-        sending = alerts.enabled()
+        on = alerts.trigger_enabled("switch_down")
+        tgts = alerts.targets("switch_down") if on else []
         for dev_id, (status, rtt) in results.items():
             d = db.session.get(Device, dev_id)
             if d is None:
@@ -81,9 +82,10 @@ def check_devices(app, device_ids=None, scheduled=True):
                     text = {"up": "Device reachable (ping + SSH OK)", "down": "Device UNREACHABLE (no ping, no SSH)",
                             "ssh-down": "Device pings but SSH port is closed"}[status]
                     log_event(f"{text} [was {old}]", "reachability", level, d, commit=False, user="monitor")
-            due = alerts.collect(d, old, status, old_since, limit, scheduled=scheduled, sending=sending)
+            due = alerts.collect(d, old, status, old_since, limit, scheduled=scheduled,
+                                 sending=on and alerts.would_reach(d.site_id, tgts))
             if due:
                 (down if due[0] == "down" else recovered).append(due[1])
         db.session.commit()
-    alerts.dispatch(app, down, recovered)
+    alerts.dispatch(app, "switch_down", {"down": down, "up": recovered})
     return results
