@@ -1,8 +1,3 @@
-# Changelog
-
-All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](https://semver.org):
-**MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
-
 ## [1.15.0] - 2026-11-06
 
 ### Added
