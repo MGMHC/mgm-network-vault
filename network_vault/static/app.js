@@ -716,6 +716,8 @@ function initLiquidSelects() {
       // Append directly to document.body so it NEVER gets trapped behind sticky headers or table rows
       document.body.appendChild(popover);
       popover.style.display = 'flex';
+      // options a page has hidden (e.g. narrowed by another filter) stay out of the list
+      optionElements.forEach((el, i) => { el.style.display = select.options[i] && select.options[i].hidden ? 'none' : ''; });
       positionPopover();
 
       activeLiquidSelect = {
@@ -728,7 +730,6 @@ function initLiquidSelects() {
 
       if (searchInput) {
         searchInput.value = '';
-        optionElements.forEach(el => el.style.display = '');
         setTimeout(() => searchInput.focus(), 50);
       }
     }
@@ -757,9 +758,10 @@ function initLiquidSelects() {
     if (searchInput) {
       searchInput.addEventListener('input', () => {
         const query = searchInput.value.toLowerCase().trim();
-        optionElements.forEach(el => {
+        optionElements.forEach((el, i) => {
           const match = el.textContent.toLowerCase().includes(query);
-          el.style.display = match ? '' : 'none';
+          const hidden = select.options[i] && select.options[i].hidden;
+          el.style.display = match && !hidden ? '' : 'none';
         });
       });
       searchInput.addEventListener('keydown', (e) => {

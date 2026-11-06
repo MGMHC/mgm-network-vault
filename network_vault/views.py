@@ -985,7 +985,11 @@ def port_locator():
     u = _current_user()
     devs = _site_filter(Device.query, Device).order_by(Device.name).all()
     user_sites_list = Site.query.order_by(Site.code).all() if (u and u.is_group_admin) else (u.assigned_sites if u else [])
-    return render_template("port_locator.html", devices=devs, sites=user_sites_list)
+    usable = [d for d in devs if d.enabled and d.credential_id and not operations._is_firewall(d)]
+    groups = sorted({(d.group or "").strip() for d in usable if (d.group or "").strip()}, key=str.lower)
+    locations = sorted({(d.location or "").strip() for d in usable if (d.location or "").strip()}, key=str.lower)
+    return render_template("port_locator.html", devices=usable, sites=user_sites_list, groups=groups,
+                           locations=locations)
 
 
 def _locator_scope(data):

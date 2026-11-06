@@ -1,3 +1,19 @@
+## [Unreleased]
+
+### Added
+- **Port Locator traces like you would by hand**: it looks the MAC up on the site's distribution and core switches, then follows the port it is learned on to the next switch using LLDP (bundle `ae` ports included), until it reaches a normal access port. A typical search now talks to 2-3 switches instead of every switch in the site, and the result shows the path, e.g. `DIST-EX3300-VC · ae12 → 10F-RACK1-ACC-SW3 · ge-0/0/14`.
+  - Switches are recognised by their real hostname (read from `show version`, which often differs from the name in the Vault) or by management IP.
+  - If the trace can't continue, for example no LLDP neighbour on the port or a neighbour that isn't in the Vault, the log says why and the locator falls back to scanning.
+- **Group and Location filters** on the Port Locator. Choosing a site narrows the groups, choosing a group narrows the locations, and the switch list follows.
+- **Stop early, "Show full path"**: a fallback scan stops at the first access-port hit and says how many switches it checked. **Show full path** scans every switch in scope and lists every port that has seen the device.
+
+### Fixed
+- **Port Locator speed**: when a switch didn't have the device, its empty answer was treated as a failure and the switch's whole MAC table (or ARP table) was downloaded and thrown away. That happened on nearly every switch, on every search. Empty answers are now trusted.
+- **IP searches with a narrow scope**: the IP was only resolved on core switches inside the chosen scope, so picking one floor gave "IP not found". IPs are now always resolved on the site's distribution and core switches.
+- **Port Locator Cancel** now stops the search; before, it only changed the status while every switch was still queried.
+- **The firewall is no longer queried** by the Port Locator. It was sent switch commands it doesn't understand.
+- Up to 16 switches are queried at once by the Port Locator (was the backup setting, 8).
+
 ## [1.16.0] - 2026-11-06
 
 ### Security

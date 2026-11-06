@@ -24,7 +24,7 @@
 
       <div class="form-group" style="flex: 1; min-width: 180px;">
         <label for="siteFilter" style="display:block;margin-bottom:6px;font-weight:600;">Campus Site</label>
-        <select id="siteFilter" class="input-lg" style="width:100%;">
+        <select id="siteFilter" class="input-lg" style="width:100%;" onchange="narrowLocator('site')">
           {% if current_user_obj.is_group_admin %}
           <option value="all">All Sites (Group View)</option>
           {% else %}
@@ -36,12 +36,28 @@
         </select>
       </div>
 
+      <div class="form-group" style="flex: 1; min-width: 150px;">
+        <label for="groupFilter" style="display:block;margin-bottom:6px;font-weight:600;">Group</label>
+        <select id="groupFilter" class="input-lg" style="width:100%;" onchange="narrowLocator('group')">
+          <option value="">Any group</option>
+          {% for g in groups %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group" style="flex: 1; min-width: 150px;">
+        <label for="locationFilter" style="display:block;margin-bottom:6px;font-weight:600;">Location</label>
+        <select id="locationFilter" class="input-lg" style="width:100%;" onchange="narrowLocator('location')">
+          <option value="">Any location</option>
+          {% for l in locations %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
+        </select>
+      </div>
+
       <div class="form-group" style="flex: 1; min-width: 180px;">
         <label for="deviceFilter" style="display:block;margin-bottom:6px;font-weight:600;">Target Switches</label>
         <select id="deviceFilter" class="input-lg" style="width:100%;">
           <option value="all">All switches in scope</option>
           {% for d in devices %}
-          <option value="{{ d.id }}">{{ d.name }} ({{ d.host }})</option>
+          <option value="{{ d.id }}" data-site="{{ d.site_id or '' }}" data-group="{{ d.group or '' }}" data-location="{{ d.location or '' }}">{{ d.name }} ({{ d.host }})</option>
           {% endfor %}
         </select>
       </div>
@@ -469,12 +485,45 @@ function abortLocatorTrace() {
   clearActiveLocatorTrace();
 }
 
-async function handleLocate(e) {
-  e.preventDefault();
+// Narrow Group, Location and Switches to what matches the choices above them (options are hidden, not removed)
+function narrowLocator(changed) {
+  const site = document.getElementById('siteFilter').value;
+  const groupSel = document.getElementById('groupFilter');
+  const locSel = document.getElementById('locationFilter');
+  const devSel = document.getElementById('deviceFilter');
+  const devOpts = Array.from(devSel.options).filter(o => o.value !== 'all');
+  const inSite = o => site === 'all' || o.dataset.site === site;
+  const groupsAvail = new Set(devOpts.filter(inSite).map(o => o.dataset.group));
+  Array.from(groupSel.options).forEach(o => { o.hidden = o.value !== '' && !groupsAvail.has(o.value); });
+  if (groupSel.selectedOptions[0] && groupSel.selectedOptions[0].hidden) { groupSel.value = ''; groupSel.dispatchEvent(new Event('change')); return; }
+  const group = groupSel.value;
+  const inGroup = o => inSite(o) && (!group || o.dataset.group === group);
+  const locsAvail = new Set(devOpts.filter(inGroup).map(o => o.dataset.location));
+  Array.from(locSel.options).forEach(o => { o.hidden = o.value !== '' && !locsAvail.has(o.value); });
+  if (locSel.selectedOptions[0] && locSel.selectedOptions[0].hidden) { locSel.value = ''; locSel.dispatchEvent(new Event('change')); return; }
+  const loc = locSel.value;
+  devOpts.forEach(o => { o.hidden = !(inGroup(o) && (!loc || o.dataset.location === loc)); });
+  if (devSel.selectedOptions[0] && devSel.selectedOptions[0].hidden) { devSel.value = 'all'; devSel.dispatchEvent(new Event('change')); }
+}
+document.addEventListener('DOMContentLoaded', () => narrowLocator('init'));
+
+// "Show full path": same search, every switch in scope
+let lastLocatorQuery = null;
+function runFullPath() {
+  if (!lastLocatorQuery) return;
+  document.getElementById('queryInput').value = lastLocatorQuery;
+  handleLocate(null, true);
+}
+
+async function handleLocate(e, full = false) {
+  if (e) e.preventDefault();
   const q = document.getElementById('queryInput').value.trim();
   const siteId = document.getElementById('siteFilter').value;
   const devVal = document.getElementById('deviceFilter').value;
   const device_ids = devVal !== 'all' ? [parseInt(devVal)] : null;
+  const group = document.getElementById('groupFilter').value;
+  const location = document.getElementById('locationFilter').value;
+  lastLocatorQuery = q;
   const btn = document.getElementById('searchBtn');
 
   if (!q) return;
@@ -543,7 +592,10 @@ async function handleLocate(e) {
         run_id: runId,
         query: q,
         site_id: siteId,
+        group: group,
+        location: location,
         device_ids: device_ids,
+        full: full,
       }),
       signal: locatorAbortCtrl.signal,
     });
@@ -668,13 +720,25 @@ function renderLocatorResults(data, queryStr) {
   document.getElementById('resIp').textContent = data.resolved_ip || 'IP Unassigned / Non-ARP';
   document.getElementById('resMac').textContent = data.resolved_mac || '—';
   document.getElementById('resVendor').textContent = data.vendor || 'Unknown Vendor';
-  document.getElementById('resSwitchStats').textContent = `${data.switches_responding}/${data.switches_queried} switches`;
+  document.getElementById('resSwitchStats').textContent = data.method === 'trace' && !data.stopped_early
+    ? `Traced via LLDP · ${data.scanned} switch${data.scanned === 1 ? '' : 'es'} queried`
+    : `${data.scanned ?? data.switches_queried} of ${data.in_scope ?? data.switches_queried} switches scanned`;
 
   // Render Best Edge Match Card
   const best = data.best_match;
   const bestWrap = document.getElementById('primaryMatchWrap');
+  const pathHtml = (data.path && data.path.length > 1)
+    ? `<div class="locator-path" style="margin:0 0 12px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px">
+         <span class="muted small" style="text-transform:uppercase;letter-spacing:.05em;margin-right:4px">Path</span>
+         ${data.path.map(h => `<span class="badge mono">${escapeHtml(h.switch_name)} · ${escapeHtml(h.port)}</span>`).join('<span class="muted">→</span>')}
+       </div>` : '';
+  const fullBtn = data.stopped_early
+    ? `<div style="margin:0 0 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+         <span class="muted small">Stopped early after ${data.scanned} of ${data.in_scope} switches.</span>
+         <button type="button" class="btn sm" onclick="runFullPath()">Show full path</button>
+       </div>` : '';
   if (best) {
-    bestWrap.innerHTML = `
+    bestWrap.innerHTML = pathHtml + fullBtn + `
       <div class="card edge-port-card">
         <div class="edge-port-header">
           <div style="display:flex;align-items:center;gap:10px;">
@@ -711,7 +775,7 @@ function renderLocatorResults(data, queryStr) {
       </div>
     `;
   } else {
-    bestWrap.innerHTML = '';
+    bestWrap.innerHTML = pathHtml + fullBtn;
   }
 
   // Render All Hops Table
