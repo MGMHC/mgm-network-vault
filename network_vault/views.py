@@ -412,7 +412,9 @@ def _site_admin_can_manage(me, u):
 @bp.route("/api/account/theme", methods=["POST"])
 def account_theme():
     """Save the signed-in user's look and mode (any role may; it is a personal display setting)."""
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        data = {}
     look, mode = data.get("look"), data.get("mode")
     if not theme.valid(look, mode):
         return jsonify(error="Invalid theme."), 400
@@ -420,8 +422,7 @@ def account_theme():
     me.theme_look, me.theme_mode = look, mode
     db.session.commit()
     resp = jsonify(ok=True, look=look, mode=mode)
-    resp.set_cookie(theme.COOKIE, theme.cookie_value(look, mode), max_age=365 * 24 * 3600,
-                    samesite="Lax", path="/", httponly=False)
+    theme.set_cookie(resp, look, mode, secure=bool(config.get("secure_cookies")) or request.is_secure)
     return resp
 
 

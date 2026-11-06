@@ -3,7 +3,7 @@ import hmac
 import secrets
 from datetime import timedelta
 
-from flask import Flask, abort, redirect, request, session, url_for
+from flask import Flask, abort, g, redirect, request, session, url_for
 from sqlalchemy import event, pool
 
 from . import config, theme
@@ -209,6 +209,7 @@ def create_app():
             if request.path.startswith("/api/"):
                 abort(401, "Session expired - please sign in again.")
             return redirect(url_for("web.login", next=request.full_path))
+        g.current_user = u
         if request.method == "POST":
             token = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
             if not token or not hmac.compare_digest(str(token), str(session.get("csrf") or "")):
@@ -239,11 +240,11 @@ def create_app():
             return resp
         if any(c.startswith(theme.COOKIE + "=") for c in resp.headers.getlist("Set-Cookie")):
             return resp
-        user = User.query.filter_by(username=session["user"]).first()
+        user = g.get("current_user") or User.query.filter_by(username=session["user"]).first()
         look, mode = theme.resolve(user, request.cookies.get(theme.COOKIE))
         want = theme.cookie_value(look, mode)
         if user and request.cookies.get(theme.COOKIE) != want:
-            resp.set_cookie(theme.COOKIE, want, max_age=365 * 24 * 3600, samesite="Lax", path="/", httponly=False)
+            theme.set_cookie(resp, look, mode, secure=bool(config.get("secure_cookies")) or request.is_secure)
         return resp
 
     @app.context_processor

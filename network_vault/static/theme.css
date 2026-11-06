@@ -16,8 +16,8 @@
 /* ── Liquid glass · dark (crystal) ───────────────────────────────────────── */
 :root[data-look="glass"][data-mode="dark"] {
   --bg: #0a0f1f;
-  --panel: linear-gradient(180deg, rgba(8, 14, 30, .30), rgba(8, 14, 30, .16));
-  --panel-strong: linear-gradient(180deg, rgba(8, 14, 30, .34), rgba(8, 14, 30, .40));
+  --panel: linear-gradient(180deg, rgba(8, 14, 30, .20), rgba(8, 14, 30, .14));
+  --panel-strong: linear-gradient(180deg, rgba(8, 14, 30, .22), rgba(8, 14, 30, .24));
   --panel-2: rgba(255, 255, 255, .04);
   --border: rgba(255, 255, 255, .20);
   --border-subtle: rgba(255, 255, 255, .09);
@@ -183,9 +183,9 @@
   --drop: rgba(0, 0, 0, .35);
   --shadow: 0 1px 2px var(--drop);
 
-  --lens: #233047;
+  --lens: rgba(56, 189, 248, .14);
   --lens-rim: #2f3f5c;
-  --lens-text: #7dd3fc;
+  --lens-text: #38bdf8;
   --chip: #1c2433;
   --chip-hover: #232c3b;
   --hair: #1f2735;
@@ -245,7 +245,7 @@
   --drop: rgba(15, 23, 42, .08);
   --shadow: 0 1px 2px var(--drop);
 
-  --lens: #e8f1fb;
+  --lens: rgba(2, 132, 199, .10);
   --lens-rim: #cfe2f6;
   --lens-text: #0369a1;
   --chip: #eef1f5;
@@ -329,7 +329,7 @@ body::after {
   border-color: transparent;
 }
 
-:root[data-look="glass"] :is(.top-subnav, .toast) {
+:root[data-look="glass"] .toast {
   position: relative;
 }
 
@@ -372,9 +372,7 @@ body::after {
 }
 
 /* Sticky table header: the translucent tint lets scrolling rows show through, so in glass it
-   takes the overlay fill (the strongest tint) plus the overlay blur. */
+   takes the opaque-ish overlay fill (no blur: a backdrop-filter per th cell would hurt scrolling). */
 :root[data-look="glass"] th {
   background: var(--overlay);
-  -webkit-backdrop-filter: blur(var(--blur-overlay));
-  backdrop-filter: blur(var(--blur-overlay));
 }

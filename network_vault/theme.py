@@ -22,3 +22,9 @@ def resolve(user, cookie_value_raw):
     if valid(look, mode):
         return look, mode
     return DEFAULT
+
+
+def set_cookie(resp, look, mode, secure):
+    """Mirror the theme into a cookie that app.js and the login page can read (no secret in it)."""
+    resp.set_cookie(COOKIE, cookie_value(look, mode), max_age=365 * 24 * 3600, samesite="Lax", path="/",
+                    httponly=False, secure=secure)

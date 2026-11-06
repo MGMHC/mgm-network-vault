@@ -393,12 +393,6 @@ h3 {
   opacity: 1;
 }
 
-/* ([data-mode] only raises specificity above theme.css's own Normal lens rule.) */
-:root[data-look="normal"][data-mode] :is(.top-nav-links .nav-item.active, .nav-dropdown-btn.active, .top-subnav .subnav-link.active) {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
 /* Dropdown Menus */
 .nav-dropdown {
   position: relative;
@@ -1378,11 +1372,6 @@ h3 {
   border-radius: 999px;
   box-shadow: var(--shadow);
   padding: 0 16px;
-}
-
-/* theme.css gives the glass edge's anchor `position: relative`; the strip must stay sticky. */
-:root .top-nav-layout > .top-subnav {
-  position: sticky;
 }
 
 .top-subnav-inner {
