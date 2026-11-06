@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+## [1.18.1] - 2026-11-07
+
+### Fixed
+- **Date picker grid**: dates no longer drift out of line with the weekday headers, and months that start late in the week (e.g. January 2027) no longer spill past the right edge. The blank days before the 1st picked up the app's empty-state padding, which widened their columns. The seven columns are now always equal width and line up with the headers.
+
 ## [1.18.0] - 2026-11-07
 
 ### Added
