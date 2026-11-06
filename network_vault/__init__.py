@@ -190,6 +190,7 @@ def create_app():
         # CSS/JS are linked with ?v=<app version>, so a release changes the URL: let browsers keep
         # them instead of re-checking on every page load. Unversioned files (images) get one day.
         if request.path.startswith("/static/") and resp.status_code in (200, 304):
+            resp.cache_control.no_cache = None  # Flask's default; it would force a re-check every time
             resp.cache_control.public = True
             if "v" in request.args:
                 resp.cache_control.max_age = 31536000
