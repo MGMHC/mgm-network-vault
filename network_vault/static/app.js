@@ -463,7 +463,7 @@ function renderGlobalLocatorDock(trace) {
   } else if (trace.status === 'error' || trace.status === 'cancelled') {
     dock.classList.add('error');
     dock.classList.remove('success');
-    if (percentEl) percentEl.style.color = 'var(--danger)';
+    if (percentEl) percentEl.style.color = 'var(--bad)';
     if (statusEl) {
       statusEl.textContent = trace.error || 'Trace cancelled';
       statusEl.className = 'small danger';

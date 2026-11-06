@@ -1824,7 +1824,7 @@ th.num {
   border-radius: 99px;
   font-size: 12px;
   font-weight: 600;
-  background: var(--chip);
+  background: var(--badge-bg);
   color: var(--text-dim);
   border: 0;
 }
@@ -2902,7 +2902,7 @@ pre.code {
 .lg-cal-day.selected,
 .lg-cal-day.selected:hover:not(.disabled) {
   background: var(--accent);
-  color: var(--accent-text);
+  color: var(--on-accent);
   font-weight: 700;
   transform: scale(1.04);
 }
