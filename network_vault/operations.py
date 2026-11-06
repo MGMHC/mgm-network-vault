@@ -379,35 +379,52 @@ def is_uplink_port(port_name, device=None, device_id=None, learned_mac_count=1, 
 
 # --------------------------------------------------------------------------- ARP Table Discovery
 
-def query_arp(device, target_ip=None, target_mac_clean=None):
+def _filtered_or_full(conn, filtered, full):
+    """Run the filtered command and trust its answer, even when empty (= not on this switch).
+    The whole table is only fetched when the filtered command itself fails (unsupported syntax)."""
+    for cmd in filtered:
+        try:
+            return engine.run(conn, cmd)
+        except Exception:  # noqa: BLE001 - try the next form
+            continue
+    for cmd in full:
+        try:
+            return engine.run(conn, cmd)
+        except Exception:  # noqa: BLE001
+            continue
+    return ""
+
+
+def _with_conn(device, conn, fn):
+    """Run fn(conn) on a caller-supplied SSH session, or on a new one that is closed afterwards."""
+    if conn is not None:
+        return fn(conn)
+    c = engine.connect(device)
+    try:
+        return fn(c)
+    finally:
+        try:
+            c.disconnect()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def query_arp(device, target_ip=None, target_mac_clean=None, conn=None):
     """Query ARP table on switch. Returns list of dicts: [{ip, mac, clean_mac, interface, vlan}]."""
     results = []
+
+    def fetch(c):
+        if device.is_juniper:
+            filtered = [f"show arp no-resolve | match {target_ip} | no-more"] if target_ip else (
+                [f"show arp no-resolve | match {format_mac(target_mac_clean, 'colon')} | no-more"] if target_mac_clean else [])
+            return _filtered_or_full(c, filtered, ["show arp no-resolve | no-more"])
+        filtered = [f"show ip arp | include {target_ip}"] if target_ip else (
+            [f"show ip arp | include {format_mac(target_mac_clean, 'cisco')}"] if target_mac_clean else [])
+        return _filtered_or_full(c, filtered, ["show ip arp"])
+
     try:
-        conn = engine.connect(device)
-        try:
-            out = ""
-            if device.is_juniper:
-                if target_ip:
-                    try:
-                        out = engine.run(conn, f"show arp no-resolve | match {target_ip} | no-more")
-                    except Exception:
-                        out = ""
-                if not out.strip():
-                    out = engine.run(conn, "show arp no-resolve | no-more")
-            else:
-                if target_ip:
-                    try:
-                        out = engine.run(conn, f"show ip arp | include {target_ip}")
-                    except Exception:
-                        out = ""
-                if not out.strip():
-                    out = engine.run(conn, "show ip arp")
-        finally:
-            try:
-                conn.disconnect()
-            except Exception:
-                pass
-    except Exception:
+        out = _with_conn(device, conn, fetch)
+    except Exception:  # noqa: BLE001 - unreachable switch: no entries
         return results
 
     mac_regex = re.compile(
@@ -455,50 +472,25 @@ def query_arp(device, target_ip=None, target_mac_clean=None):
 
 # --------------------------------------------------------------------------- MAC Address Table Discovery
 
-def query_mac_table(device, target_mac_clean=None):
+def query_mac_table(device, target_mac_clean=None, conn=None):
     """Query MAC address forwarding table. Returns list of dicts: [{mac, clean_mac, vlan, interface, type, age}]."""
     results = []
+
+    def fetch(c):
+        if device.is_juniper:
+            filtered = ([f"show ethernet-switching table | match {format_mac(target_mac_clean, 'colon')} | no-more"]
+                        if target_mac_clean else [])
+            return _filtered_or_full(c, filtered, ["show ethernet-switching table | no-more"])
+        filtered = []
+        if target_mac_clean:
+            cisco_mac, colon_mac = format_mac(target_mac_clean, "cisco"), format_mac(target_mac_clean, "colon")
+            filtered = [f"show mac address-table address {cisco_mac}", f"show mac-address-table address {cisco_mac}",
+                        f"show mac address-table | include {cisco_mac}|{colon_mac}"]
+        return _filtered_or_full(c, filtered, ["show mac address-table", "show mac-address-table"])
+
     try:
-        conn = engine.connect(device)
-        try:
-            out = ""
-            if device.is_juniper:
-                if target_mac_clean:
-                    c_mac = format_mac(target_mac_clean, "colon")
-                    try:
-                        out = engine.run(conn, f"show ethernet-switching table | match {c_mac} | no-more")
-                    except Exception:
-                        out = ""
-                if not out.strip():
-                    out = engine.run(conn, "show ethernet-switching table | no-more")
-            else:
-                if target_mac_clean:
-                    cisco_mac = format_mac(target_mac_clean, "cisco")
-                    colon_mac = format_mac(target_mac_clean, "colon")
-                    try:
-                        out = engine.run(conn, f"show mac address-table address {cisco_mac}")
-                    except Exception:
-                        try:
-                            out = engine.run(conn, f"show mac-address-table address {cisco_mac}")
-                        except Exception:
-                            try:
-                                out = engine.run(conn, f"show mac address-table | include {cisco_mac}|{colon_mac}")
-                            except Exception:
-                                out = ""
-                if not out.strip():
-                    try:
-                        out = engine.run(conn, "show mac address-table")
-                    except Exception:
-                        try:
-                            out = engine.run(conn, "show mac-address-table")
-                        except Exception:
-                            out = ""
-        finally:
-            try:
-                conn.disconnect()
-            except Exception:
-                pass
-    except Exception:
+        out = _with_conn(device, conn, fetch)
+    except Exception:  # noqa: BLE001 - unreachable switch: no entries
         return results
 
     mac_regex = re.compile(
@@ -577,6 +569,109 @@ def query_mac_table(device, target_mac_clean=None):
         })
 
     return results
+
+
+# --------------------------------------------------------------------------- LLDP neighbours (trace)
+
+_IPV4 = r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+
+
+def _base_port(p):
+    """ge-0/0/14.0 -> ge-0/0/14 ; Gi1/0/14 stays (lower-cased for comparison)."""
+    return (p or "").strip().split(".")[0].lower()
+
+
+def _parse_junos_lldp_table(out):
+    """Rows of 'show lldp neighbors' using the header's column positions (System Name may contain spaces)."""
+    lines = (out or "").splitlines()
+    hdr_i = next((i for i, l in enumerate(lines) if "Local Interface" in l and "System Name" in l), None)
+    if hdr_i is None:
+        return []
+    h = lines[hdr_i]
+    cols = [("local", h.index("Local Interface")), ("parent", h.find("Parent Interface")),
+            ("chassis", h.find("Chassis Id")), ("port", h.find("Port info")), ("name", h.index("System Name"))]
+    cols = [c for c in cols if c[1] >= 0]
+    rows = []
+    for l in lines[hdr_i + 1:]:
+        if not l.strip() or l.strip().startswith("{"):
+            continue
+        row = {}
+        for i, (key, start) in enumerate(cols):
+            end = cols[i + 1][1] if i + 1 < len(cols) else None
+            row[key] = l[start:end].strip() if len(l) > start else ""
+        if row.get("local"):
+            rows.append(row)
+    return rows
+
+
+def query_lldp_neighbor(device, port, conn=None, want_ip=False):
+    """Who is on the other end of `port` (a physical port or an ae/LAG bundle)?
+
+    Returns {"local_port", "parent", "system_name", "mgmt_ip"} or None. Read-only show commands only."""
+    target = _base_port(port)
+
+    def fetch(c):
+        if device.is_juniper:
+            rows = _parse_junos_lldp_table(engine.run(c, "show lldp neighbors | no-more"))
+            hit = (next((r for r in rows if _base_port(r.get("local")) == target), None)
+                   or next((r for r in rows if _base_port(r.get("parent")) == target), None))
+            if not hit:
+                return None
+            nb = {"local_port": hit.get("local"), "parent": None if hit.get("parent") in ("", "-") else hit.get("parent"),
+                  "system_name": hit.get("name") or "", "mgmt_ip": None}
+            if want_ip:
+                try:
+                    det = engine.run(c, f"show lldp neighbors interface {hit.get('local')} | no-more")
+                    m = re.search(r"Address\s*:\s*" + _IPV4, det)
+                    nb["mgmt_ip"] = m.group(1) if m else None
+                except Exception:  # noqa: BLE001
+                    pass
+            return nb
+        # Cisco IOS / C1300: LLDP detail, else CDP detail
+        try:
+            det = engine.run(c, f"show lldp neighbors {port} detail")
+            m_name = re.search(r"System Name:\s*(\S+)", det)
+            if m_name:
+                m_ip = re.search(r"Management Address(?:es)?:?[\s\S]{0,80}?" + _IPV4, det)
+                return {"local_port": port, "parent": None, "system_name": m_name.group(1),
+                        "mgmt_ip": m_ip.group(1) if m_ip else None}
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            det = engine.run(c, f"show cdp neighbors {port} detail")
+            m_name = re.search(r"Device ID:\s*(\S+)", det)
+            if m_name:
+                m_ip = re.search(r"IP(?:v4)? [Aa]ddress:\s*" + _IPV4, det)
+                return {"local_port": port, "parent": None, "system_name": m_name.group(1),
+                        "mgmt_ip": m_ip.group(1) if m_ip else None}
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
+    try:
+        return _with_conn(device, conn, fetch)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def match_neighbor(nb, candidates):
+    """Map an LLDP/CDP neighbour to a Vault switch: real hostname, then Vault name, then management IP."""
+    if not nb:
+        return None
+    name = (nb.get("system_name") or "").strip().lower()
+    short = name if re.match(r"^\d+\.\d+\.\d+\.\d+$", name) else name.split(".")[0]
+    if short:
+        for d in candidates:
+            for cand in (d.hostname, d.name):
+                c = (cand or "").strip().lower()
+                if c and (c == name or c == short or c.split(".")[0] == short):
+                    return d
+    ip = nb.get("mgmt_ip")
+    if ip:
+        for d in candidates:
+            if (d.host or "").strip() == ip:
+                return d
+    return None
 
 
 # --------------------------------------------------------------------------- Parallel Port Locator Engine

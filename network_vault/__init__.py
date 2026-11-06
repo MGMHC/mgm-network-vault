@@ -122,6 +122,24 @@ def _add_missing_columns():
         db.session.commit()
 
     run_once("seed_alert_messages", seed_alert_messages)
+
+    def backfill_hostnames():
+        # Real switch hostnames (what LLDP neighbours report) from each switch's latest backup info file
+        from .engine import parse_hostname
+        from .models import Backup, Device
+        from .util import read_backup_file
+        for d in Device.query.filter(Device.hostname.is_(None)).all():
+            b = (Backup.query.filter(Backup.device_id == d.id, Backup.info_path.isnot(None))
+                 .order_by(Backup.created_at.desc()).first())
+            try:
+                h = parse_hostname(read_backup_file(b.info_path)) if b else None
+            except Exception:  # noqa: BLE001 - a missing or unreadable file just leaves it empty
+                h = None
+            if h:
+                d.hostname = h[:128]
+        db.session.commit()
+
+    run_once("backfill_hostnames", backfill_hostnames)
     run_once("floor_to_level", floor_to_level)
     run_once("malar_fixups", malar_fixups)
 

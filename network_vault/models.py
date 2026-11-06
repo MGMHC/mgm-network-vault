@@ -154,7 +154,8 @@ class Device(db.Model):
     status_since = db.Column(db.DateTime)
     down_checks = db.Column(db.Integer, default=0)     # consecutive 'down' results (switch-down alerts)
     down_alerted = db.Column(db.Boolean, default=False)  # a down email went out for the current outage
-    backup_fail_alerted = db.Column(db.Boolean, default=False)  # a backup-failed email went out for this failure streak
+    backup_fail_alerted = db.Column(db.Boolean, default=False)
+    hostname = db.Column(db.String(128))  # the switch's own hostname (show version) - what LLDP neighbours report  # a backup-failed email went out for this failure streak
 
     # facts gathered during backup
     sw_version = db.Column(db.String(128))

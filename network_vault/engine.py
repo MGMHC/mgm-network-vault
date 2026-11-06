@@ -315,8 +315,17 @@ def parse_vc(text):
     return members
 
 
+def parse_hostname(version):
+    """The switch's own hostname from 'show version' (Juniper 'Hostname: x', Cisco 'x uptime is ...')."""
+    m = re.search(r"^Hostname:\s*(\S+)", version or "", re.M) or re.search(r"^(\S+)\s+uptime is\b", version or "", re.M)
+    return m.group(1) if m else None
+
+
 def parse_facts(device, version, inventory):
     facts = {}
+    hostname = parse_hostname(version)
+    if hostname:
+        facts["hostname"] = hostname
     if device.is_juniper:
         m = re.search(r"^Model:\s*(\S+)", version, re.M)
         if m:
