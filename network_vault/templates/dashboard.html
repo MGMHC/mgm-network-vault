@@ -183,7 +183,7 @@
         <tr>
           <td><a href="{{ url_for('web.device_detail', dev_id=b.device_id) }}">{{ b.device.name }}</a></td>
           <td class="muted small" title="{{ b.created_at|dt }}">{{ b.created_at|ago }}</td>
-          <td><span class="badge ok">+{{ b.lines_added }}</span> <span class="badge bad">-{{ b.lines_removed }}</span></td>
+          <td><span style="color:var(--ok)">+{{ b.lines_added }}</span> <span style="color:var(--bad)">-{{ b.lines_removed }}</span></td>
           <td class="muted small wrap">{{ b.last_commit or '' }}</td>
           <td class="num">{% set prev = b.previous %}
             {% if prev %}<a class="btn sm" href="{{ url_for('web.compare', a=prev.id, b=b.id) }}">Diff</a>{% else %}<span class="muted small">first</span>{% endif %}</td>
