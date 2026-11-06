@@ -51,11 +51,23 @@ function trackBackupJob(jobId, initialStatus) {
   );
 
   let active = true;
+  let failures = 0;
 
   const poll = async () => {
     while (active) {
       try {
-        const j = await fetch(`/api/jobs/${jobId}`).then(r => r.json());
+        const r = await fetch(`/api/jobs/${jobId}`, { headers: { 'Accept': 'application/json' } });
+        // Job gone, session expired or no access: stop polling instead of retrying forever
+        if ([401, 403, 404].includes(r.status) || r.redirected) {
+          localStorage.removeItem(ACTIVE_BACKUP_KEY);
+          t.className = 'toast bad';
+          t.textContent = r.status === 404 ? `Backup job #${jobId} not found` : 'Session expired - reload the page to see backup progress';
+          setTimeout(() => t.remove(), 6000);
+          break;
+        }
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const j = await r.json();
+        failures = 0;
         if (!j || !j.id) {
           localStorage.removeItem(ACTIVE_BACKUP_KEY);
           t.remove();
@@ -89,13 +101,20 @@ function trackBackupJob(jobId, initialStatus) {
           break;
         }
       } catch (err) {
-        // network blip, retry next interval
+        // network blip: retry, but give up after ~1 minute of consecutive failures
+        if (++failures >= 40) {
+          localStorage.removeItem(ACTIVE_BACKUP_KEY);
+          t.className = 'toast bad';
+          t.textContent = `Lost contact with backup job #${jobId} - check the Logs page`;
+          setTimeout(() => t.remove(), 8000);
+          break;
+        }
       }
       await new Promise(r => setTimeout(r, 1500));
     }
   };
 
-  poll();
+  t.finished = poll();  // resolves when the job ends (or tracking stops)
   return t;
 }
 
@@ -119,10 +138,15 @@ function trackBackupJob(jobId, initialStatus) {
 async function runBackup(ids, btn) {
   const body = ids === 'all' ? { all: true } : { ids };
   if (ids !== 'all' && !ids.length) { toast('Select at least one device', 'bad'); return; }
-  if (btn) btn.disabled = true;
+  if (btn) {
+    if (btn.disabled) return;
+    btn.disabled = true;
+  }
   try {
     const { job } = await api('/api/backup', body);
-    trackBackupJob(job, 'starting…');
+    // Keep the button disabled until the job finishes, so repeat clicks can't start
+    // parallel SSH backups of the same switches
+    await trackBackupJob(job, 'starting…').finished;
   } catch (err) {
     toast('Backup failed to start: ' + err.message, 'bad');
   } finally {
@@ -132,7 +156,11 @@ async function runBackup(ids, btn) {
 
 async function runCheck(ids, btn) {
   const body = ids === 'all' ? { all: true } : { ids };
-  if (btn) btn.disabled = true;
+  if (ids !== 'all' && !ids.length) { toast('Select at least one device', 'bad'); return; }
+  if (btn) {
+    if (btn.disabled) return;
+    btn.disabled = true;
+  }
   const t = toast('Checking reachability (ping + SSH)…', '', 0);
   try {
     const res = await api('/api/check', body);
@@ -257,6 +285,8 @@ function toggleSidebar() {
       // Same origin only; skip hash-only changes and logout (instant redirect)
       if (url.origin !== location.origin) return false;
       if (url.pathname === location.pathname && url.hash) return false;
+      // Downloads don't leave the page: fading out would leave it blank until a reload
+      if (/(\.csv|\.diff|\.zip|\/zip|\/download|\/export[^/]*|\/package|\/config-from-export|\/logout)$/i.test(url.pathname)) return false;
       return true;
     } catch { return false; }
   }
@@ -266,7 +296,7 @@ function toggleSidebar() {
     const a = e.target.closest('a[href]');
     if (!a) return;
     if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    if (a.target === '_blank') return;
+    if (a.target === '_blank' || a.hasAttribute('download') || a.hasAttribute('data-no-transition')) return;
     if (!shouldAnimate(a.href)) return;
 
     const layout = document.getElementById('layout');
@@ -288,7 +318,16 @@ function toggleSidebar() {
         card.style.transform = 'scale(.92) translateY(-10px)';
       }
     }
-    setTimeout(() => { location.href = dest; }, 220);
+    setTimeout(() => { location.href = dest; }, 140);
+  });
+
+  // Back/forward restores the page from the browser cache in its faded-out state: undo it
+  window.addEventListener('pageshow', (e) => {
+    if (!e.persisted) return;
+    const layout = document.getElementById('layout');
+    if (layout) layout.classList.remove('page-leaving');
+    const card = document.querySelector('.login-wrap .card');
+    if (card) { card.style.opacity = ''; card.style.transform = ''; }
   });
 })();
 
@@ -1071,16 +1110,19 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// Reposition floating popovers on scroll or window resize
-window.addEventListener('scroll', () => {
-  if (activeLiquidSelect) activeLiquidSelect.positionPopover();
-  if (activeLiquidCalendar) activeLiquidCalendar.positionCalendar();
-}, { passive: true });
-
-window.addEventListener('resize', () => {
-  if (activeLiquidSelect) activeLiquidSelect.positionPopover();
-  if (activeLiquidCalendar) activeLiquidCalendar.positionCalendar();
-}, { passive: true });
+// Reposition floating popovers on scroll or window resize - at most once per frame, so a
+// fast scroll doesn't queue dozens of layout reads and the popover tracks without lag.
+let _popoverRaf = 0;
+function _schedulePopoverReposition() {
+  if (_popoverRaf || (!activeLiquidSelect && !activeLiquidCalendar)) return;
+  _popoverRaf = requestAnimationFrame(() => {
+    _popoverRaf = 0;
+    if (activeLiquidSelect) activeLiquidSelect.positionPopover();
+    if (activeLiquidCalendar) activeLiquidCalendar.positionCalendar();
+  });
+}
+window.addEventListener('scroll', _schedulePopoverReposition, { passive: true });
+window.addEventListener('resize', _schedulePopoverReposition, { passive: true });
 
 // Initialize on DOM load
 function initLiquidComponents() {

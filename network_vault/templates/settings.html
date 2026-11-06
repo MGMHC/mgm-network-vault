@@ -4,6 +4,8 @@
 {% block content %}
 <div class="topbar"><div><h1>Settings</h1><div class="sub">Backups stored in <code>{{ backup_dir }}</code> · {{ usage|size }} on disk</div></div></div>
 
+{% set is_ga = current_user_obj and current_user_obj.is_group_admin %}
+{% if is_ga %}
 <div class="card" id="updateCard" style="margin-bottom:18px">
   <div class="card-head">
     <div style="display:flex;align-items:center;gap:10px">
@@ -31,6 +33,7 @@
     </button>
   </div>
 </div>
+{% endif %}
 
 <form class="card" method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -76,7 +79,9 @@
       <div class="help">Raw syslog stream saved daily on disk.</div>
     </div>
   </div>
+  <fieldset {{ 'disabled' if not is_ga }} style="border:0;padding:0;margin:0;min-width:0">
   <h2 style="margin-top:22px">Email Notifications &amp; Password Reset (SMTP)</h2>
+  {% if not is_ga %}<p class="muted small" style="margin:0 0 12px">Mail server and public URL are shared by all sites and can only be changed by a Group Administrator.</p>{% endif %}
   <label class="check" style="margin-bottom:12px">
     <input type="checkbox" name="smtp_enabled" value="1" {{ 'checked' if s.smtp_enabled == '1' }}>
     <b>Enable Outbound Email Service</b> (required for self-service "Forgot Password" reset links)
@@ -120,14 +125,16 @@
     <div class="field" style="grid-column:1 / -1">
       <label>Application Public Web URL</label>
       <input type="text" name="app_url" value="{{ s.app_url }}" placeholder="https://networkvault.mgmhealthcare.in">
-      <div class="help">Base address included in password reset emails. Leave blank to auto-detect from browser requests.</div>
+      <div class="help">Base address included in password reset emails. Required - reset emails are not sent while it is blank.</div>
     </div>
   </div>
+  </fieldset>
 
   <button class="btn primary" style="margin-top:16px">Save settings</button>
 </form>
 
 <!-- Test SMTP Connection Card -->
+{% if is_ga %}
 <form class="card" method="post" action="{{ url_for('web.settings_test_email') }}" style="margin-top:18px">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <h2>Test Outbound Email Delivery</h2>
@@ -137,6 +144,7 @@
     <button class="btn">{{ icon('key') }} Send Test Email</button>
   </div>
 </form>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

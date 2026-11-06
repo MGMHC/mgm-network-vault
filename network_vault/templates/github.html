@@ -41,6 +41,7 @@
       {% if s.git_last_error %}<dt>Last error</dt><dd class="lvl-ERROR" style="white-space:pre-wrap">{{ s.git_last_error }}</dd>{% endif %}
       {% if local_error %}<dt>Local repository</dt><dd class="lvl-ERROR">{{ local_error }}</dd>{% endif %}
     </dl>
+    {% if current_user_obj and current_user_obj.is_group_admin %}
     <div class="actions" style="margin-top:14px">
       {% for a, label, title in [('test', 'Test connection', 'Check the address and token can reach the repository'),
                                   ('sync', 'Sync now', 'Commit the latest backup of every switch and push'),
@@ -52,8 +53,12 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="reset">
         <button class="btn danger" {{ 'disabled' if s.git_enabled != '1' or progress.busy }}>Re-download from GitHub</button></form>
     </div>
+    {% else %}
+    <p class="muted small" style="margin-top:14px">GitHub sync settings can only be changed by a Group Administrator.</p>
+    {% endif %}
   </div>
 
+  {% if current_user_obj and current_user_obj.is_group_admin %}
   <form class="card" method="post" autocomplete="off">
     <h2>Settings</h2>
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="save">
@@ -80,6 +85,7 @@
       </ol>
     </details>
   </form>
+  {% endif %}
 </div>
 
 <div class="grid g2">

@@ -1,4 +1,5 @@
 """MGM Network Vault - network switch configuration backup manager."""
+import hmac
 import secrets
 from datetime import timedelta
 
@@ -6,7 +7,7 @@ from flask import Flask, abort, redirect, request, session, url_for
 from sqlalchemy import event, pool
 
 from . import config
-from .models import Site, User, db
+from .models import Site, User, db, password_version
 from .util import BASE_DIR, FLASK_SECRET, RESTORED, log_event
 from .version import __version__
 
@@ -17,8 +18,14 @@ PUBLIC_ENDPOINTS = {
 
 
 def _add_missing_columns():
-    """Tiny migration: add columns introduced by newer versions to an existing SQLite database."""
+    """Tiny migration: bring an existing SQLite database up to date with the models.
+
+    Schema steps (new columns, missing indexes) are idempotent and run on every start.
+    One-off data fixes run once each and are recorded in the setting table, so later edits
+    made in the UI are never overwritten by a restart."""
     from sqlalchemy import inspect, text
+    from .models import Setting
+
     insp = inspect(db.engine)
     with db.engine.begin() as conn:
         for table in db.metadata.sorted_tables:
@@ -29,59 +36,82 @@ def _add_missing_columns():
                     conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {ddl}'))
         # Backfill: any user with NULL or old 'admin' role gets 'group-admin'
         conn.execute(text("UPDATE \"user\" SET role = 'group-admin' WHERE role IS NULL OR role = '' OR role = 'admin'"))
-        # Backfill: populate user.last_login_at from the latest auth login log_entry if empty
-        conn.execute(text("""
-            UPDATE "user"
-            SET last_login_at = (
-                SELECT max(ts)
-                FROM log_entry
-                WHERE log_entry.category = 'auth'
-                  AND log_entry.message = 'User logged in'
-                  AND log_entry.user = "user".username
-            )
-            WHERE last_login_at IS NULL
-        """))
 
-    # Seed default sites if none exist
-    default_sites = [
-        ("MGMHC", "MGM Healthcare (Main)", "Primary healthcare center"),
-        ("MGMCI", "MGM Cancer Institute", "Cancer care specialty center"),
-        ("MGM-Malar", "MGM Malar Hospital", "Malar multispeciality center"),
-        ("MGM-Sevenhills", "MGM Sevenhills Hospital", "Sevenhills tertiary care center"),
-    ]
-    primary_site = None
-    for code, name, desc in default_sites:
-        s = Site.query.filter_by(code=code).first()
-        if not s:
-            s = Site(code=code, name=name, description=desc)
-            db.session.add(s)
-            db.session.flush()
-        if code == "MGMHC":
-            primary_site = s
-    db.session.commit()
+    # Create indexes declared on the models that an older database is missing (create_all only
+    # creates indexes together with new tables). Unique indexes are skipped: existing duplicate
+    # rows would make them fail.
+    for table in db.metadata.sorted_tables:
+        for idx in table.indexes:
+            if idx.unique:
+                continue
+            try:
+                idx.create(bind=db.engine, checkfirst=True)
+            except Exception as e:  # noqa: BLE001 - never block start-up on an index
+                log_event(f"Could not create index {idx.name}: {e}", "system", "WARN", user="system")
 
-    # Backfill pre-existing devices, credentials, and schedules to primary site MGMHC if unassigned
-    if primary_site:
-        from sqlalchemy import text
+    def run_once(key, fn):
+        flag = f"migration:{key}"
+        if db.session.get(Setting, flag):
+            return
+        fn()
+        db.session.add(Setting(key=flag, value="done"))
+        db.session.commit()
+
+    def backfill_last_login():
         with db.engine.begin() as conn:
-            conn.execute(text(f"UPDATE device SET site_id = {primary_site.id} WHERE site_id IS NULL"))
-            conn.execute(text(f"UPDATE credential SET site_id = {primary_site.id} WHERE site_id IS NULL"))
-            conn.execute(text(f"UPDATE schedule SET site_id = {primary_site.id} WHERE site_id IS NULL"))
+            conn.execute(text("""
+                UPDATE "user"
+                SET last_login_at = (
+                    SELECT max(ts)
+                    FROM log_entry
+                    WHERE log_entry.category = 'auth'
+                      AND log_entry.message = 'User logged in'
+                      AND log_entry.user = "user".username
+                )
+                WHERE last_login_at IS NULL
+            """))
 
-    # Migrate group names: 'Floor-X' or 'Floor X' -> 'Level-X'
-    with db.engine.begin() as conn:
-        for i in range(1, 30):
-            conn.execute(text(f"UPDATE device SET \"group\" = 'Level-{i}' WHERE \"group\" = 'Floor-{i}' OR \"group\" = 'Floor {i}'"))
-            conn.execute(text(f"UPDATE schedule SET target_value = 'Level-{i}' WHERE target = 'group' AND (target_value = 'Floor-{i}' OR target_value = 'Floor {i}')"))
+    def seed_default_sites():
+        default_sites = [
+            ("MGMHC", "MGM Healthcare (Main)", "Primary healthcare center"),
+            ("MGMCI", "MGM Cancer Institute", "Cancer care specialty center"),
+            ("MGM-Malar", "MGM Malar Hospital", "Malar multispeciality center"),
+            ("MGM-Sevenhills", "MGM Sevenhills Hospital", "Sevenhills tertiary care center"),
+        ]
+        for code, name, desc in default_sites:
+            if not Site.query.filter_by(code=code).first():
+                db.session.add(Site(code=code, name=name, description=desc))
+        db.session.commit()
 
-        # Migrate Malar devices and credentials to MGM-Malar site and set correct Cisco IOS platform
-        conn.execute(text("UPDATE credential SET site_id = (SELECT id FROM site WHERE code = 'MGM-Malar') WHERE name = 'Mgm-Malar-SW'"))
-        conn.execute(text("UPDATE device SET site_id = (SELECT id FROM site WHERE code = 'MGM-Malar') WHERE name LIKE '%MALAR%'"))
-        # Update Cisco Catalyst switches at Malar to cisco_ios
-        conn.execute(text("UPDATE device SET platform = 'cisco_ios', model = 'C1000-48T-4X-L' WHERE name = 'MGM-MALAR-B-1ST-FLOOR'"))
-        conn.execute(text("UPDATE device SET platform = 'cisco_ios', model = 'Catalyst 2960-S' WHERE name = 'MGM-MALAR-B-5TH-IT'"))
-        conn.execute(text("UPDATE device SET platform = 'cisco_ios', model = 'C1000-48T-4X-L' WHERE name = 'MGM-MALAR-B-4TH-FLOOR'"))
-        conn.execute(text("UPDATE device SET platform = 'cisco_ios', model = 'C1000-48T-4X-L' WHERE name = 'MGM-MALAR-B-5TH-FLOOR'"))
+    def floor_to_level():
+        # 'Floor-X' or 'Floor X' -> 'Level-X'
+        with db.engine.begin() as conn:
+            for i in range(1, 30):
+                conn.execute(text(f"UPDATE device SET \"group\" = 'Level-{i}' WHERE \"group\" = 'Floor-{i}' OR \"group\" = 'Floor {i}'"))
+                conn.execute(text(f"UPDATE schedule SET target_value = 'Level-{i}' WHERE target = 'group' AND (target_value = 'Floor-{i}' OR target_value = 'Floor {i}')"))
+
+    def malar_fixups():
+        # Move Malar devices and credentials to the MGM-Malar site and set the Cisco IOS platform
+        with db.engine.begin() as conn:
+            conn.execute(text("UPDATE credential SET site_id = (SELECT id FROM site WHERE code = 'MGM-Malar') WHERE name = 'Mgm-Malar-SW'"))
+            conn.execute(text("UPDATE device SET site_id = (SELECT id FROM site WHERE code = 'MGM-Malar') WHERE name LIKE '%MALAR%'"))
+            conn.execute(text("UPDATE device SET platform = 'cisco_ios', model = 'C1000-48T-4X-L' WHERE name = 'MGM-MALAR-B-1ST-FLOOR'"))
+            conn.execute(text("UPDATE device SET platform = 'cisco_ios', model = 'Catalyst 2960-S' WHERE name = 'MGM-MALAR-B-5TH-IT'"))
+            conn.execute(text("UPDATE device SET platform = 'cisco_ios', model = 'C1000-48T-4X-L' WHERE name = 'MGM-MALAR-B-4TH-FLOOR'"))
+            conn.execute(text("UPDATE device SET platform = 'cisco_ios', model = 'C1000-48T-4X-L' WHERE name = 'MGM-MALAR-B-5TH-FLOOR'"))
+
+    run_once("backfill_last_login", backfill_last_login)
+    run_once("seed_default_sites", seed_default_sites)
+
+    # Every start: anything created without a site goes to the primary site (MGMHC) if it exists
+    primary_site = Site.query.filter_by(code="MGMHC").first()
+    if primary_site:
+        with db.engine.begin() as conn:
+            for tbl in ("device", "credential", "schedule"):
+                conn.execute(text(f"UPDATE {tbl} SET site_id = :sid WHERE site_id IS NULL"), {"sid": primary_site.id})
+
+    run_once("floor_to_level", floor_to_level)
+    run_once("malar_fixups", malar_fixups)
 
 
 def create_app():
@@ -138,9 +168,18 @@ def create_app():
             return None
         if "user" not in session:
             return redirect(url_for("web.login", next=request.full_path))
+        # The session cookie is signed but stateless: re-check that the account still exists and
+        # that its password has not changed since this session logged in (deleted users and
+        # password changes/resets end every other session).
+        u = User.query.filter_by(username=session.get("user")).first()
+        if not u or session.get("pwv") != password_version(u):
+            session.clear()
+            if request.path.startswith("/api/"):
+                abort(401, "Session expired - please sign in again.")
+            return redirect(url_for("web.login", next=request.full_path))
         if request.method == "POST":
             token = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
-            if not token or token != session.get("csrf"):
+            if not token or not hmac.compare_digest(str(token), str(session.get("csrf") or "")):
                 abort(400, "CSRF token missing or invalid - reload the page and try again.")
         if session.get("must_change") and request.endpoint not in ("web.account", "web.logout"):
             return redirect(url_for("web.account"))

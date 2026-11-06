@@ -6,11 +6,13 @@
   <div><h1>Logs</h1><div class="sub">{{ p.total }} matching entr{{ 'y' if p.total == 1 else 'ies' }}</div></div>
   <div class="actions">
     <a class="btn" href="{{ url_for('web.logs_export', **request.args.to_dict()) }}">{{ icon('download') }}Export CSV</a>
+    {% if current_user_obj and current_user_obj.is_group_admin %}
     <form method="post" action="{{ url_for('web.logs_purge') }}" class="actions" data-confirm="Permanently delete old log entries?">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <select name="days" style="width:auto"><option value="30">older than 30 days</option><option value="90">older than 90 days</option><option value="7">older than 7 days</option><option value="0">all entries</option></select>
       <button class="btn danger">Purge</button>
     </form>
+    {% endif %}
   </div>
 </div>
 <div class="card flush">

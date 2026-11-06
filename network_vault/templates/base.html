@@ -109,7 +109,9 @@
             {% endif %}
             <a href="{{ url_for('web.credentials') }}" class="dd-item {{ 'active' if ep.startswith('web.credential') }}">{{ icon('key') }}<span>Credentials</span></a>
             <a href="{{ url_for('web.github') }}" class="dd-item {{ 'active' if ep == 'web.github' }}">{{ icon('git') }}<span>GitHub sync</span></a>
+            {% if current_user_obj and current_user_obj.is_group_admin %}
             <a href="{{ url_for('web.migrate') }}" class="dd-item {{ 'active' if ep.startswith('web.migrate') }}">{{ icon('archive') }}<span>Export &amp; migrate</span></a>
+            {% endif %}
             <a href="{{ url_for('web.settings') }}" class="dd-item {{ 'active' if ep == 'web.settings' }}">{{ icon('gear') }}<span>Settings</span></a>
             <a href="{{ url_for('web.account') }}" class="dd-item {{ 'active' if ep == 'web.account' }}">{{ icon('user') }}<span>Users</span></a>
           </div>
@@ -179,7 +181,9 @@
         {% endif %}
         <a href="{{ url_for('web.credentials') }}" class="subnav-link {{ 'active' if ep.startswith('web.credential') }}">{{ icon('key') }}<span>Credentials</span></a>
         <a href="{{ url_for('web.github') }}" class="subnav-link {{ 'active' if ep == 'web.github' }}">{{ icon('git') }}<span>GitHub sync</span></a>
+        {% if current_user_obj and current_user_obj.is_group_admin %}
         <a href="{{ url_for('web.migrate') }}" class="subnav-link {{ 'active' if ep.startswith('web.migrate') }}">{{ icon('archive') }}<span>Export &amp; migrate</span></a>
+        {% endif %}
         <a href="{{ url_for('web.settings') }}" class="subnav-link {{ 'active' if ep == 'web.settings' }}">{{ icon('gear') }}<span>Settings</span></a>
         <a href="{{ url_for('web.account') }}" class="subnav-link {{ 'active' if ep == 'web.account' }}">{{ icon('user') }}<span>Users</span></a>
       </div>
@@ -257,7 +261,9 @@
           {% endif %}
           <a href="{{ url_for('web.credentials') }}" class="mobile-nav-link {{ 'active' if ep.startswith('web.credential') }}">{{ icon('key') }}<span>Credentials</span></a>
           <a href="{{ url_for('web.github') }}" class="mobile-nav-link {{ 'active' if ep == 'web.github' }}">{{ icon('git') }}<span>GitHub sync</span></a>
+          {% if current_user_obj and current_user_obj.is_group_admin %}
           <a href="{{ url_for('web.migrate') }}" class="mobile-nav-link {{ 'active' if ep.startswith('web.migrate') }}">{{ icon('archive') }}<span>Export &amp; migrate</span></a>
+          {% endif %}
           <a href="{{ url_for('web.settings') }}" class="mobile-nav-link {{ 'active' if ep == 'web.settings' }}">{{ icon('gear') }}<span>Settings</span></a>
           <a href="{{ url_for('web.account') }}" class="mobile-nav-link {{ 'active' if ep == 'web.account' }}">{{ icon('user') }}<span>Users</span></a>
         </div>

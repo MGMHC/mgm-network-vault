@@ -205,7 +205,7 @@ class Device(db.Model):
 
 class Backup(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    device_id = db.Column(db.Integer, db.ForeignKey("device.id"), nullable=False)
+    device_id = db.Column(db.Integer, db.ForeignKey("device.id"), nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=now, index=True)
     status = db.Column(db.String(16), default="success")  # success | changed | error
     config_hash = db.Column(db.String(64))
@@ -282,9 +282,9 @@ class Job(db.Model):
 class LogEntry(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     ts = db.Column(db.DateTime, default=now, index=True)
-    level = db.Column(db.String(10), default="INFO")  # INFO | WARN | ERROR
-    category = db.Column(db.String(32), default="general")
-    device_id = db.Column(db.Integer, db.ForeignKey("device.id", ondelete="SET NULL"), nullable=True)
+    level = db.Column(db.String(10), default="INFO", index=True)  # INFO | WARN | ERROR
+    category = db.Column(db.String(32), default="general", index=True)
+    device_id = db.Column(db.Integer, db.ForeignKey("device.id", ondelete="SET NULL"), nullable=True, index=True)
     device_name = db.Column(db.String(128), nullable=True)
     user = db.Column(db.String(64), default="")
     message = db.Column(db.Text, nullable=False)
@@ -338,6 +338,13 @@ def set_setting(key, value):
         s.value = str(value)
     else:
         db.session.add(Setting(key=key, value=str(value)))
+
+
+def password_version(user):
+    """Short fingerprint of a user's password hash, stored in the session at login.
+    Any password change alters it, which invalidates that user's other sessions."""
+    import hashlib
+    return hashlib.sha256((user.password_hash or "").encode()).hexdigest()[:16]
 
 
 # =============================================================================

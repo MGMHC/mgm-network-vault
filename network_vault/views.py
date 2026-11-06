@@ -8,12 +8,14 @@ from datetime import datetime, timedelta
 
 from flask import (Blueprint, Response, abort, current_app, flash, jsonify, redirect, render_template,
                    request, send_file, session, stream_with_context, url_for)
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
+from sqlalchemy.orm import selectinload
 
 from . import config, engine, gitsync, lifecycle, mailer, operations, portable, reach, updater
 from .diffing import side_by_side, stats, unified
 from .models import (DEFAULT_SETTINGS, MODELS, PLATFORMS, ROLES, USER_ROLES, Backup, Credential, Device, Job,
-                     LogEntry, Schedule, Site, User, db, get_setting, now, set_setting)
+                     LogEntry, Schedule, Site, User, db, get_int, get_setting, now, password_version,
+                     set_setting)
 from .scheduler import make_trigger, next_run, resolve_targets, run_schedule, sync_schedules
 from .util import BACKUP_DIR, BASE_DIR, decrypt, encrypt, log_event, read_backup_file, safe_name
 from .version import __version__
@@ -61,12 +63,12 @@ def _active_site_id():
 
 
 def require_write(f):
-    """Decorator: 403 if user is read-only."""
+    """Decorator: 403 if user is read-only (or not a known user)."""
     from functools import wraps
     @wraps(f)
     def wrapper(*a, **kw):
         u = _current_user()
-        if u and not u.can_write:
+        if not u or not u.can_write:
             abort(403, "Your account is read-only. Contact an admin.")
         return f(*a, **kw)
     return wrapper
@@ -78,7 +80,7 @@ def require_admin(f):
     @wraps(f)
     def wrapper(*a, **kw):
         u = _current_user()
-        if u and not u.is_admin:
+        if not u or not u.is_admin:
             abort(403, "Admin access required.")
         return f(*a, **kw)
     return wrapper
@@ -90,10 +92,31 @@ def require_group_admin(f):
     @wraps(f)
     def wrapper(*a, **kw):
         u = _current_user()
-        if u and not u.is_group_admin:
+        if not u or not u.is_group_admin:
             abort(403, "Group Administrator access required.")
         return f(*a, **kw)
     return wrapper
+
+
+def _check_device_access(device):
+    """403 unless the current user may see this device's site."""
+    u = _current_user()
+    if not u or not device or not u.has_site_access(device.site_id):
+        abort(403, "Cannot access devices belonging to another site.")
+
+
+def _authorized_device_ids(ids, need_backup=True):
+    """Validate a list of device ids from a JSON action: the user must be allowed to trigger
+    actions and have site access to every device. Returns the ids of devices that exist."""
+    u = _current_user()
+    if not u or (need_backup and not u.can_backup):
+        abort(403, "Your account is read-only. Contact an admin.")
+    if not ids:
+        return []
+    devs = Device.query.filter(Device.id.in_(ids)).all()
+    if any(not u.has_site_access(d.site_id) for d in devs):
+        abort(403, "Cannot run actions on devices belonging to another site.")
+    return [d.id for d in devs]
 
 
 @bp.app_template_filter("dt")
@@ -156,12 +179,13 @@ def login():
             session.permanent = True
             session["user"] = u.username
             session["must_change"] = bool(u.must_change)
+            session["pwv"] = password_version(u)
             u.last_login_at = now()
             db.session.commit()
             log_event("User logged in", "auth", user=u.username, details=request.remote_addr)
             nxt = request.args.get("next") or ""
             return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("web.dashboard"))
-        log_event(f"Failed login for '{request.form.get('username', '')}'", "auth", "WARN",
+        log_event(f"Failed login for '{request.form.get('username', '')[:64]}'", "auth", "WARN",
                   user="-", details=request.remote_addr)
         flash("Invalid username or password", "error")
     return render_template("login.html")
@@ -190,8 +214,13 @@ def forgot_password():
             )
         ).first()
 
-        if u and u.email:
-            base_url = get_setting("app_url") or request.host_url.rstrip("/")
+        # The reset link must point at the configured public URL. Never build it from the request's
+        # Host / X-Forwarded-Host header: an attacker controls that and could steal the token.
+        base_url = (get_setting("app_url") or "").strip().rstrip("/")
+        if u and u.email and not base_url:
+            log_event("Password reset email not sent: 'Application Public Web URL' is not configured in Settings",
+                      "auth", "WARN", user=u.username, details=request.remote_addr)
+        elif u and u.email:
             ok, err = mailer.send_password_reset_email(u, base_url)
             if ok:
                 log_event(f"Password reset link emailed to '{u.email}' for user '{u.username}'", "auth",
@@ -370,11 +399,23 @@ def sites():
     return render_template("sites.html", sites=all_sites_list, edit=edit_site, stats=site_stats)
 
 
+def _site_admin_can_manage(me, u):
+    """A site admin may manage a user only if that user is not a group admin, belongs to at least
+    one site, and every site they belong to is one of the site admin's own sites."""
+    if u.is_group_admin:
+        return False
+    u_sites = set(u.allowed_site_ids or [])
+    my_sites = set(me.allowed_site_ids or [])
+    return bool(u_sites) and u_sites.issubset(my_sites)
+
+
 @bp.route("/account", methods=["GET", "POST"])
 def account():
     me = User.query.filter_by(username=session["user"]).first_or_404()
     if request.method == "POST":
         action = request.form.get("action")
+        if session.get("must_change") and action != "password":
+            abort(403, "Change your password before doing anything else.")
         if action == "password":
             if not me.check_password(request.form.get("current", "")):
                 flash("Current password is wrong", "error")
@@ -387,6 +428,7 @@ def account():
                 me.must_change = False
                 session["must_change"] = False
                 db.session.commit()
+                session["pwv"] = password_version(me)  # keep this session; others are signed out
                 log_event("Password changed", "auth")
                 flash("Password changed", "ok")
                 return redirect(url_for("web.dashboard"))
@@ -439,11 +481,9 @@ def account():
             if u and u.username != me.username and new_role in USER_ROLES:
                 if not me.is_group_admin:
                     # Site admin can only manage users within their own sites
-                    u_sites = set(u.allowed_site_ids or ([u.site_id] if u.site_id else []))
-                    my_sites = set(me.allowed_site_ids or ([me.site_id] if me.site_id else []))
-                    if not u_sites.issubset(my_sites) or new_role == "group-admin":
+                    if not _site_admin_can_manage(me, u) or new_role == "group-admin":
                         abort(403, "Cannot modify users outside your assigned site(s).")
-                
+
                 u.role = new_role
                 if "email" in request.form:
                     u.email = request.form.get("email", "").strip() or None
@@ -475,11 +515,8 @@ def account():
                 abort(403, "Admin access required.")
             u = db.session.get(User, int(request.form.get("id", 0)))
             if u and u.username != me.username:
-                if not me.is_group_admin:
-                    u_sites = set(u.allowed_site_ids or ([u.site_id] if u.site_id else []))
-                    my_sites = set(me.allowed_site_ids or ([me.site_id] if me.site_id else []))
-                    if not u_sites.issubset(my_sites):
-                        abort(403, "Cannot delete users outside your assigned site(s).")
+                if not me.is_group_admin and not _site_admin_can_manage(me, u):
+                    abort(403, "Cannot delete users outside your assigned site(s).")
                 db.session.delete(u)
                 db.session.commit()
                 log_event(f"User '{u.username}' deleted", "auth")
@@ -498,9 +535,7 @@ def account():
                 if not me.is_group_admin:
                     if u.is_group_admin:
                         abort(403, "Site administrators cannot reset passwords for group administrators.")
-                    u_sites = set(u.allowed_site_ids or ([u.site_id] if u.site_id else []))
-                    my_sites = set(me.allowed_site_ids or ([me.site_id] if me.site_id else []))
-                    if not u_sites.intersection(my_sites) and not (u.site_id in my_sites):
+                    if not _site_admin_can_manage(me, u):
                         abort(403, "Cannot reset password for users outside your assigned site(s).")
                 u.set_password(new_pw)
                 u.must_change = require_change
@@ -552,17 +587,26 @@ def dashboard():
     floors = sorted(floor_map.items(), key=lambda item: _group_sort_key(item[0]))
 
     # --- Chart data: backups + changes per day over last 14 days ---
+    # One grouped query for all 14 days (was 28 separate COUNT queries).
     chart_days = 14
+    first_day = (now() - timedelta(days=chart_days - 1)).replace(hour=0, minute=0, second=0)
+    day_col = func.date(Backup.created_at)
+    per_day_q = _site_filter(
+        db.session.query(day_col, func.count(Backup.id),
+                         func.sum(case((Backup.changed.is_(True), 1), else_=0)))
+        .join(Device, Backup.device_id == Device.id)
+        .filter(Backup.created_at >= first_day)
+        .group_by(day_col), Device)
+    per_day = {d: (n, ch or 0) for d, n, ch in per_day_q.all()}
     day_labels = []
     daily_backups = []
     daily_changes = []
-    for i in range(chart_days - 1, -1, -1):
-        day_start = (now() - timedelta(days=i)).replace(hour=0, minute=0, second=0)
-        day_end   = (now() - timedelta(days=i)).replace(hour=23, minute=59, second=59)
-        day_labels.append(day_start.strftime("%d %b"))
-        q_day = _site_filter(Backup.query.filter(Backup.created_at >= day_start, Backup.created_at <= day_end).join(Device), Device)
-        daily_backups.append(q_day.count())
-        daily_changes.append(q_day.filter(Backup.changed.is_(True)).count())
+    for i in range(chart_days):
+        day = first_day + timedelta(days=i)
+        n, ch = per_day.get(day.strftime("%Y-%m-%d"), (0, 0))
+        day_labels.append(day.strftime("%d %b"))
+        daily_backups.append(n)
+        daily_changes.append(int(ch))
 
     # --- Reachability chart data ---
     reach_data = {
@@ -613,9 +657,17 @@ def devices():
     
     g_q = _site_filter(db.session.query(Device.group).distinct(), Device)
     groups = sorted((g for (g,) in g_q if g), key=_group_sort_key)
+    # Load site + credential up front and count backups in one grouped query, instead of
+    # ~3 lazy queries per table row.
+    q = q.options(selectinload(Device.site), selectinload(Device.credential))
     dev_list = sorted(q.all(), key=lambda d: (_group_sort_key(d.group), d.name))
+    backup_counts = {}
+    if dev_list:
+        backup_counts = dict(db.session.query(Backup.device_id, func.count(Backup.id))
+                             .filter(Backup.device_id.in_([d.id for d in dev_list]))
+                             .group_by(Backup.device_id).all())
     return render_template("devices.html", devices=dev_list, f=f, groups=groups,
-                           PLATFORMS=PLATFORMS, ROLES=ROLES)
+                           PLATFORMS=PLATFORMS, ROLES=ROLES, backup_counts=backup_counts)
 
 
 @bp.route("/devices/new", methods=["GET", "POST"])
@@ -649,8 +701,19 @@ def device_edit(dev_id=None):
             d.legacy_ssh = _bool("legacy_ssh")
             d.enabled = _bool("enabled")
             d.notes = request.form.get("notes", "")
-            d.credential_id = int(request.form["credential_id"]) if request.form.get("credential_id") else None
-            
+            cred_raw = request.form.get("credential_id", "")
+            if cred_raw.isdigit():
+                cred = db.session.get(Credential, int(cred_raw))
+                # A credential from a site the user can't access must never be bound to a host
+                # they control - the switch login would hand them its password.
+                if not cred:
+                    abort(400, "Unknown credential profile.")
+                if cred.id != d.credential_id and not u.has_site_access(cred.site_id):
+                    abort(403, "That credential profile belongs to another site.")
+                d.credential_id = cred.id
+            else:
+                d.credential_id = None
+
             # Site assignment
             site_id_val = request.form.get("site_id")
             if site_id_val and site_id_val.isdigit():
@@ -760,6 +823,7 @@ def devices_template():
 
 
 @bp.route("/devices/import", methods=["POST"])
+@require_write
 def devices_import():
     f = request.files.get("file")
     if f and request.content_length and request.content_length > 5 * 1024 * 1024:
@@ -768,10 +832,17 @@ def devices_import():
     if not f:
         flash("Choose a CSV file", "error")
         return redirect(url_for("web.devices"))
+    me = _current_user()
     site_id = _active_site_id()
     if not site_id:
-        first_s = Site.query.order_by(Site.id).first()
-        site_id = first_s.id if first_s else None
+        allowed = me.allowed_site_ids
+        if allowed:
+            site_id = allowed[0]
+        else:
+            first_s = Site.query.order_by(Site.id).first()
+            site_id = first_s.id if first_s else None
+    if not me.has_site_access(site_id):
+        abort(403, "Cannot import devices into another site.")
     cred_q = Credential.query
     if site_id:
         cred_q = cred_q.filter(Credential.site_id == site_id)
@@ -790,6 +861,9 @@ def devices_import():
             errors.append(f"line {i}: unknown platform '{row['platform']}'")
             continue
         d = Device.query.filter_by(name=row["name"]).first()
+        if d is not None and not me.has_site_access(d.site_id):
+            errors.append(f"line {i}: device '{row['name']}' belongs to another site (skipped)")
+            continue
         new = d is None
         d = d or Device(name=row["name"])
         d.site_id = d.site_id or site_id
@@ -840,6 +914,7 @@ def api_backup():
         ids = [d.id for d in q.all()]
     else:
         ids = _ids(data.get("ids", []))
+    ids = _authorized_device_ids(ids)
     if not ids:
         return jsonify(error="No devices selected"), 400
     log_event(f"Manual backup requested for {len(ids)} device(s)", "backup")
@@ -862,6 +937,7 @@ def api_check():
         ids = [d.id for d in q.all()]
     else:
         ids = _ids(data.get("ids", []))
+    ids = _authorized_device_ids(ids)
     res = reach.check_devices(current_app._get_current_object(), ids)
     return jsonify({str(k): {"status": s, "ping_ms": r} for k, (s, r) in res.items()})
 
@@ -869,7 +945,7 @@ def api_check():
 @bp.route("/api/detect", methods=["POST"])
 def api_detect():
     data = request.get_json(silent=True) or {}
-    ids = _ids(data.get("ids", []))
+    ids = _authorized_device_ids(_ids(data.get("ids", [])))
     if not ids:
         return jsonify(error="No devices selected"), 400
     user = session.get("user")
@@ -1268,6 +1344,9 @@ def api_lifecycle_fetch_all():
     devs = q_devs.filter(Device.enabled.is_(True), Device.credential_id.isnot(None)).all()
     dev_ids = [d.id for d in devs]
     app = current_app._get_current_object()
+    # Read request-bound values now: the worker threads below have no request context.
+    username = session.get("user")
+    max_workers = get_int("max_workers")
 
     def stream_discover():
         import json as _json
@@ -1305,7 +1384,7 @@ def api_lifecycle_fetch_all():
             ok = False
             try:
                 with app.app_context():
-                    ok = engine.discover_device(did, user=session.get("user"))
+                    ok = engine.discover_device(did, user=username)
             except Exception as e:
                 q.put({"type": "log", "level": "error", "msg": f"[{dev_name}] SSH discovery error: {e}"})
 
@@ -1339,7 +1418,7 @@ def api_lifecycle_fetch_all():
 
         def run_all():
             try:
-                workers = min(total, max(2, get_int("max_workers") if app else 4))
+                workers = min(total, max(2, max_workers))
                 with ThreadPoolExecutor(max_workers=workers) as pool:
                     list(pool.map(worker, dev_ids))
                 q.put({"type": "complete", "msg": "Live discovery finished across switches."})
@@ -1357,7 +1436,7 @@ def api_lifecycle_fetch_all():
                 break
             yield _json.dumps(item) + "\n"
 
-    log_event(f"Started live hardware & firmware discovery fetch across {len(dev_ids)} switches", "device", user=session.get("user"))
+    log_event(f"Started live hardware & firmware discovery fetch across {len(dev_ids)} switches", "device", user=username)
     return Response(
         stream_with_context(stream_discover()),
         mimetype="application/x-ndjson",
@@ -1458,21 +1537,34 @@ def backups():
         except (ValueError, TypeError):
             pass
     page = max(1, int(request.args.get("page", 1)))
-    p = q.order_by(Backup.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
-    
+    p = (q.options(selectinload(Backup.device).selectinload(Device.site))
+         .order_by(Backup.created_at.desc()).paginate(page=page, per_page=50, error_out=False))
+
+    # Previous backup of the same device for every row, in one query (Backup.previous would
+    # run a separate query per row - twice).
+    prev_ids = {}
+    if p.items:
+        older = db.aliased(Backup)
+        prev_sq = (db.select(older.id)
+                   .where(older.device_id == Backup.device_id, older.created_at < Backup.created_at)
+                   .order_by(older.created_at.desc()).limit(1).scalar_subquery())
+        prev_ids = dict(db.session.query(Backup.id, prev_sq)
+                        .filter(Backup.id.in_([b.id for b in p.items])).all())
+
     size_q = _site_filter(db.session.query(func.sum(Backup.size)).join(Device), Device)
     count_q = _site_filter(db.session.query(func.count(Backup.id)).join(Device), Device)
     dev_q = _site_filter(Device.query, Device)
         
     total_size = size_q.scalar() or 0
     total_backups = count_q.scalar() or 0
-    return render_template("backups.html", p=p, f=f, devices=dev_q.order_by(Device.name).all(),
+    return render_template("backups.html", p=p, f=f, prev_ids=prev_ids, devices=dev_q.order_by(Device.name).all(),
                            total_size=total_size, total=total_backups)
 
 
 @bp.route("/backups/<int:bid>")
 def backup_view(bid):
     b = db.get_or_404(Backup, bid)
+    _check_device_access(b.device)
     part = request.args.get("part", "conf")
     rel = {"conf": b.path, "set": b.set_path, "info": b.info_path}.get(part) or b.path
     return render_template("backup_view.html", b=b, part=part, text=read_backup_file(rel), prev=b.previous)
@@ -1481,6 +1573,7 @@ def backup_view(bid):
 @bp.route("/backups/<int:bid>/download")
 def backup_download(bid):
     b = db.get_or_404(Backup, bid)
+    _check_device_access(b.device)
     rel = {"conf": b.path, "set": b.set_path, "info": b.info_path}.get(request.args.get("part", "conf")) or b.path
     path = (BACKUP_DIR / rel).resolve()
     if not path.exists():
@@ -1490,8 +1583,10 @@ def backup_download(bid):
 
 
 @bp.route("/backups/<int:bid>/pin", methods=["POST"])
+@require_write
 def backup_pin(bid):
     b = db.get_or_404(Backup, bid)
+    _check_device_access(b.device)
     b.pinned = not b.pinned
     db.session.commit()
     flash("Backup pinned (kept forever)" if b.pinned else "Backup unpinned", "ok")
@@ -1499,8 +1594,10 @@ def backup_pin(bid):
 
 
 @bp.route("/backups/<int:bid>/delete", methods=["POST"])
+@require_write
 def backup_delete(bid):
     b = db.get_or_404(Backup, bid)
+    _check_device_access(b.device)
     dev = b.device
     log_event(f"Backup deleted: {b.path}", "backup", "WARN", dev, commit=False)
     engine.delete_backup(b)
@@ -1518,6 +1615,8 @@ def backups_zip():
         items = Backup.query.filter(Backup.id.in_(_ids(request.args.get("ids", "").split(",")))).all()
     if request.args.get("device"):
         items = [b for b in items if b.device_id == int(request.args["device"])]
+    me = _current_user()
+    items = [b for b in items if me.has_site_access(b.device.site_id)]
     if not items:
         flash("Nothing to download", "error")
         return redirect(request.referrer or url_for("web.backups"))
@@ -1540,6 +1639,8 @@ def compare():
     if not a or not b:
         flash("Pick two backups to compare", "error")
         return redirect(request.referrer or url_for("web.backups"))
+    _check_device_access(a.device)
+    _check_device_access(b.device)
     if a.created_at > b.created_at:
         a, b = b, a
     fmt = request.args.get("fmt") or ("set" if a.set_path and b.set_path else "conf")
@@ -1564,6 +1665,8 @@ def compare():
 def compare_download():
     a = db.get_or_404(Backup, int(request.args["a"]))
     b = db.get_or_404(Backup, int(request.args["b"]))
+    _check_device_access(a.device)
+    _check_device_access(b.device)
     if a.created_at > b.created_at:
         a, b = b, a
     fmt = request.args.get("fmt", "conf")
@@ -1590,6 +1693,7 @@ def schedules():
 
 
 @bp.route("/schedules/save", methods=["POST"])
+@require_write
 def schedule_save():
     sid = request.form.get("id")
     s = db.session.get(Schedule, int(sid)) if sid else Schedule()
@@ -1633,6 +1737,7 @@ def schedule_save():
 
 
 @bp.route("/schedules/<int:sid>/<action>", methods=["POST"])
+@require_write
 def schedule_action(sid, action):
     s = db.get_or_404(Schedule, sid)
     u = _current_user()
@@ -1708,6 +1813,7 @@ def logs_export():
 
 
 @bp.route("/logs/purge", methods=["POST"])
+@require_group_admin
 def logs_purge():
     days = int(request.form.get("days") or 0)
     n = LogEntry.query.filter(LogEntry.ts < now() - timedelta(days=days)).delete()
@@ -1722,6 +1828,10 @@ def logs_purge():
 @bp.route("/github", methods=["GET", "POST"])
 def github():
     if request.method == "POST":
+        # Repo URL, token, secret masking and pushes are global: Group Administrators only.
+        me = _current_user()
+        if not me or not me.is_group_admin:
+            abort(403, "Group Administrator access required.")
         action = request.form.get("action")
         app = current_app._get_current_object()
         try:
@@ -1781,6 +1891,7 @@ def api_github_progress():
 # --------------------------------------------------------------------------- export & migrate
 
 @bp.route("/migrate")
+@require_group_admin
 def migrate():
     import platform
     import sys
@@ -1803,6 +1914,7 @@ def migrate():
 
 
 @bp.route("/migrate/export", methods=["POST"])
+@require_group_admin
 def migrate_export():
     pw = request.form.get("passphrase", "")
     if pw != request.form.get("confirm", ""):
@@ -1832,6 +1944,7 @@ def migrate_export():
 
 
 @bp.route("/migrate/import", methods=["POST"])
+@require_group_admin
 def migrate_import():
     f = request.files.get("file")
     if not f or not f.filename:
@@ -1855,6 +1968,7 @@ def migrate_import():
 
 
 @bp.route("/migrate/cancel", methods=["POST"])
+@require_group_admin
 def migrate_cancel():
     portable.cancel_restore(BASE_DIR)
     log_event("Staged restore cancelled", "system")
@@ -1863,6 +1977,7 @@ def migrate_cancel():
 
 
 @bp.route("/migrate/restart", methods=["POST"])
+@require_group_admin
 def migrate_restart():
     import os
     import threading
@@ -1878,6 +1993,7 @@ def migrate_restart():
 
 
 @bp.route("/migrate/package")
+@require_group_admin
 def migrate_package():
     log_event("Application package downloaded", "system")
     return Response(portable.app_package(config.APP_ROOT), mimetype="application/zip", headers={
@@ -1885,6 +2001,7 @@ def migrate_package():
 
 
 @bp.route("/migrate/config-from-export")
+@require_group_admin
 def migrate_exported_config():
     p = BASE_DIR / "config.toml.from-export"
     if not p.exists():
@@ -1939,6 +2056,7 @@ def credentials():
 
 
 @bp.route("/credentials/<int:cid>/delete", methods=["POST"])
+@require_write
 def credential_delete(cid):
     c = db.get_or_404(Credential, cid)
     u = _current_user()
@@ -1955,11 +2073,18 @@ def credential_delete(cid):
     return redirect(url_for("web.credentials"))
 
 
+GROUP_ADMIN_SETTINGS = {"smtp_enabled", "smtp_host", "smtp_port", "smtp_encryption", "smtp_user",
+                        "smtp_pass_enc", "smtp_from_name", "smtp_from", "app_url"}
+
+
 @bp.route("/settings", methods=["GET", "POST"])
 @require_admin
 def settings():
     if request.method == "POST":
+        me = _current_user()
         for k in DEFAULT_SETTINGS:
+            if k in GROUP_ADMIN_SETTINGS and not me.is_group_admin:
+                continue  # mail server and public URL affect every site's password resets
             if k == "skip_unchanged":
                 set_setting(k, "1" if _bool(k) else "0")
             elif k == "smtp_enabled":
@@ -1983,7 +2108,7 @@ def settings():
 
 
 @bp.route("/settings/test-email", methods=["POST"])
-@require_admin
+@require_group_admin
 def settings_test_email():
     target = request.form.get("test_email", "").strip() or get_setting("smtp_from") or "donotreply@mgmhealthcare.in"
     ok, err = mailer.send_email(
@@ -2002,7 +2127,7 @@ def settings_test_email():
 
 
 @bp.route("/api/update/check", methods=["POST"])
-@require_admin
+@require_group_admin
 def api_update_check():
     """Check GitHub repository for software updates."""
     status = updater.check_for_updates(force_fetch=True)
@@ -2010,7 +2135,7 @@ def api_update_check():
 
 
 @bp.route("/api/update/apply", methods=["POST"])
-@require_admin
+@require_group_admin
 def api_update_apply():
     """Pull the latest software update from GitHub and restart the service."""
     res = updater.apply_update()

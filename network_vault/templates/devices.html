@@ -3,7 +3,10 @@
 {% block title %}Devices{% endblock %}
 {% block content %}
 <div class="topbar">
-  <div><h1>Devices</h1><div class="sub">{{ devices|length }} switch(es) shown</div></div>
+  <div>
+    <h1>Devices</h1>
+    <div class="sub">{{ devices|length }} switch(es) shown</div>
+  </div>
   <div class="actions">
     <a class="btn" href="{{ url_for('web.devices_export') }}">{{ icon('download') }}Export CSV</a>
     <a class="btn primary" href="{{ url_for('web.device_edit') }}">{{ icon('plus') }}Add device</a>
@@ -13,10 +16,22 @@
 <div class="card flush">
   <form class="filters" method="get">
     <div><label>Search</label><input type="search" name="q" value="{{ f.q }}" placeholder="name, IP, location"></div>
-    <div><label>Platform</label><select name="platform"><option value="">All</option>{% for k, v in PLATFORMS.items() %}<option value="{{ k }}" {{ 'selected' if f.platform == k }}>{{ v }}</option>{% endfor %}</select></div>
-    <div><label>Role</label><select name="role"><option value="">All</option>{% for r in ROLES %}<option {{ 'selected' if f.role == r }}>{{ r }}</option>{% endfor %}</select></div>
-    <div><label>Group</label><select name="group"><option value="">All</option>{% for g in groups %}<option {{ 'selected' if f.group == g }}>{{ g }}</option>{% endfor %}</select></div>
-    <div><label>Status</label><select name="status"><option value="">All</option>{% for s in ['up','down','ssh-down','unknown'] %}<option {{ 'selected' if f.status == s }}>{{ s }}</option>{% endfor %}</select></div>
+    <div><label>Platform</label><select name="platform">
+        <option value="">All</option>{% for k, v in PLATFORMS.items() %}<option value="{{ k }}" {{ 'selected' if
+          f.platform==k }}>{{ v }}</option>{% endfor %}
+      </select></div>
+    <div><label>Role</label><select name="role">
+        <option value="">All</option>{% for r in ROLES %}<option {{ 'selected' if f.role==r }}>{{ r }}</option>{% endfor
+        %}
+      </select></div>
+    <div><label>Group</label><select name="group">
+        <option value="">All</option>{% for g in groups %}<option {{ 'selected' if f.group==g }}>{{ g }}</option>{%
+        endfor %}
+      </select></div>
+    <div><label>Status</label><select name="status">
+        <option value="">All</option>{% for s in ['up','down','ssh-down','unknown'] %}<option {{ 'selected' if
+          f.status==s }}>{{ s }}</option>{% endfor %}
+      </select></div>
     <button class="btn">Filter</button> <a class="btn" href="{{ url_for('web.devices') }}">Reset</a>
   </form>
   <div class="card-head">
@@ -27,56 +42,65 @@
     </div>
   </div>
   <div class="table-wrap">
-  <table class="devices-table">
-    <thead>
-      <tr>
-        <th class="col-cb"><input type="checkbox" class="sel-all"></th>
-        {% if current_site_id == 'all' %}<th class="col-site">Site</th>{% endif %}
-        <th class="col-name">Name</th>
-        <th class="col-host">Host</th>
-        <th class="col-platform">Platform</th>
-        <th class="col-model">Model</th>
-        <th class="col-role">Role</th>
-        <th class="col-group">Group / Location</th>
-        <th class="col-credential">Credential</th>
-        <th class="col-status">Status</th>
-        <th class="col-backup">Last backup</th>
-        <th class="col-backups num">Backups</th>
-        <th class="col-action"></th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for d in devices %}
-      <tr {% if not d.enabled %}style="opacity:.5" title="disabled"{% endif %}>
-        <td class="col-cb"><input type="checkbox" class="sel" value="{{ d.id }}"></td>
-        {% if current_site_id == 'all' %}
-        <td class="col-site"><span class="badge blue" style="font-size:10px">{{ d.site.code if d.site else '—' }}</span></td>
-        {% endif %}
-        <td class="col-name"><a href="{{ url_for('web.device_detail', dev_id=d.id) }}" {% if d.legacy_ssh %}title="Legacy SSH algorithms enabled"{% endif %}><b>{{ d.name }}</b></a>
-          {% if d.is_vc %}<span class="badge blue">VC</span>{% endif %}</td>
-        <td class="col-host mono">{{ d.host }}{% if d.port != 22 %}:{{ d.port }}{% endif %}</td>
-        <td class="col-platform">{{ 'Junos' if d.is_juniper else ('C1300' if d.platform == 'cisco_c1300' else 'IOS') }}</td>
-        <td class="col-model">{{ d.model_label }}</td>
-        <td class="col-role">{{ d.role }}</td>
-        <td class="col-group">{{ d.group or '—' }}<div class="muted small">{{ d.location }}</div></td>
-        <td class="col-credential">{{ d.credential.name if d.credential else '⚠ none' }}</td>
-        <td class="col-status">{{ status_badge(d.status) }}</td>
-        <td class="col-backup">{{ backup_badge(d) }} <span class="muted small">{{ d.last_backup_at|ago }}</span></td>
-        <td class="col-backups num">{{ d.backups.count() }}</td>
-        <td class="col-action"><a class="btn sm" href="{{ url_for('web.device_edit', dev_id=d.id) }}">Edit</a></td>
-      </tr>
-    {% else %}<tr><td colspan="13" class="empty">No devices match.</td></tr>{% endfor %}
-    </tbody>
-  </table>
+    <table class="devices-table">
+      <thead>
+        <tr>
+          <th class="col-cb"><input type="checkbox" class="sel-all"></th>
+          {% if current_site_id == 'all' %}<th class="col-site">Site</th>{% endif %}
+          <th class="col-name">Name</th>
+          <th class="col-host">Host</th>
+          <th class="col-platform">Platform</th>
+          <th class="col-model">Model</th>
+          <th class="col-role">Role</th>
+          <th class="col-group">Group / Location</th>
+          <th class="col-credential">Credential</th>
+          <th class="col-status">Status</th>
+          <th class="col-backup">Last backup</th>
+          <th class="col-backups num">Backups</th>
+          <th class="col-action"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in devices %}
+        <tr {% if not d.enabled %}style="opacity:.5" title="disabled" {% endif %}>
+          <td class="col-cb"><input type="checkbox" class="sel" value="{{ d.id }}"></td>
+          {% if current_site_id == 'all' %}
+          <td class="col-site"><span class="badge blue" style="font-size:10px">{{ d.site.code if d.site else '—'
+              }}</span></td>
+          {% endif %}
+          <td class="col-name"><a href="{{ url_for('web.device_detail', dev_id=d.id) }}" {% if d.legacy_ssh
+              %}title="Legacy SSH algorithms enabled" {% endif %}><b>{{ d.name }}</b></a>
+            {% if d.is_vc %}<span class="badge blue">VC</span>{% endif %}</td>
+          <td class="col-host mono">{{ d.host }}{% if d.port != 22 %}:{{ d.port }}{% endif %}</td>
+          <td class="col-platform">{{ 'Junos' if d.is_juniper else ('C1300' if d.platform == 'cisco_c1300' else 'IOS')
+            }}</td>
+          <td class="col-model">{{ d.model_label }}</td>
+          <td class="col-role">{{ d.role }}</td>
+          <td class="col-group">{{ d.group or '—' }}<div class="muted small">{{ d.location }}</div>
+          </td>
+          <td class="col-credential">{{ d.credential.name if d.credential else '⚠ none' }}</td>
+          <td class="col-status">{{ status_badge(d.status) }}</td>
+          <td class="col-backup">{{ backup_badge(d) }} <span class="muted small">{{ d.last_backup_at|ago }}</span></td>
+          <td class="col-backups num">{{ backup_counts.get(d.id, 0) }}</td>
+          <td class="col-action"><a class="btn sm" href="{{ url_for('web.device_edit', dev_id=d.id) }}">Edit</a></td>
+        </tr>
+        {% else %}<tr>
+          <td colspan="13" class="empty">No devices match.</td>
+        </tr>{% endfor %}
+      </tbody>
+    </table>
   </div>
 </div>
 
 <div class="card">
   <h2>Bulk import (CSV)</h2>
-  <p class="muted">Columns: <code>name, host, port, platform, role, group, location, is_vc, legacy_ssh, enabled, credential, notes</code>.
+  <p class="muted">Columns:
+    <code>name, host, port, platform, role, group, location, is_vc, legacy_ssh, enabled, credential, notes</code>.
     The switch model, software version and serial number are detected automatically after import.
-    Platform is one of <code>juniper_junos</code>, <code>cisco_c1300</code>, <code>cisco_ios</code>. Existing devices (matched by name) are updated.
-    <a href="{{ url_for('web.devices_template') }}">Download template</a>.</p>
+    Platform is one of <code>juniper_junos</code>, <code>cisco_c1300</code>, <code>cisco_ios</code>. Existing devices
+    (matched by name) are updated.
+    <a href="{{ url_for('web.devices_template') }}">Download template</a>.
+  </p>
   <form method="post" action="{{ url_for('web.devices_import') }}" enctype="multipart/form-data" class="actions">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="file" name="file" accept=".csv" required>
