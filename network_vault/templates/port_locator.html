@@ -216,6 +216,63 @@ let locatorLogs = [];
 let locatorCurrentRunId = null;
 let _locatorModalPollInterval = null;
 
+// Live progress while a trace streams. A proxy (IIS) can hold the stream back until the trace ends,
+// so the page also polls the run's status once a second. Both sources describe the same server-side
+// run: log lines are matched by position (the Nth log is the same line either way) and the bar
+// never moves backwards.
+let _locatorLivePoll = null;
+let _locatorLivePct = 0;
+let _locatorStreamLogs = 0;
+
+function setLocatorBar(pct) {
+  _locatorLivePct = Math.max(_locatorLivePct, Math.min(100, pct || 0));
+  document.getElementById('locatorModalBarFill').style.width = `${_locatorLivePct}%`;
+  document.getElementById('locatorModalPercent').textContent = `${_locatorLivePct}%`;
+}
+
+function applyLocatorLiveState(data) {
+  if (!data || data.status !== 'running') return;
+  setLocatorBar(data.percent);
+  const statusText = document.getElementById('locatorModalStatusText');
+  if (data.step) {
+    statusText.textContent = data.step;
+  } else if (data.device) {
+    statusText.textContent = `Probing switch ${data.done} of ${data.total}: ${data.device}…`;
+  }
+  if (data.total) {
+    document.getElementById('modalLocSwitches').textContent = `${data.done || 0} / ${data.total}`;
+  }
+  if (data.resolved_ip) document.getElementById('modalLocIp').textContent = data.resolved_ip;
+  if (data.resolved_mac) document.getElementById('modalLocMac').textContent = data.resolved_mac;
+  if (data.matches_found !== undefined && data.matches_found !== null) {
+    document.getElementById('modalLocMatches').textContent = data.matches_found;
+  }
+  for (let i = locatorLogs.length; i < (data.logs || []).length; i++) {
+    const l = data.logs[i];
+    appendLocatorLog(l.timestamp, l.level || 'info', l.msg);
+  }
+  const cur = setActiveLocatorTrace({
+    percent: _locatorLivePct, done: data.done, total: data.total, message: statusText.textContent,
+  });
+  if (cur && cur.minimized) renderGlobalLocatorDock(cur);
+}
+
+function startLocatorLivePoll(runId) {
+  stopLocatorLivePoll();
+  _locatorLivePoll = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/operations/port-locator/status/${runId}`);
+      if (!res.ok) return;  // 404 until the server has registered the run
+      applyLocatorLiveState(await res.json());
+    } catch (_) {}
+  }, 1000);
+}
+
+function stopLocatorLivePoll() {
+  if (_locatorLivePoll) clearInterval(_locatorLivePoll);
+  _locatorLivePoll = null;
+}
+
 function appendLocatorLog(timeStr, level, msg) {
   const term = document.getElementById('locatorTerminalLogs');
   if (!term) return;
@@ -565,6 +622,8 @@ async function handleLocate(e, full = false, scope = null) {
   modal.style.display = 'flex';
   term.innerHTML = '';
   locatorLogs = [];
+  _locatorLivePct = 0;
+  _locatorStreamLogs = 0;
   statusText.textContent = `Tracing '${q}'…`;
   barFill.style.width = '0%';
   percentText.textContent = '0%';
@@ -582,6 +641,7 @@ async function handleLocate(e, full = false, scope = null) {
   emptyCard.style.display = 'none';
 
   locatorAbortCtrl = new AbortController();
+  startLocatorLivePoll(runId);
 
   try {
     const res = await fetch('/api/operations/port-locator/stream', {
@@ -625,14 +685,16 @@ async function handleLocate(e, full = false, scope = null) {
         try { evt = JSON.parse(line); } catch (e) { continue; }
 
         if (evt.type === 'init') {
+          // The server logs the same "Starting trace" line as a log event; don't print it twice.
           document.getElementById('modalLocSwitches').textContent = `0 / ${evt.total}`;
-          appendLocatorLog(evt.timestamp, 'info', evt.msg);
           setActiveLocatorTrace({ total: evt.total, message: evt.msg });
         } else if (evt.type === 'log') {
-          appendLocatorLog(evt.timestamp, evt.level || 'info', evt.msg);
+          _locatorStreamLogs += 1;
+          if (_locatorStreamLogs > locatorLogs.length) {  // the status poll may have shown it already
+            appendLocatorLog(evt.timestamp, evt.level || 'info', evt.msg);
+          }
         } else if (evt.type === 'progress') {
-          barFill.style.width = `${evt.percent}%`;
-          percentText.textContent = `${evt.percent}%`;
+          setLocatorBar(evt.percent);
           statusText.textContent = evt.step || `Probing switch ${evt.done} of ${evt.total}: ${evt.device}…`;
           document.getElementById('modalLocSwitches').textContent = `${evt.done} / ${evt.total}`;
           if (evt.matches_found !== undefined) {
@@ -645,7 +707,7 @@ async function handleLocate(e, full = false, scope = null) {
             document.getElementById('modalLocMac').textContent = evt.resolved_mac;
           }
           const curTrace = setActiveLocatorTrace({
-            percent: evt.percent,
+            percent: _locatorLivePct,
             done: evt.done,
             total: evt.total,
             message: statusText.textContent,
@@ -654,6 +716,7 @@ async function handleLocate(e, full = false, scope = null) {
             renderGlobalLocatorDock(curTrace);
           }
         } else if (evt.type === 'complete') {
+          stopLocatorLivePoll();
           lastData = evt.result;
           barFill.style.width = '100%';
           percentText.textContent = '100%';
@@ -699,6 +762,7 @@ async function handleLocate(e, full = false, scope = null) {
     doneBtn.disabled = false;
     cancelBtn.disabled = true;
   } finally {
+    stopLocatorLivePoll();
     btn.disabled = false;
     locatorAbortCtrl = null;
   }
