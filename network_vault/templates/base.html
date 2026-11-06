@@ -7,13 +7,14 @@
   <meta name="color-scheme" content="{{ theme_mode }}">
   <meta name="csrf" content="{{ csrf_token }}">
   <title>{% block title %}MGM Network Vault{% endblock %} &middot; MGM Network Vault</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}?v={{ app_version }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v={{ app_version }}">
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
   <style>
-    /* Minimal custom scrollbars matching dark/light theme */
+    /* Minimal custom scrollbars; colours follow the theme tokens (theme.css) */
     * {
       scrollbar-width: thin;
-      scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+      scrollbar-color: var(--scroll-thumb) transparent;
     }
     *::-webkit-scrollbar {
       width: 5px;
@@ -23,25 +24,14 @@
       background: transparent;
     }
     *::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.16);
+      background: var(--scroll-thumb);
       border-radius: 4px;
     }
     *::-webkit-scrollbar-thumb:hover {
-      background: rgba(255, 255, 255, 0.3);
+      background: var(--scroll-thumb-hover);
     }
     *::-webkit-scrollbar-corner {
       background: transparent;
-    }
-    @media (prefers-color-scheme: light) {
-      * {
-        scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
-      }
-      *::-webkit-scrollbar-thumb {
-        background: rgba(0, 0, 0, 0.18);
-      }
-      *::-webkit-scrollbar-thumb:hover {
-        background: rgba(0, 0, 0, 0.32);
-      }
     }
   </style>
 </head>

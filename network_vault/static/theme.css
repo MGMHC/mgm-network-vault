@@ -1,0 +1,363 @@
+/* MGM Network Vault themes.
+   <html data-look="glass|normal" data-mode="dark|light"> picks one of four token sets below.
+   app.css (loaded after this file) only consumes tokens; the glass material (backdrop blur,
+   gradient edge, lens) lives here and only under [data-look=glass].
+   Values: approved mockup (.dark.crystal, .light.crystal, .normal.dark, .normal.light). */
+
+/* ── Shared, look-independent tokens ─────────────────────────────────────── */
+:root {
+  --radius: 16px;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+
+  /* Retired names, kept as aliases until their last uses are converted (Task 6). */
+  --mgm-blue: var(--accent);
+  --mgm-gold: var(--accent);
+  --mgm-light-gold: var(--accent);
+  --mgm-chrome: var(--accent-2);
+  --mgm-yellow: var(--warn);
+  --mgm-grey: var(--muted);
+  --side: var(--panel-strong);
+  --side-2: var(--panel-strong);
+  --side-text: var(--text);
+  --side-active: var(--accent-soft);
+  --side-accent: var(--accent);
+  --gold: var(--accent);
+  --gold-soft: var(--accent-soft);
+}
+
+:root[data-mode="dark"] { color-scheme: dark; }
+:root[data-mode="light"] { color-scheme: light; }
+
+/* ── Liquid glass · dark (crystal) ───────────────────────────────────────── */
+:root[data-look="glass"][data-mode="dark"] {
+  --bg: #0a0f1f;
+  --panel: linear-gradient(180deg, rgba(255, 255, 255, .035), rgba(255, 255, 255, 0));
+  --panel-strong: linear-gradient(180deg, rgba(8, 14, 30, .16), rgba(8, 14, 30, .22));
+  --panel-2: rgba(255, 255, 255, .04);
+  --border: rgba(255, 255, 255, .20);
+  --border-subtle: rgba(255, 255, 255, .09);
+  --overlay: rgba(10, 16, 32, .80);
+
+  --text: #f8fafc;
+  --text-dim: rgba(240, 244, 250, .72);
+  --muted: rgba(240, 244, 250, .5);
+
+  --accent: #38bdf8;
+  --accent-2: #0284c7;
+  --accent-soft: rgba(56, 189, 248, .16);
+  --accent-text: #ffffff;
+
+  --ok: #4ade80;
+  --ok-soft: rgba(74, 222, 128, .18);
+  --warn: #fbbf24;
+  --warn-soft: rgba(251, 191, 36, .18);
+  --bad: #f87171;
+  --bad-soft: rgba(248, 113, 113, .18);
+  --info-soft: rgba(56, 189, 248, .14);
+  --add: rgba(16, 185, 129, .22);
+  --add-strong: rgba(16, 185, 129, .42);
+  --del: rgba(239, 68, 68, .22);
+  --del-strong: rgba(239, 68, 68, .42);
+
+  --blur-panel: 3px;
+  --blur-overlay: 20px;
+  --edge-hi: rgba(255, 255, 255, .95);
+  --edge-lo: rgba(255, 255, 255, .18);
+  --rim: rgba(255, 255, 255, .70);
+  --glow: rgba(255, 255, 255, .35);
+  --drop: rgba(0, 0, 0, .45);
+  --shadow: inset 0 1px 0 var(--rim), inset 0 -14px 24px -18px var(--glow), 0 18px 40px -16px var(--drop);
+
+  --lens: rgba(255, 255, 255, .10);
+  --lens-rim: rgba(255, 255, 255, .55);
+  --lens-text: #f8fafc;
+  --chip: rgba(255, 255, 255, .07);
+  --chip-hover: rgba(255, 255, 255, .12);
+  --hair: rgba(255, 255, 255, .09);
+  --input: rgba(8, 14, 30, .35);
+  --btn-primary-bg: #ffffff;
+  --btn-primary-fg: #0b1220;
+  --scroll-thumb: rgba(255, 255, 255, .16);
+  --scroll-thumb-hover: rgba(255, 255, 255, .30);
+  --chart-text: rgba(240, 244, 250, .72);
+  --chart-grid: rgba(255, 255, 255, .09);
+  --code-bg: rgba(255, 255, 255, .06);
+}
+
+/* ── Liquid glass · light (crystal) ──────────────────────────────────────── */
+:root[data-look="glass"][data-mode="light"] {
+  --bg: #e6edf3;
+  --panel: linear-gradient(180deg, rgba(255, 255, 255, .18), rgba(255, 255, 255, .03));
+  --panel-strong: linear-gradient(180deg, rgba(255, 255, 255, .34), rgba(255, 255, 255, .26));
+  --panel-2: rgba(255, 255, 255, .30);
+  --border: rgba(15, 23, 42, .12);
+  --border-subtle: rgba(15, 23, 42, .08);
+  --overlay: rgba(255, 255, 255, .82);
+
+  --text: #0f172a;
+  --text-dim: rgba(15, 23, 42, .68);
+  --muted: rgba(15, 23, 42, .48);
+
+  --accent: #0284c7;
+  --accent-2: #0369a1;
+  --accent-soft: rgba(2, 132, 199, .12);
+  --accent-text: #ffffff;
+
+  --ok: #16a34a;
+  --ok-soft: rgba(22, 163, 74, .14);
+  --warn: #d97706;
+  --warn-soft: rgba(217, 119, 6, .14);
+  --bad: #dc2626;
+  --bad-soft: rgba(220, 38, 38, .12);
+  --info-soft: rgba(2, 132, 199, .10);
+  --add: rgba(22, 163, 74, .16);
+  --add-strong: rgba(22, 163, 74, .32);
+  --del: rgba(220, 38, 38, .14);
+  --del-strong: rgba(220, 38, 38, .30);
+
+  --blur-panel: 3px;
+  --blur-overlay: 20px;
+  --edge-hi: #ffffff;
+  --edge-lo: rgba(255, 255, 255, .45);
+  --rim: #ffffff;
+  --glow: rgba(255, 255, 255, .8);
+  --drop: rgba(40, 60, 90, .22);
+  --shadow: inset 0 1px 0 var(--rim), inset 0 -14px 24px -18px var(--glow), 0 18px 40px -16px var(--drop);
+
+  --lens: rgba(255, 255, 255, .55);
+  --lens-rim: #ffffff;
+  --lens-text: #0f172a;
+  --chip: rgba(15, 23, 42, .08);
+  --chip-hover: rgba(15, 23, 42, .12);
+  --hair: rgba(15, 23, 42, .08);
+  --input: rgba(255, 255, 255, .55);
+  --btn-primary-bg: #0f172a;
+  --btn-primary-fg: #ffffff;
+  --scroll-thumb: rgba(0, 0, 0, .18);
+  --scroll-thumb-hover: rgba(0, 0, 0, .32);
+  --chart-text: rgba(15, 23, 42, .68);
+  --chart-grid: rgba(15, 23, 42, .08);
+  --code-bg: rgba(15, 23, 42, .05);
+}
+
+/* ── Normal · dark (solid slate) ─────────────────────────────────────────── */
+:root[data-look="normal"][data-mode="dark"] {
+  --bg: #0b0f17;
+  --panel: #141a26;
+  --panel-strong: #141a26;
+  --panel-2: #182031;
+  --border: #232c3b;
+  --border-subtle: #1f2735;
+  --overlay: #141a26;
+
+  --text: #e8edf5;
+  --text-dim: #a3aec0;
+  --muted: #7a8699;
+
+  --accent: #38bdf8;
+  --accent-2: #0284c7;
+  --accent-soft: rgba(56, 189, 248, .14);
+  --accent-text: #ffffff;
+
+  --ok: #4ade80;
+  --ok-soft: rgba(74, 222, 128, .16);
+  --warn: #fbbf24;
+  --warn-soft: rgba(251, 191, 36, .16);
+  --bad: #f87171;
+  --bad-soft: rgba(248, 113, 113, .16);
+  --info-soft: rgba(56, 189, 248, .12);
+  --add: rgba(16, 185, 129, .22);
+  --add-strong: rgba(16, 185, 129, .42);
+  --del: rgba(239, 68, 68, .22);
+  --del-strong: rgba(239, 68, 68, .42);
+
+  --blur-panel: 0px;
+  --blur-overlay: 0px;
+  --edge-hi: #232c3b;
+  --edge-lo: #232c3b;
+  --rim: rgba(255, 255, 255, .04);
+  --glow: transparent;
+  --drop: rgba(0, 0, 0, .35);
+  --shadow: 0 1px 2px var(--drop);
+
+  --lens: #233047;
+  --lens-rim: #2f3f5c;
+  --lens-text: #7dd3fc;
+  --chip: #1c2433;
+  --chip-hover: #232c3b;
+  --hair: #1f2735;
+  --input: #0f141e;
+  --btn-primary-bg: #ffffff;
+  --btn-primary-fg: #0b1220;
+  --scroll-thumb: rgba(255, 255, 255, .16);
+  --scroll-thumb-hover: rgba(255, 255, 255, .30);
+  --chart-text: #a3aec0;
+  --chart-grid: #1f2735;
+  --code-bg: #0f141e;
+}
+
+/* ── Normal · light (white panels) ───────────────────────────────────────── */
+:root[data-look="normal"][data-mode="light"] {
+  --bg: #f3f5f8;
+  --panel: #ffffff;
+  --panel-strong: #ffffff;
+  --panel-2: #f7f9fb;
+  --border: #e2e7ee;
+  --border-subtle: #edf0f4;
+  --overlay: #ffffff;
+
+  --text: #0f172a;
+  --text-dim: #526079;
+  --muted: #7c889c;
+
+  --accent: #0284c7;
+  --accent-2: #0369a1;
+  --accent-soft: rgba(2, 132, 199, .10);
+  --accent-text: #ffffff;
+
+  --ok: #16a34a;
+  --ok-soft: rgba(22, 163, 74, .12);
+  --warn: #d97706;
+  --warn-soft: rgba(217, 119, 6, .12);
+  --bad: #dc2626;
+  --bad-soft: rgba(220, 38, 38, .10);
+  --info-soft: rgba(2, 132, 199, .08);
+  --add: rgba(22, 163, 74, .16);
+  --add-strong: rgba(22, 163, 74, .32);
+  --del: rgba(220, 38, 38, .14);
+  --del-strong: rgba(220, 38, 38, .30);
+
+  --blur-panel: 0px;
+  --blur-overlay: 0px;
+  --edge-hi: #e2e7ee;
+  --edge-lo: #e2e7ee;
+  --rim: #ffffff;
+  --glow: transparent;
+  --drop: rgba(15, 23, 42, .08);
+  --shadow: 0 1px 2px var(--drop);
+
+  --lens: #e8f1fb;
+  --lens-rim: #cfe2f6;
+  --lens-text: #0369a1;
+  --chip: #eef1f5;
+  --chip-hover: #e2e7ee;
+  --hair: #edf0f4;
+  --input: #ffffff;
+  --btn-primary-bg: #0f172a;
+  --btn-primary-fg: #ffffff;
+  --scroll-thumb: rgba(0, 0, 0, .18);
+  --scroll-thumb-hover: rgba(0, 0, 0, .32);
+  --chart-text: #526079;
+  --chart-grid: #edf0f4;
+  --code-bg: #f1f4f8;
+}
+
+/* ── Page background ─────────────────────────────────────────────────────────
+   One fixed, static layer, painted once and only composited on scroll (no
+   background-attachment: fixed, no animated blur). The small bright glows are sized
+   in vmin so they keep the mockup's proportions on any screen. */
+body {
+  background: var(--bg);
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background: var(--bg);
+}
+
+/* glass dark: aurora + glows */
+:root[data-look="glass"][data-mode="dark"] body::after {
+  background:
+    radial-gradient(circle at 64% 44%, rgba(125, 211, 252, .95) 0, rgba(56, 189, 248, .55) 11.7vmin, transparent 24.5vmin),
+    radial-gradient(circle at 30% 70%, rgba(45, 212, 191, .9) 0, rgba(20, 184, 166, .45) 9.6vmin, transparent 21.3vmin),
+    radial-gradient(circle at 86% 78%, rgba(251, 191, 36, .9) 0, rgba(245, 158, 11, .45) 8.5vmin, transparent 20.2vmin),
+    radial-gradient(circle at 46% 12%, rgba(196, 181, 253, .85) 0, rgba(139, 92, 246, .4) 8.5vmin, transparent 20.2vmin),
+    radial-gradient(55% 75% at 12% 18%, rgba(14, 165, 233, .9) 0%, transparent 62%),
+    radial-gradient(45% 65% at 88% 12%, rgba(124, 58, 237, .85) 0%, transparent 62%),
+    radial-gradient(55% 60% at 78% 95%, rgba(245, 158, 11, .6) 0%, transparent 60%),
+    radial-gradient(50% 60% at 22% 92%, rgba(20, 184, 166, .8) 0%, transparent 62%),
+    linear-gradient(160deg, #0b1630, #0a0f1f);
+}
+
+/* glass light: daylight mist + grid + glows */
+:root[data-look="glass"][data-mode="light"] body::after {
+  background:
+    radial-gradient(circle at 64% 44%, rgba(56, 189, 248, .70) 0, rgba(125, 211, 252, .40) 11.7vmin, transparent 24.5vmin),
+    radial-gradient(circle at 28% 72%, rgba(45, 212, 191, .60) 0, rgba(94, 234, 212, .30) 9.6vmin, transparent 21.3vmin),
+    radial-gradient(circle at 86% 78%, rgba(251, 191, 36, .55) 0, rgba(253, 224, 71, .25) 8.5vmin, transparent 20.2vmin),
+    radial-gradient(circle at 46% 12%, rgba(167, 139, 250, .55) 0, rgba(196, 181, 253, .25) 8.5vmin, transparent 20.2vmin),
+    radial-gradient(45% 60% at 15% 15%, rgba(125, 211, 252, .7) 0%, transparent 62%),
+    radial-gradient(40% 55% at 90% 85%, rgba(167, 139, 250, .4) 0%, transparent 62%),
+    repeating-linear-gradient(0deg, rgba(15, 23, 42, .05) 0 1px, transparent 1px 64px),
+    repeating-linear-gradient(90deg, rgba(15, 23, 42, .05) 0 1px, transparent 1px 64px),
+    linear-gradient(135deg, #e6edf3, #b9c6d2);
+}
+
+/* normal dark / light: flat #0b0f17 / #f3f5f8 come from --bg above. */
+
+/* ── Glass material ──────────────────────────────────────────────────────── */
+/* Panels: crystal blur over the page background. */
+:root[data-look="glass"] :is(.card, .stat, .top-nav-bar, .top-subnav, .login) {
+  -webkit-backdrop-filter: blur(var(--blur-panel)) saturate(170%);
+  backdrop-filter: blur(var(--blur-panel)) saturate(170%);
+}
+
+/* Things that float over content: stronger blur (spec: overlays). */
+:root[data-look="glass"] :is(.nav-dropdown-menu, .lg-select-popover, .lg-calendar-popover, .toast,
+                             .op-modal, .modal, .global-locator-dock, .mobile-nav-drawer) {
+  -webkit-backdrop-filter: blur(var(--blur-overlay)) saturate(170%);
+  backdrop-filter: blur(var(--blur-overlay)) saturate(170%);
+}
+
+/* The light-catching gradient edge: a 1px ring drawn by ::before, replacing the grey border. */
+:root[data-look="glass"] :is(.card, .stat, .top-nav-bar, .top-subnav, .op-modal,
+                             .nav-dropdown-menu, .lg-select-popover, .toast) {
+  isolation: isolate;
+  border-color: transparent;
+}
+
+:root[data-look="glass"] :is(.top-subnav, .toast) {
+  position: relative;
+}
+
+:root[data-look="glass"] :is(.card, .stat, .top-nav-bar, .top-subnav, .op-modal,
+                             .nav-dropdown-menu, .lg-select-popover, .toast)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: linear-gradient(140deg, var(--edge-hi) 0%, var(--edge-lo) 28%, transparent 48%, var(--edge-lo) 72%, var(--edge-hi) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+
+:root[data-look="glass"][data-mode="dark"] :is(.card, .stat, .top-nav-bar, .top-subnav) {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .35);
+}
+
+/* The lens on the current page (main bar, Operations/Admin button, sub-row). */
+:root[data-look="glass"] :is(.top-nav-links .nav-item.active, .nav-dropdown-btn.active, .top-subnav .subnav-link.active) {
+  color: var(--lens-text);
+  background: var(--lens);
+  box-shadow: inset 0 0 0 1px var(--lens-rim), inset 0 3px 6px rgba(255, 255, 255, .35),
+              inset 0 -4px 10px rgba(0, 0, 0, .20), 0 6px 14px rgba(0, 0, 0, .22);
+}
+
+/* ── Normal: solid, no blur, no edge ─────────────────────────────────────── */
+:root[data-look="normal"] * {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+:root[data-look="normal"] :is(.top-nav-links .nav-item.active, .nav-dropdown-btn.active, .top-subnav .subnav-link.active) {
+  color: var(--lens-text);
+  background: var(--lens);
+  box-shadow: none;
+}
