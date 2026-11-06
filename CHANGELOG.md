@@ -3,7 +3,7 @@
 All notable changes to MGM Network Vault. Versions follow [Semantic Versioning](https://semver.org):
 **MAJOR** = breaking change (e.g. export format, removed feature), **MINOR** = new feature,
 
-## [Unreleased]
+## [1.15.0] - 2026-11-06
 
 ### Added
 - **Switch-down email alerts**: when a switch fails 2 reachability checks in a row (no ping and no SSH, about 10 minutes at the default 5-minute interval), an email goes out. A second email follows when it recovers, with how long it was down.
