@@ -110,6 +110,18 @@ def _add_missing_columns():
             for tbl in ("device", "credential", "schedule"):
                 conn.execute(text(f"UPDATE {tbl} SET site_id = :sid WHERE site_id IS NULL"), {"sid": primary_site.id})
 
+    def seed_alert_messages():
+        # One "Network team" message per alert trigger, worded like the defaults (Alerts page)
+        from .alert_render import DEFAULTS
+        from .models import AlertMessage
+        for trig, d in DEFAULTS.items():
+            if not AlertMessage.query.filter_by(trigger=trig).first():
+                db.session.add(AlertMessage(trigger=trig, name="Network team", subject=d["subject"], intro=d["intro"],
+                                            outro=d["outro"], recovery_subject=d.get("recovery_subject", ""),
+                                            recovery_intro=d.get("recovery_intro", "")))
+        db.session.commit()
+
+    run_once("seed_alert_messages", seed_alert_messages)
     run_once("floor_to_level", floor_to_level)
     run_once("malar_fixups", malar_fixups)
 

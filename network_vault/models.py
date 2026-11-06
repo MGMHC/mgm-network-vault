@@ -154,6 +154,7 @@ class Device(db.Model):
     status_since = db.Column(db.DateTime)
     down_checks = db.Column(db.Integer, default=0)     # consecutive 'down' results (switch-down alerts)
     down_alerted = db.Column(db.Boolean, default=False)  # a down email went out for the current outage
+    backup_fail_alerted = db.Column(db.Boolean, default=False)  # a backup-failed email went out for this failure streak
 
     # facts gathered during backup
     sw_version = db.Column(db.String(128))
@@ -295,6 +296,41 @@ class LogEntry(db.Model):
     device = db.relationship("Device", backref="logs")
 
 
+class AlertMessage(db.Model):
+    """One email sent by an alert trigger: who receives it and how it is worded (Alerts page)."""
+    id = db.Column(db.Integer, primary_key=True)
+    trigger = db.Column(db.String(32), nullable=False, index=True)  # switch_down | backup_failed | config_changed
+    name = db.Column(db.String(64), nullable=False, default="Network team")
+    enabled = db.Column(db.Boolean, default=True)
+    to_group_admins = db.Column(db.Boolean, default=True)
+    to_site_admins = db.Column(db.Boolean, default=True)
+    extra_emails = db.Column(db.Text, default="")      # comma / newline separated
+    site_ids_json = db.Column(db.Text, default="[]")   # [] = all sites
+    subject = db.Column(db.String(255), default="")    # blank = default wording
+    intro = db.Column(db.Text, default="")
+    outro = db.Column(db.Text, default="")
+    recovery_subject = db.Column(db.String(255), default="")  # switch_down only
+    recovery_intro = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=now)
+    updated_at = db.Column(db.DateTime, default=now, onupdate=now)
+
+    @property
+    def site_ids(self):
+        try:
+            return [int(x) for x in json.loads(self.site_ids_json or "[]")]
+        except (ValueError, TypeError):
+            return []
+
+    @site_ids.setter
+    def site_ids(self, ids):
+        self.site_ids_json = json.dumps(sorted({int(x) for x in ids or []}))
+
+    @property
+    def extra_list(self):
+        import re
+        return [e.strip() for e in re.split(r"[,;\s]+", self.extra_emails or "") if e.strip()]
+
+
 class Setting(db.Model):
     key = db.Column(db.String(64), primary_key=True)
     value = db.Column(db.String(512))
@@ -322,6 +358,15 @@ DEFAULT_SETTINGS = {
     # Switch-down email alerts
     "alert_down_enabled": "1",
     "alert_down_checks": "2",       # consecutive failed reachability checks before emailing
+    "alert_down_recovery": "1",     # also email when a switch comes back
+    "alert_backup_enabled": "1",    # email when a backup fails (once per failure streak)
+    "alert_change_enabled": "1",    # email when a backup finds a configuration change
+    "alert_change_manual": "1",     # ... including changes found by manual backups
+    "alert_change_diff_lines": "40",  # diff lines shown in the change email (0 = none)
+    # Alert email style (Alerts page)
+    "alert_style_color": "#25366C",
+    "alert_style_logo": "1",
+    "alert_style_footer": "Sent by MGM Network Vault. Manage alerts in Network Vault → Alerts.",
 }
 
 

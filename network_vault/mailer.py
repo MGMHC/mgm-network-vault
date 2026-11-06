@@ -1,7 +1,9 @@
 """SMTP mailer and password reset token handling."""
 import logging
+import os
 import smtplib
 import ssl
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr, parseaddr
@@ -30,8 +32,11 @@ def get_smtp_config():
     }
 
 
-def send_email(to_email: str, subject: str, html_body: str, text_body: str = None) -> tuple[bool, str | None]:
-    """Send an HTML email via configured SMTP server."""
+def send_email(to_email: str, subject: str, html_body: str, text_body: str = None,
+               inline_images: dict | None = None) -> tuple[bool, str | None]:
+    """Send an HTML email via configured SMTP server.
+
+    inline_images: optional {content_id: file_path}; the HTML refers to them as src="cid:<content_id>"."""
     cfg = get_smtp_config()
     if not cfg["enabled"]:
         return False, "SMTP is currently disabled in Settings."
@@ -45,7 +50,12 @@ def send_email(to_email: str, subject: str, html_body: str, text_body: str = Non
     display_name = cfg.get("from_name") or name or "MGM Networkvault"
     sender_email = addr or cfg["from_addr"]
 
-    msg = MIMEMultipart("alternative")
+    alt = MIMEMultipart("alternative")
+    if inline_images:
+        msg = MIMEMultipart("related")
+        msg.attach(alt)
+    else:
+        msg = alt
     msg["Subject"] = subject
     msg["From"] = formataddr((display_name, sender_email))
     msg["To"] = to_email
@@ -54,8 +64,14 @@ def send_email(to_email: str, subject: str, html_body: str, text_body: str = Non
         # Fallback plain text representation
         text_body = "Please view this message in an email client that supports HTML."
 
-    msg.attach(MIMEText(text_body, "plain", "utf-8"))
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
+    alt.attach(MIMEText(text_body, "plain", "utf-8"))
+    alt.attach(MIMEText(html_body, "html", "utf-8"))
+    for cid, path in (inline_images or {}).items():
+        with open(path, "rb") as fh:
+            img = MIMEImage(fh.read())
+        img.add_header("Content-ID", f"<{cid}>")
+        img.add_header("Content-Disposition", "inline", filename=os.path.basename(str(path)))
+        msg.attach(img)
 
     try:
         timeout = 20
