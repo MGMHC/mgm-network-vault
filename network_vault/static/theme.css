@@ -314,7 +314,7 @@ body::after {
 }
 
 /* The light-catching gradient edge: a 1px ring drawn by ::before, replacing the grey border. */
-:root[data-look="glass"] :is(.card, .stat, .top-nav-bar, .top-subnav, .op-modal,
+:root[data-look="glass"] :is(.card, .stat, .top-nav-bar, .top-subnav, .op-modal, .global-locator-dock,
                              .nav-dropdown-menu, .lg-select-popover, .toast) {
   isolation: isolate;
   border-color: transparent;
@@ -324,7 +324,7 @@ body::after {
   position: relative;
 }
 
-:root[data-look="glass"] :is(.card, .stat, .top-nav-bar, .top-subnav, .op-modal,
+:root[data-look="glass"] :is(.card, .stat, .top-nav-bar, .top-subnav, .op-modal, .global-locator-dock,
                              .nav-dropdown-menu, .lg-select-popover, .toast)::before {
   content: "";
   position: absolute;
