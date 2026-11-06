@@ -505,8 +505,17 @@ def start_discover_job(app, device_ids, user=None):
     threading.Thread(target=runner, daemon=True, name="discover").start()
 
 
-def backup_device(device_id, trigger="manual", user=None):
-    """Back up one device. Must be called inside an app context. Returns 'ok' | 'unchanged' | 'failed'."""
+def _alert_item(device, **extra):
+    return dict(id=device.id, name=device.name, host=device.host, site_id=device.site_id,
+                site=device.site.code if device.site else "", **extra)
+
+
+def backup_device(device_id, trigger="manual", user=None, alert=None):
+    """Back up one device. Must be called inside an app context. Returns 'ok' | 'unchanged' | 'failed'.
+
+    alert: optional dict from start_backup_job - {"events": list, "lock": Lock, "failed": targets|None,
+    "changed": targets|None}. Backup-failed / config-changed alert items are appended to events."""
+    from . import alerts
     actor = user or ("scheduler" if trigger.startswith("schedule") else "system")
     lock = _lock_for(device_id)
     if not lock.acquire(blocking=False):
@@ -522,6 +531,11 @@ def backup_device(device_id, trigger="manual", user=None):
             device.last_backup_status = "failed"
             device.last_backup_error = err[:2000]
             device.last_backup_at = now()
+            if (alert and alert["failed"] is not None and not device.backup_fail_alerted
+                    and alerts.would_reach(device.site_id, alert["failed"])):
+                device.backup_fail_alerted = True  # once per failure streak
+                with alert["lock"]:
+                    alert["events"].append(_alert_item(device, kind="failed", error=err))
             log_event(f"Backup failed ({trigger})", "backup", "ERROR", device, details=err, user=actor)
             return "failed"
 
@@ -531,6 +545,7 @@ def backup_device(device_id, trigger="manual", user=None):
         prev = device.backups.order_by(Backup.created_at.desc()).first()
         changed = prev is not None and prev.sha256 != digest  # first backup is a baseline, not a change
         added = removed = 0
+        diff_lines = []  # first changed lines, for the config-changed alert email
         if prev and changed:
             from .util import read_backup_file
             use_set = bool(data["set_config"] and prev.set_path)
@@ -541,10 +556,15 @@ def backup_device(device_id, trigger="manual", user=None):
                     added += 1
                 elif l.startswith("-") and not l.startswith("---"):
                     removed += 1
+                else:
+                    continue
+                if len(diff_lines) < 500:
+                    diff_lines.append(l)
 
         device.last_backup_at = now()
         device.last_backup_status = "ok"
         device.last_backup_error = None
+        device.backup_fail_alerted = False
 
         if prev and not changed and get_setting("skip_unchanged") == "1":
             log_event(f"Backup OK - configuration unchanged, not stored ({trigger})", "backup", "INFO", device, user=actor)
@@ -578,6 +598,13 @@ def backup_device(device_id, trigger="manual", user=None):
             log_event(f"Backup OK - {'first backup' if not prev else 'no changes'} ({trigger})",
                       "backup", "INFO", device, commit=False, user=actor)
         db.session.commit()
+        if (changed and prev and alert and alert["changed"] is not None
+                and alerts.would_reach(device.site_id, alert["changed"])):
+            who, via = alerts.parse_commit(data["last_commit"])
+            with alert["lock"]:
+                alert["events"].append(_alert_item(
+                    device, kind="changed", added=added, removed=removed, committed_by=who, via=via, when=now(),
+                    diff=diff_lines, diff_total=added + removed, prev_id=prev.id, backup_id=backup.id))
         gitsync.record(backup.id)
         apply_retention(device)
         return "ok" if changed or not prev else "unchanged"
@@ -623,11 +650,20 @@ def start_backup_job(app, device_ids, trigger="manual", wait=False, user=None):
         job_id = job.id
         workers = max(1, get_int("max_workers"))
         git_head_before = gitsync.head() if gitsync.is_enabled() else None
+        from . import alerts
+        manual = not (trigger.startswith("schedule") or trigger.startswith("syslog"))
+        alert = {
+            "events": [], "lock": threading.Lock(),
+            "failed": alerts.targets("backup_failed") if alerts.trigger_enabled("backup_failed") else None,
+            "changed": (alerts.targets("config_changed")
+                        if alerts.trigger_enabled("config_changed")
+                        and (not manual or get_setting("alert_change_manual") == "1") else None),
+        }
 
     def worker(dev_id):
         with app.app_context():
             try:
-                result = backup_device(dev_id, trigger, user)
+                result = backup_device(dev_id, trigger, user, alert=alert)
             except Exception as e:  # noqa: BLE001
                 log_event(f"Unexpected backup error: {e}", "backup", "ERROR")
                 result = "failed"
@@ -653,6 +689,15 @@ def start_backup_job(app, device_ids, trigger="manual", wait=False, user=None):
             log_event(f"Backup job #{job_id} finished ({trigger}): {j.ok} ok ({j.unchanged} unchanged), "
                       f"{j.failed} failed of {j.total}", "backup",
                       "ERROR" if j.failed else "INFO", user=user or "system")
+            label = ("scheduled" if trigger.startswith("schedule") else
+                     "commit-triggered" if trigger.startswith("syslog") else "manual")
+        ev = alert["events"]
+        alerts.dispatch(app, "backup_failed", {"failed": [e for e in ev if e["kind"] == "failed"]},
+                        {"trigger_label": label})
+        alerts.dispatch(app, "config_changed", {"changed": [e for e in ev if e["kind"] == "changed"]},
+                        {"trigger_label": label})
+        with app.app_context():
+            j = db.session.get(Job, job_id)
             if gitsync.is_enabled():
                 gitsync.tag_run(j, git_head_before)
                 if gitsync.ahead():
