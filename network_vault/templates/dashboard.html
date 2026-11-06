@@ -219,20 +219,42 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
+// Charts read their colours from the theme tokens and re-read them on themechange.
+const chartTok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let activityChart = null, reachChart = null;
+
+function applyChartTheme() {
+  const text = chartTok('--chart-text'), grid = chartTok('--chart-grid');
+  if (activityChart) {
+    const o = activityChart.options;
+    o.plugins.legend.labels.color = text;
+    o.scales.x.ticks.color = text; o.scales.x.grid.color = grid;
+    o.scales.y.ticks.color = text; o.scales.y.grid.color = grid;
+    const [bars, line] = activityChart.data.datasets;
+    bars.backgroundColor = chartTok('--accent-soft'); bars.borderColor = chartTok('--accent');
+    line.borderColor = chartTok('--warn'); line.backgroundColor = chartTok('--warn-soft');
+    line.pointBackgroundColor = chartTok('--warn');
+    activityChart.update();
+  }
+  if (reachChart) {
+    reachChart.data.datasets[0].backgroundColor = [chartTok('--ok'), chartTok('--warn'), chartTok('--bad'), chartTok('--muted')];
+    reachChart.update();
+  }
+}
+
 // Activity chart (bar + line)
 (function(){
   const labels  = {{ day_labels | tojson }};
   const backups = {{ daily_backups | tojson }};
   const changes = {{ daily_changes | tojson }};
-  const isDark  = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const textCol = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#888';
-  new Chart(document.getElementById('activityChart'), {
+  const textCol = chartTok('--chart-text'), gridCol = chartTok('--chart-grid');
+  activityChart = new Chart(document.getElementById('activityChart'), {
     type: 'bar',
     data: {
       labels,
       datasets: [
-        { label: 'Backups', data: backups, backgroundColor: 'rgba(56, 189, 248, 0.22)', borderColor: '#38bdf8', borderWidth: 1.5, borderRadius: 4, order: 2 },
-        { label: 'Changes', data: changes, type: 'line', borderColor: '#f5b301', backgroundColor: 'rgba(245, 179, 1, 0.15)', borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#f5b301', tension: 0.35, fill: true, order: 1 }
+        { label: 'Backups', data: backups, backgroundColor: chartTok('--accent-soft'), borderColor: chartTok('--accent'), borderWidth: 1.5, borderRadius: 4, order: 2 },
+        { label: 'Changes', data: changes, type: 'line', borderColor: chartTok('--warn'), backgroundColor: chartTok('--warn-soft'), borderWidth: 2, pointRadius: 3, pointBackgroundColor: chartTok('--warn'), tension: 0.35, fill: true, order: 1 }
       ]
     },
     options: {
@@ -243,8 +265,8 @@
         tooltip: { mode: 'index' }
       },
       scales: {
-        x: { ticks: { color: textCol, font: { size: 9 }, maxRotation: 0 }, grid: { color: 'rgba(128,128,128,0.08)' } },
-        y: { ticks: { color: textCol, font: { size: 9 }, stepSize: 20 }, grid: { color: 'rgba(128,128,128,0.08)' }, beginAtZero: true }
+        x: { ticks: { color: textCol, font: { size: 9 }, maxRotation: 0 }, grid: { color: gridCol } },
+        y: { ticks: { color: textCol, font: { size: 9 }, stepSize: 20 }, grid: { color: gridCol }, beginAtZero: true }
       }
     }
   });
@@ -254,13 +276,13 @@
 (function(){
   const d = {{ reach_data | tojson }};
   const canvas = document.getElementById('reachChart');
-  new Chart(canvas, {
+  reachChart = new Chart(canvas, {
     type: 'doughnut',
     data: {
       labels: ['Up', 'SSH only', 'Down', 'Unknown'],
       datasets: [{
         data: [d.up, d.ssh_only, d.down, d.unknown],
-        backgroundColor: ['#34d399', '#fbbf24', '#f87171', 'rgba(148, 163, 184, 0.4)'],
+        backgroundColor: [chartTok('--ok'), chartTok('--warn'), chartTok('--bad'), chartTok('--muted')],
         borderWidth: 0, hoverOffset: 4
       }]
     },
@@ -270,6 +292,8 @@
     }
   });
 })();
+
+window.addEventListener('themechange', applyChartTheme);
 
 // Floor card toggle
 function toggleFloor(btn) {

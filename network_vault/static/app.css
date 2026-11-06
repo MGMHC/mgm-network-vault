@@ -634,7 +634,7 @@ h3 {
   color: var(--text);
 }
 
-/* The custom select trigger (enhanced from .site-select) is styled further down with a fixed white;
+/* The custom select trigger (enhanced from .site-select) is styled further down;
    keep it on the text token inside the bar. */
 .top-nav-right .site-switcher-pill .lg-select-trigger.site-select-trigger,
 .mobile-site-box .lg-select-trigger.site-select-trigger {
@@ -2704,7 +2704,6 @@ pre.code {
   min-width: 0 !important;
   font-size: 11.5px !important;
   font-weight: 600 !important;
-  color: #ffffff !important;
 }
 
 .site-switcher-pill .lg-select-trigger.site-select-trigger .lg-select-chevron,
@@ -3009,7 +3008,7 @@ pre.code {
   border-radius: 50%;
   background: var(--panel);
   border: 1px solid var(--border);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, .15);
+  box-shadow: 0 2px 6px var(--drop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3260,7 +3259,7 @@ pre.code {
 }
 
 .device-card:hover {
-  box-shadow: 0 4px 16px rgba(37, 54, 108, .13);
+  box-shadow: 0 4px 16px var(--drop);
   transform: translateY(-2px);
   text-decoration: none;
 }
@@ -3342,13 +3341,13 @@ pre.code {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 99px;
-  box-shadow: 0 1px 3px rgba(37, 54, 108, .05);
+  box-shadow: 0 1px 3px var(--drop);
   transition: border-color .15s ease, box-shadow .15s ease;
 }
 
 .site-switcher-pill:hover {
   border-color: var(--mgm-gold);
-  box-shadow: 0 2px 8px rgba(37, 54, 108, .1);
+  box-shadow: 0 2px 8px var(--drop);
 }
 
 .site-switcher-pill .s-icon {
@@ -3577,7 +3576,7 @@ h2 svg.icon {
 
 .input-lg:focus {
   border-color: var(--mgm-gold);
-  box-shadow: 0 0 0 3px rgba(195, 162, 117, .18);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .btn-lg {
@@ -3603,7 +3602,7 @@ h2 svg.icon {
 .edge-port-card {
   border: 2px solid var(--mgm-gold);
   background: var(--panel);
-  box-shadow: 0 4px 16px rgba(195, 162, 117, .12);
+  box-shadow: 0 4px 16px var(--accent-soft);
   border-radius: var(--radius);
   position: relative;
   overflow: hidden;
@@ -3844,7 +3843,7 @@ h2 svg.icon {
 .op-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(4, 8, 20, 0.72);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -3857,14 +3856,12 @@ h2 svg.icon {
   width: 100%;
   max-width: 820px;
   max-height: 90vh;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.06) 50%, rgba(255, 255, 255, 0.02) 100%), rgba(8, 14, 28, 0.90) !important;
-  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  background: var(--overlay) !important;
+  border: 1px solid var(--border) !important;
   border-radius: 20px !important;
   box-shadow:
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.45),
-    inset 0 -1px 2px rgba(0, 0, 0, 0.35),
-    0 32px 80px -10px rgba(0, 0, 0, 0.85),
-    0 0 36px rgba(56, 189, 248, 0.22);
+    var(--shadow),
+    0 32px 80px -10px var(--drop);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -3877,7 +3874,7 @@ h2 svg.icon {
   position: absolute;
   inset: 0 0 auto 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  background: linear-gradient(90deg, transparent, var(--rim), transparent);
   pointer-events: none;
 }
 
@@ -3886,8 +3883,8 @@ h2 svg.icon {
   align-items: center;
   justify-content: space-between;
   padding: 16px 22px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--hair);
+  background: var(--panel-2);
 }
 
 .op-modal-title {
@@ -3927,8 +3924,8 @@ h2 svg.icon {
 }
 
 .op-modal-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--chip-hover);
+  color: var(--text);
 }
 
 .op-modal-close {
@@ -3944,8 +3941,8 @@ h2 svg.icon {
 }
 
 .op-modal-close:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--chip-hover);
+  color: var(--text);
 }
 
 /* Minimized Docked Widget State */
@@ -3961,9 +3958,9 @@ h2 svg.icon {
   width: 380px;
   max-width: calc(100vw - 32px);
   pointer-events: auto !important;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--border);
+  box-shadow: var(--shadow);
   border-radius: 12px;
-  background: var(--panel);
+  background: var(--overlay);
   animation: modal-minimize .2s ease-out;
 }
 
@@ -4020,7 +4017,7 @@ h2 svg.icon {
 .op-progress-section {
   padding: 18px 20px;
   border-bottom: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--panel-2);
 }
 
 .op-progress-info {
@@ -4041,7 +4038,7 @@ h2 svg.icon {
 
 .op-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--mgm-gold) 0%, #38bdf8 100%);
+  background: linear-gradient(90deg, var(--accent-2) 0%, var(--accent) 100%);
   border-radius: 99px;
   transition: width .25s ease;
 }
@@ -4058,7 +4055,7 @@ h2 svg.icon {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--chip);
   padding: 3px 9px;
   border-radius: 6px;
   border: 1px solid var(--border);
@@ -4066,13 +4063,13 @@ h2 svg.icon {
 
 .op-terminal {
   margin: 14px 20px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: #080c14;
+  background: var(--code-bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 2px 6px var(--drop);
 }
 
 .op-terminal-header {
@@ -4080,8 +4077,8 @@ h2 svg.icon {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: #0f1523;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--chip);
+  border-bottom: 1px solid var(--hair);
   font-size: 12px;
   color: var(--muted);
 }
@@ -4093,7 +4090,7 @@ h2 svg.icon {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
   font-size: 12px;
   line-height: 1.55;
-  color: #e2e8f0;
+  color: var(--text);
 }
 
 .op-log-line {
@@ -4105,7 +4102,7 @@ h2 svg.icon {
 }
 
 .op-log-time {
-  color: #64748b;
+  color: var(--muted);
   font-size: 11px;
   flex-shrink: 0;
 }
@@ -4120,28 +4117,28 @@ h2 svg.icon {
 }
 
 .op-log-badge.info {
-  background: rgba(56, 189, 248, 0.15);
-  color: #38bdf8;
+  background: var(--info-soft);
+  color: var(--accent);
 }
 
 .op-log-badge.ok {
-  background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
+  background: var(--ok-soft);
+  color: var(--ok);
 }
 
 .op-log-badge.warn {
-  background: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
+  background: var(--warn-soft);
+  color: var(--warn);
 }
 
 .op-log-badge.error {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
+  background: var(--bad-soft);
+  color: var(--bad);
 }
 
 .op-log-badge.muted {
-  background: rgba(148, 163, 184, 0.12);
-  color: #94a3b8;
+  background: var(--chip);
+  color: var(--muted);
 }
 
 .op-modal-footer {
@@ -4150,7 +4147,7 @@ h2 svg.icon {
   align-items: center;
   padding: 14px 20px;
   border-top: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--panel-2);
 }
 
 /* --------------------------------------------------------------------------- Persistent Global Minimized Port Locator Dock */
@@ -4160,10 +4157,10 @@ h2 svg.icon {
   right: 24px;
   width: 380px;
   max-width: calc(100vw - 32px);
-  background: rgba(12, 20, 38, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--overlay);
+  border: 1px solid var(--border);
   border-radius: 14px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  box-shadow: var(--shadow);
   z-index: 99999;
   cursor: pointer;
   overflow: hidden;
@@ -4173,8 +4170,8 @@ h2 svg.icon {
 
 .global-locator-dock:hover {
   transform: translateY(-2px);
-  border-color: rgba(56, 189, 248, 0.5);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75), 0 0 24px rgba(56, 189, 248, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  border-color: var(--accent);
+  box-shadow: var(--shadow), 0 0 24px var(--accent-soft);
 }
 
 .gld-header {
@@ -4182,7 +4179,7 @@ h2 svg.icon {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--panel-2);
   border-bottom: 1px solid var(--border);
 }
 
@@ -4240,8 +4237,8 @@ h2 svg.icon {
 }
 
 .gld-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--chip-hover);
+  color: var(--text);
 }
 
 .gld-body {
@@ -4265,13 +4262,13 @@ h2 svg.icon {
 
 .gld-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--mgm-gold) 0%, #38bdf8 100%);
+  background: linear-gradient(90deg, var(--accent-2) 0%, var(--accent) 100%);
   border-radius: 99px;
   transition: width .25s ease;
 }
 
 .global-locator-dock.success {
-  border-color: rgba(34, 197, 94, 0.5);
+  border-color: var(--ok);
 }
 
 .global-locator-dock.success .gld-progress-fill {
@@ -4283,17 +4280,17 @@ h2 svg.icon {
 }
 
 .global-locator-dock.error {
-  border-color: rgba(239, 68, 68, 0.5);
+  border-color: var(--bad);
 }
 
 .global-locator-dock.error .gld-progress-fill {
-  background: var(--danger);
+  background: var(--bad);
 }
 
 /* --------------------------------------------------------------------------- Hardware Health Monitoring Dashboard */
 .health-meter-bg {
   height: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--border-subtle);
   border-radius: 99px;
   overflow: hidden;
   margin-top: 3px;
@@ -4315,17 +4312,17 @@ h2 svg.icon {
 
 .bg-ok {
   background: var(--ok);
-  box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--ok) 40%, transparent);
 }
 
 .bg-warn {
   background: var(--warn);
-  box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--warn) 40%, transparent);
 }
 
 .bg-bad {
   background: var(--bad);
-  box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--bad) 40%, transparent);
 }
 
 .bg-muted {
