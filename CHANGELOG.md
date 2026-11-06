@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+### Added
+- **Glass / Normal and Day / Night switches**, remembered per user. Choose the look (Glass or Normal solid panels) and the mode (Dark or Light) in the top bar; your choice follows you to other browsers.
+- **Liquid glass redone**: aurora (dark) and daylight (light) backgrounds, clear glass panels with light-catching edges, and a floating menu bar with a glass lens on the current page. Dropdowns, dialogs and the locator dock use stronger blur.
+- **Status as dot + text** and **softer badges and buttons** (no outlines) across all pages.
+
+### Fixed
+- Text contrast in all four looks: selected calendar day, blue badges, role avatars on the Users page, and the sticky table header over scrolling rows in glass now meet WCAG AA.
+- The Port Locator dock showed no colour on error because it used an undefined colour token.
+
 ## [1.17.1] - 2026-11-06
 
 ### Added
