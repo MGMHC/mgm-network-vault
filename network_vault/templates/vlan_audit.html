@@ -1064,13 +1064,14 @@ async function startLiveProbe() {
           appendProbeLog(evt.ts, 'info', `Starting live port audit across ${totalSwitches} switches...`);
         } else if (evt.type === 'log') {
           appendProbeLog(evt.ts, evt.level || 'info', evt.msg);
+        } else if (evt.type === 'progress') {
+          // Each switch reports its steps (connect, command, parse), so the bar moves during the probe
+          barFill.style.width = `${evt.percent}%`;
+          percentText.textContent = `${evt.percent}%`;
+          statusText.textContent = evt.step;
+          document.getElementById('modalStatSwitches').textContent = `${evt.done} / ${evt.total}`;
         } else if (evt.type === 'device') {
           completedSwitches++;
-          const pct = totalSwitches > 0 ? Math.round((completedSwitches / totalSwitches) * 100) : 100;
-          barFill.style.width = `${pct}%`;
-          percentText.textContent = `${pct}%`;
-          statusText.textContent = `Probed ${completedSwitches} of ${totalSwitches}: ${evt.device_name}`;
-          document.getElementById('modalStatSwitches').textContent = `${completedSwitches} / ${totalSwitches}`;
 
           if (evt.status === 'ok') {
             const conn = evt.connected_count || 0;

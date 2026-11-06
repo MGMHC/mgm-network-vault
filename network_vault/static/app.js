@@ -592,8 +592,15 @@ function closeAllLiquidPopovers() {
   }
 }
 
-function initLiquidSelects() {
-  const selects = document.querySelectorAll('.filters select, select.liquid-select');
+function initLiquidSelects(root = document) {
+  const container = root || document;
+  const selects = [];
+  if (container.nodeType === 1 && container.matches && container.matches('select:not([multiple]):not(.no-liquid)')) {
+    selects.push(container);
+  } else if (container.querySelectorAll) {
+    selects.push(...container.querySelectorAll('select:not([multiple]):not(.no-liquid)'));
+  }
+
   selects.forEach(select => {
     if (select.dataset.lgEnhanced) return;
     select.dataset.lgEnhanced = 'true';
@@ -602,7 +609,24 @@ function initLiquidSelects() {
     const wrapper = document.createElement('div');
     wrapper.className = 'lg-select-wrapper';
 
-    // Position next to select and visually hide native select
+    // Adapt wrapper sizing
+    const isWFull = select.classList.contains('w-full') ||
+      select.style.width === '100%' ||
+      select.getAttribute('style')?.includes('width:100%') ||
+      select.getAttribute('style')?.includes('width: 100%') ||
+      Boolean(select.closest('.form-group, .field, .audit-control-group, .health-filters, .optics-filters, .rack-controls'));
+
+    if (isWFull) {
+      wrapper.classList.add('w-full');
+    }
+    if (select.classList.contains('site-select') || select.classList.contains('mobile-site-select') || select.closest('.site-switcher-pill, .mobile-site-box')) {
+      wrapper.classList.add('site-select-wrapper');
+    }
+    if (select.disabled) {
+      wrapper.classList.add('disabled');
+    }
+
+    // Position wrapper next to select and visually hide native select
     select.parentNode.insertBefore(wrapper, select);
     wrapper.appendChild(select);
     select.style.position = 'absolute';
@@ -612,21 +636,27 @@ function initLiquidSelects() {
     select.style.height = '0';
     select.style.margin = '0';
     select.style.padding = '0';
-
-    // Find current selected option
-    const currentOpt = select.options[select.selectedIndex] || select.options[0];
-    const initialText = currentOpt ? currentOpt.textContent : '';
+    select.setAttribute('tabindex', '-1');
 
     // Trigger button
     const trigger = document.createElement('div');
     trigger.className = 'lg-select-trigger';
+    if (select.classList.contains('input-lg')) {
+      trigger.classList.add('input-lg');
+    } else if (select.classList.contains('input')) {
+      trigger.classList.add('input');
+    }
+    if (select.classList.contains('site-select') || select.classList.contains('mobile-site-select') || select.closest('.site-switcher-pill, .mobile-site-box')) {
+      trigger.classList.add('site-select-trigger');
+    }
     trigger.setAttribute('tabindex', '0');
     trigger.setAttribute('role', 'combobox');
     trigger.setAttribute('aria-expanded', 'false');
 
     const labelSpan = document.createElement('span');
     labelSpan.className = 'lg-select-label-text';
-    labelSpan.textContent = initialText;
+    const initialOpt = select.options[select.selectedIndex] || select.options[0];
+    labelSpan.textContent = initialOpt ? initialOpt.textContent : '';
 
     const chevronSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     chevronSvg.setAttribute('class', 'lg-select-chevron');
@@ -649,75 +679,131 @@ function initLiquidSelects() {
     popover.className = 'lg-select-popover';
     popover.style.display = 'none';
 
-    // Search box if more than 6 options
-    let searchInput = null;
-    if (select.options.length > 6) {
-      const searchBox = document.createElement('div');
-      searchBox.className = 'lg-select-search';
-      searchInput = document.createElement('input');
-      searchInput.type = 'text';
-      searchInput.placeholder = 'Search options…';
-      searchInput.setAttribute('autocomplete', 'off');
-      searchBox.appendChild(searchInput);
-      popover.appendChild(searchBox);
-    }
-
     const optionsList = document.createElement('div');
     optionsList.className = 'lg-select-options';
 
-    const optionElements = [];
-    Array.from(select.options).forEach((opt, idx) => {
-      const optEl = document.createElement('div');
-      optEl.className = 'lg-select-option' + (opt.selected ? ' selected' : '');
-      optEl.textContent = opt.textContent;
-      optEl.dataset.value = opt.value;
-      optEl.dataset.index = idx;
+    let searchInput = null;
+    let optionElements = [];
 
-      optEl.addEventListener('click', (e) => {
-        e.stopPropagation();
-        select.value = opt.value;
-        labelSpan.textContent = opt.textContent;
-        optionElements.forEach(el => el.classList.remove('selected'));
-        optEl.classList.add('selected');
-        closePopover();
-        select.dispatchEvent(new Event('change', { bubbles: true }));
+    function attachSearchEvents() {
+      if (!searchInput) return;
+      searchInput.addEventListener('input', () => {
+        const query = searchInput.value.toLowerCase().trim();
+        optionElements.forEach((el, i) => {
+          const opt = select.options[i];
+          const isHidden = opt ? (opt.hidden || opt.style.display === 'none') : false;
+          const match = el.textContent.toLowerCase().includes(query);
+          el.style.display = match && !isHidden ? '' : 'none';
+        });
+      });
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          closePopover();
+          trigger.focus();
+        } else if (e.key === 'Enter') {
+          const firstVisible = optionElements.find(el => el.style.display !== 'none');
+          if (firstVisible) firstVisible.click();
+        }
+      });
+    }
+
+    function rebuildOptions() {
+      optionsList.innerHTML = '';
+      optionElements = [];
+
+      const needsSearch = select.options.length > 6;
+      let searchBox = popover.querySelector('.lg-select-search');
+      if (needsSearch && !searchBox) {
+        searchBox = document.createElement('div');
+        searchBox.className = 'lg-select-search';
+        searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Search options…';
+        searchInput.setAttribute('autocomplete', 'off');
+        searchBox.appendChild(searchInput);
+        popover.insertBefore(searchBox, optionsList);
+        attachSearchEvents();
+      } else if (!needsSearch && searchBox) {
+        searchBox.remove();
+        searchInput = null;
+      }
+
+      Array.from(select.options).forEach((opt, idx) => {
+        const optEl = document.createElement('div');
+        optEl.className = 'lg-select-option' + (opt.selected ? ' selected' : '');
+        optEl.textContent = opt.textContent;
+        optEl.dataset.value = opt.value;
+        optEl.dataset.index = idx;
+        if (opt.hidden || opt.style.display === 'none') {
+          optEl.style.display = 'none';
+        }
+
+        optEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          select.value = opt.value;
+          labelSpan.textContent = opt.textContent;
+          optionElements.forEach(el => el.classList.remove('selected'));
+          optEl.classList.add('selected');
+          closePopover();
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+
+        optionsList.appendChild(optEl);
+        optionElements.push(optEl);
       });
 
-      optionsList.appendChild(optEl);
-      optionElements.push(optEl);
-    });
+      const selOpt = select.options[select.selectedIndex];
+      labelSpan.textContent = selOpt ? selOpt.textContent : (select.options[0] ? select.options[0].textContent : '');
+    }
 
     popover.appendChild(optionsList);
+    rebuildOptions();
 
     function positionPopover() {
       const rect = trigger.getBoundingClientRect();
       const popoverWidth = Math.max(rect.width, 180);
-      let left = rect.left;
-      if (left + popoverWidth > window.innerWidth - 12) {
-        left = Math.max(12, window.innerWidth - popoverWidth - 12);
-      }
+      let left = Math.max(12, Math.min(rect.left, window.innerWidth - popoverWidth - 12));
       let top = rect.bottom + 6;
-      // Flip upward if not enough room below but room above
       const spaceBelow = window.innerHeight - rect.bottom;
-      if (spaceBelow < 260 && rect.top > 260) {
-        top = Math.max(12, rect.top - popover.offsetHeight - 6);
+      const popoverHeight = popover.offsetHeight || 260;
+      if (spaceBelow < Math.min(popoverHeight + 10, 260) && rect.top > 260) {
+        top = Math.max(12, rect.top - popoverHeight - 6);
       }
       popover.style.top = top + 'px';
       popover.style.left = left + 'px';
       popover.style.minWidth = popoverWidth + 'px';
+      popover.style.maxWidth = Math.max(popoverWidth, 480) + 'px';
     }
 
     function openPopover() {
+      if (select.disabled) return;
       closeAllLiquidPopovers();
+
+      if (select.options.length !== optionElements.length) {
+        rebuildOptions();
+      }
 
       wrapper.classList.add('open');
       trigger.setAttribute('aria-expanded', 'true');
 
-      // Append directly to document.body so it NEVER gets trapped behind sticky headers or table rows
       document.body.appendChild(popover);
       popover.style.display = 'flex';
-      // options a page has hidden (e.g. narrowed by another filter) stay out of the list
-      optionElements.forEach((el, i) => { el.style.display = select.options[i] && select.options[i].hidden ? 'none' : ''; });
+
+      // Sync active selected state & hidden options
+      const curOpt = select.options[select.selectedIndex];
+      if (curOpt) {
+        labelSpan.textContent = curOpt.textContent;
+      }
+      let visibleCount = 0;
+      optionElements.forEach((el, i) => {
+        const opt = select.options[i];
+        if (!opt) return;
+        const isHidden = opt.hidden || opt.style.display === 'none';
+        el.style.display = isHidden ? 'none' : '';
+        el.classList.toggle('selected', opt.value === select.value || opt.selected);
+        if (!isHidden) visibleCount++;
+      });
+
       positionPopover();
 
       activeLiquidSelect = {
@@ -730,6 +816,8 @@ function initLiquidSelects() {
 
       if (searchInput) {
         searchInput.value = '';
+        const searchBox = popover.querySelector('.lg-select-search');
+        if (searchBox) searchBox.style.display = visibleCount > 6 ? '' : 'none';
         setTimeout(() => searchInput.focus(), 50);
       }
     }
@@ -755,23 +843,6 @@ function initLiquidSelects() {
       }
     });
 
-    if (searchInput) {
-      searchInput.addEventListener('input', () => {
-        const query = searchInput.value.toLowerCase().trim();
-        optionElements.forEach((el, i) => {
-          const match = el.textContent.toLowerCase().includes(query);
-          const hidden = select.options[i] && select.options[i].hidden;
-          el.style.display = match && !hidden ? '' : 'none';
-        });
-      });
-      searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-          closePopover();
-          trigger.focus();
-        }
-      });
-    }
-
     trigger.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
         e.preventDefault();
@@ -790,6 +861,20 @@ function initLiquidSelects() {
         });
       }
     });
+
+    // Observe changes to select options and disabled state
+    if (window.MutationObserver) {
+      const observer = new MutationObserver(() => {
+        wrapper.classList.toggle('disabled', select.disabled);
+        rebuildOptions();
+      });
+      observer.observe(select, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['hidden', 'disabled', 'selected', 'class']
+      });
+    }
   });
 }
 
@@ -1088,6 +1173,29 @@ window.addEventListener('resize', _schedulePopoverReposition, { passive: true })
 function initLiquidComponents() {
   initLiquidSelects();
   initLiquidDatepickers();
+
+  // Auto-enhance dynamically added selects and datepickers (e.g. modals, dynamically rendered tabs)
+  if (!window._lgObserverInstalled && window.MutationObserver && document.body) {
+    window._lgObserverInstalled = true;
+    const bodyObserver = new MutationObserver((mutations) => {
+      let needsSelectInit = false;
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (node.nodeType === 1) {
+            if (node.matches?.('select:not([multiple]):not(.no-liquid)') || node.querySelector?.('select:not([multiple]):not(.no-liquid)')) {
+              needsSelectInit = true;
+              break;
+            }
+          }
+        }
+        if (needsSelectInit) break;
+      }
+      if (needsSelectInit) {
+        initLiquidSelects();
+      }
+    });
+    bodyObserver.observe(document.body, { childList: true, subtree: true });
+  }
 }
 
 if (document.readyState === 'loading') {

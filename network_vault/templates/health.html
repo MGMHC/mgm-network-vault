@@ -724,13 +724,14 @@ async function startFleetHealthScan() {
           appendHealthLog(ev.timestamp, "info", `Fleet scan initiated for ${ev.total} switches`);
         } else if (ev.type === "log") {
           appendHealthLog(ev.timestamp, ev.level || "info", ev.msg);
+        } else if (ev.type === "progress") {
+          // Each switch reports its steps (connect, each command, parse), so the bar moves during the poll
+          pBar.style.width = `${ev.percent}%`;
+          pPct.textContent = `${ev.percent}%`;
+          pLabel.textContent = ev.step;
+          document.getElementById("healthStatSwitches").textContent = `${ev.done} / ${ev.total}`;
         } else if (ev.type === "device") {
           completedDevices++;
-          const pct = Math.round((completedDevices / targetIds.length) * 100);
-          pBar.style.width = `${pct}%`;
-          pPct.textContent = `${pct}%`;
-          pLabel.textContent = `Polled switch ${completedDevices} of ${targetIds.length}: ${ev.data.device_name}…`;
-          document.getElementById("healthStatSwitches").textContent = `${completedDevices} / ${targetIds.length}`;
 
           if (ev.data.overall_status === "ok") okCount++;
           else if (ev.data.overall_status === "warn") warnCount++;

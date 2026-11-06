@@ -1,3 +1,19 @@
+## [Unreleased]
+
+## [1.17.1] - 2026-11-06
+
+### Added
+- **Universal Rounded Liquid Glass Dropdown Menus**: Replaced raw OS-native `<select>` dropdowns across all pages with the ObaidQatan Liquid Glass design system.
+  - Consistent frosted backdrop blur (`blur(40px)`), 16px rounded popover corners, specular highlights, glowing cyan border accents, and custom checkmark indicators across the entire web interface.
+  - Applied across **Port Locator** (Campus Site, Group, Location, Scope), **Hardware Health** (Campus Site, Health Status), **Optical Health** (Campus Site, Switch, Status), **VLAN & Port Audit** (Campus Site, Switch Filter, Port Mode, Status), **IPAM & Subnets**, **Rack Elevations**, **Lifecycle & EOL**, **Compare**, **Schedules**, **Settings**, **Device Modals**, **User Account Administration**, and the **Top Navigation Site Switcher Pill**.
+  - **Adaptive Trigger Sizing**: Automatically respects `.input-lg` (44px height, 12px radius) and `.input` (38px height) form field heights, full-width container widths, and compact navbar pill layouts.
+  - **Live Search Filtering**: Automatically activates for dropdowns with more than 6 choices with keyboard-accessible navigation and auto-selection on Enter.
+  - **Dynamic Mutation & Scope Synchronization**: Seamlessly updates when choices are narrowed or replaced dynamically by JavaScript (e.g. Port Locator's hierarchical site/group/location filtering and VLAN Audit's switch population) while keeping narrowed-out options hidden.
+  - **DOM Injection Auto-Enhancement**: Mutation observer dynamically discovers and applies liquid glass styling to new `<select>` elements created in modals and tabs without manual bindings.
+
+### Changed
+- **Progress bars follow each switch's steps** in Hardware Health, Optical Health and the VLAN audit live port probe. Each switch reports connecting, each command (e.g. "[CORE-SW1] Running 'show chassis environment'…") and parsing, and the bar adds these up across switches. The bar used to move only when a whole switch finished, so a scan of one or a few switches sat at 0% until the result. The bar never goes back and holds at 99% until the scan completes.
+
 ## [1.17.0] - 2026-11-06
 
 ### Added

@@ -1413,25 +1413,79 @@ def parse_cisco_ios_optics(text):
     return ports
 
 
-def query_device_optics(device):
-    """Run optical diagnostics on a single switch over SSH. Returns list of port telemetry dicts."""
+def _fleet_progress(q, total, timestamp):
+    """Progress for a parallel per-switch scan. Each switch reports a fraction (0..1) as it goes through its
+    steps (connect, each command, parse), so the bar moves during the SSH session and not only when a whole
+    switch finishes. The bar never goes back, and it holds at 99% until the scan's final event."""
+    fracs = {}
+    lock = threading.Lock()
+    state = {"pct": 0}
+
+    def step(key, device, text, frac, **extra):
+        with lock:
+            fracs[key] = max(fracs.get(key, 0.0), min(1.0, frac))
+            done = sum(1 for f in fracs.values() if f >= 1.0)
+            state["pct"] = max(state["pct"], min(99, int(sum(fracs.values()) / max(1, total) * 100)))
+            q.put({"type": "progress", "step": f"[{device}] {text}", "percent": state["pct"], "done": done,
+                   "total": total, "device": device, "timestamp": timestamp(), **extra})
+
+    return step
+
+
+class _DeviceSteps:
+    """Reports one switch's steps to an on_step(text, frac) callback: connecting, then each command, then
+    parsing. `commands` is how many commands this platform runs, so each one moves the bar the same amount."""
+
+    def __init__(self, on_step, conn=None):
+        self.say = on_step or (lambda text, frac: None)
+        self.conn = conn
+        self.n = 1
+        self.ran = 0
+
+    def connect(self, device):
+        self.say(f"Connecting to {device.host} over SSH…", 0.05)
+        self.conn = engine.connect(device)
+        self.say("Connected", 0.35)
+        return self.conn
+
+    def expect(self, commands):
+        self.n = max(1, commands)
+
+    def run(self, cmd):
+        self.say(f"Running '{cmd}'…", 0.35 + 0.55 * min(self.ran, self.n) / self.n)
+        out = engine.run(self.conn, cmd)
+        self.ran += 1
+        return out
+
+    def parsing(self):
+        self.say("Parsing output…", 0.92)
+
+
+def query_device_optics(device, on_step=None):
+    """Run optical diagnostics on a single switch over SSH. Returns list of port telemetry dicts.
+    on_step(text, frac), if given, is told each step so a progress bar can follow it."""
     ports = []
-    conn = engine.connect(device)
+    s = _DeviceSteps(on_step)
+    conn = s.connect(device)
     try:
+        s.expect(1)
         if device.is_juniper:
-            out = engine.run(conn, "show interfaces diagnostics optics | no-more")
+            out = s.run("show interfaces diagnostics optics | no-more")
+            s.parsing()
             ports = parse_junos_optics(out)
         elif device.platform == "cisco_c1300":
             try:
-                out = engine.run(conn, "show optical-transceiver-diagnostics")
+                out = s.run("show optical-transceiver-diagnostics")
             except Exception:
-                out = engine.run(conn, "show fiber-ports optical-transceiver")
+                out = s.run("show fiber-ports optical-transceiver")
+            s.parsing()
             ports = parse_cisco_c1300_optics(out)
         else:
             try:
-                out = engine.run(conn, "show interfaces transceiver detail")
+                out = s.run("show interfaces transceiver detail")
             except Exception:
-                out = engine.run(conn, "show interfaces transceiver")
+                out = s.run("show interfaces transceiver")
+            s.parsing()
             ports = parse_cisco_ios_optics(out)
     finally:
         try:
@@ -1583,11 +1637,9 @@ def stream_scan_optics(app, devices):
         return
 
     results = []
-    done_count = 0
-    done_lock = threading.Lock()
+    step = _fleet_progress(q, total, timestamp)
 
     def worker(dev_id):
-        nonlocal done_count
         with app.app_context():
             d = db.session.get(Device, dev_id)
             if not d:
@@ -1611,15 +1663,9 @@ def stream_scan_optics(app, devices):
         try:
             with app.app_context():
                 d = db.session.get(Device, dev_id)
-                ports = query_device_optics(d)
+                ports = query_device_optics(d, on_step=lambda text, frac: step(dev_id, dev_name, text, frac))
         except Exception as e:
             err = str(e)
-
-        with done_lock:
-            done_count += 1
-            current_done = done_count
-
-        pct = int((current_done / total) * 100)
 
         if err:
             q.put({
@@ -1649,15 +1695,8 @@ def stream_scan_optics(app, devices):
                 "msg": f"[{dev_name}] No optical transceivers active or installed.",
             })
 
-        q.put({
-            "type": "progress",
-            "done": current_done,
-            "total": total,
-            "percent": pct,
-            "device": dev_name,
-            "ports_count": len(ports),
-            "timestamp": timestamp(),
-        })
+        step(dev_id, dev_name, "Failed" if err else f"Done, {len(ports)} optical port(s)", 1.0,
+             ports_count=len(ports))
 
         results.append((dev_id, dev_name, dev_host, dev_role, dev_loc, dev_grp, ports, err))
 
@@ -1990,13 +2029,16 @@ def parse_cisco_vlans_and_ports(config_text):
     return {"vlans": list(vlans_by_id.values()), "ports": ports}
 
 
-def query_device_live_ports(device):
-    """Query real-time interface status (connected, notconnect/dormant, disabled) via SSH."""
+def query_device_live_ports(device, on_step=None):
+    """Query real-time interface status (connected, notconnect/dormant, disabled) via SSH.
+    on_step(text, frac), if given, is told each step."""
     live_map = {}
-    conn = engine.connect(device)
+    st = _DeviceSteps(on_step)
+    conn = st.connect(device)
     try:
         if device.platform.startswith("cisco"):
-            out = engine.run(conn, "show interfaces status")
+            out = st.run("show interfaces status")
+            st.parsing()
             for line in out.splitlines():
                 line = line.strip()
                 if not line or line.startswith("Port") or line.startswith("-") or line.startswith("Ch "):
@@ -2022,7 +2064,8 @@ def query_device_live_ports(device):
                     live_map[pname.lower()] = {"status": status}
 
         elif device.is_juniper:
-            out_terse = engine.run(conn, "show interfaces terse")
+            out_terse = st.run("show interfaces terse")
+            st.parsing()
             for line in out_terse.splitlines():
                 parts = line.split()
                 if len(parts) >= 3 and re.match(r'^[a-z]+-\d+/\d+/\d+$', parts[0]):
@@ -2272,6 +2315,8 @@ def stream_live_port_audit(app, device_ids):
             yield _json.dumps(item) + "\n"
         return
 
+    step = _fleet_progress(q, total, timestamp)
+
     def worker(did):
         with app.app_context():
             dev = db.session.get(Device, did)
@@ -2286,7 +2331,7 @@ def stream_live_port_audit(app, device_ids):
         try:
             with app.app_context():
                 dev = db.session.get(Device, did)
-                live_ports = query_device_live_ports(dev)
+                live_ports = query_device_live_ports(dev, on_step=lambda text, frac: step(did, dev_name, text, frac))
 
             conn_c = sum(1 for p in live_ports.values() if p["status"] == "connected")
             dorm_c = sum(1 for p in live_ports.values() if p["status"] == "dormant")
@@ -2324,6 +2369,7 @@ def stream_live_port_audit(app, device_ids):
                 "ports": live_ports,
                 "ts": timestamp(),
             })
+            step(did, dev_name, f"Done, {conn_c} connected, {dorm_c} dormant", 1.0)
         except Exception as e:
             q.put({
                 "type": "device",
@@ -2333,6 +2379,7 @@ def stream_live_port_audit(app, device_ids):
                 "error": str(e),
                 "ts": timestamp(),
             })
+            step(did, dev_name, "Failed", 1.0)
 
     def run_all():
         try:
@@ -2595,48 +2642,59 @@ def parse_sonicos_health(status_text):
     return res
 
 
-def query_device_health(device):
+def query_device_health(device, on_step=None):
     """
     Connects to a single network device and queries CPU, Memory, Temperature, Fan and Power stats.
-    Returns a unified dictionary with health metrics.
+    Returns a unified dictionary with health metrics. on_step(text, frac), if given, is told each step.
     """
     platform = (device.platform or "").lower()
-    conn = engine.connect(device)
+    s = _DeviceSteps(on_step)
+    conn = s.connect(device)
 
     try:
         if "juniper" in platform:
-            re_out = engine.run(conn, "show chassis routing-engine | no-more")
-            env_out = engine.run(conn, "show chassis environment | no-more")
+            s.expect(2)
+            re_out = s.run("show chassis routing-engine | no-more")
+            env_out = s.run("show chassis environment | no-more")
+            s.parsing()
             data = parse_junos_health(re_out, env_out)
         elif "c1300" in platform or "cbs" in platform or "cisco_s300" in platform:
-            cpu_out = engine.run(conn, "show cpu utilization")
-            env_out = engine.run(conn, "show environment all")
+            s.expect(2)
+            cpu_out = s.run("show cpu utilization")
+            env_out = s.run("show environment all")
+            s.parsing()
             data = parse_cisco_c1300_health(cpu_out, env_out)
         elif "cisco" in platform:
-            cpu_out = engine.run(conn, "show processes cpu | include CPU")
-            mem_out = engine.run(conn, "show processes memory | include Processor")
+            s.expect(3)
+            cpu_out = s.run("show processes cpu | include CPU")
+            mem_out = s.run("show processes memory | include Processor")
             try:
-                env_out = engine.run(conn, "show env all")
+                env_out = s.run("show env all")
             except Exception:
                 env_out = ""
+            s.parsing()
             data = parse_cisco_ios_health(cpu_out, mem_out, env_out)
         elif "sonic" in platform:
-            stat_out = engine.run(conn, "show status")
+            s.expect(1)
+            stat_out = s.run("show status")
+            s.parsing()
             data = parse_sonicos_health(stat_out)
         else:
             # Generic fallback (try standard Cisco IOS commands)
+            s.expect(3)
             try:
-                cpu_out = engine.run(conn, "show processes cpu | include CPU")
+                cpu_out = s.run("show processes cpu | include CPU")
             except Exception:
                 cpu_out = ""
             try:
-                mem_out = engine.run(conn, "show processes memory | include Processor")
+                mem_out = s.run("show processes memory | include Processor")
             except Exception:
                 mem_out = ""
             try:
-                env_out = engine.run(conn, "show env all")
+                env_out = s.run("show env all")
             except Exception:
                 env_out = ""
+            s.parsing()
             data = parse_cisco_ios_health(cpu_out, mem_out, env_out)
 
         # Compute overall device health status: 'ok', 'warn', 'bad'
@@ -2707,6 +2765,8 @@ def stream_scan_health(app, device_ids):
     def timestamp():
         return datetime.now().strftime("%H:%M:%S")
 
+    step = _fleet_progress(q, total, timestamp)
+
     def worker(did):
         with app.app_context():
             dev = db.session.get(Device, did)
@@ -2728,7 +2788,7 @@ def stream_scan_health(app, device_ids):
         try:
             with app.app_context():
                 d = db.session.get(Device, did)
-                health_data = query_device_health(d)
+                health_data = query_device_health(d, on_step=lambda text, frac: step(did, dev_name, text, frac))
 
             q.put({
                 "type": "device",
@@ -2736,6 +2796,7 @@ def stream_scan_health(app, device_ids):
                 "data": health_data,
                 "timestamp": timestamp(),
             })
+            step(did, dev_name, f"Done, {health_data['overall_status'].upper()}", 1.0)
 
             # Log summary
             cpu_s = f"{health_data['cpu_pct']}%" if health_data['cpu_pct'] is not None else "N/A"
@@ -2778,6 +2839,7 @@ def stream_scan_health(app, device_ids):
                 "timestamp": timestamp(),
                 "msg": f"[{dev_name}] Connection error: {e}",
             })
+            step(did, dev_name, "Failed", 1.0)
 
     def run_all():
         try:

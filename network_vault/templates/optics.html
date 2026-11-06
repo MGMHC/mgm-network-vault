@@ -365,7 +365,7 @@ async function startOpticsScan() {
         } else if (evt.type === 'progress') {
           barFill.style.width = `${evt.percent}%`;
           percentText.textContent = `${evt.percent}%`;
-          statusText.textContent = `Scanning switch ${evt.done} of ${evt.total}: ${evt.device}…`;
+          statusText.textContent = evt.step || `Scanning switch ${evt.done} of ${evt.total}: ${evt.device}…`;
           document.getElementById('modalStatSwitches').textContent = `${evt.done} / ${evt.total}`;
           if (evt.ports_count) {
             portsFound += evt.ports_count;
