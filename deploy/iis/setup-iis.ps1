@@ -14,13 +14,13 @@
       -HostName "networkvault.mgmhealthcare.in"
       -CertThumbprint "F8B88429298FB5FAF50C0F98DB4C7B292172D221"
       -PfxPath "C:\Certs\mgm-origin.pfx"
-      -PfxPassword "MGM@NetworkVault2026!"
+      -PfxPassword "<pfx password>"   (asked for when a PFX must be created or imported)
 #>
 param(
     [string]$HostName = "networkvault.mgmhealthcare.in",
     [string]$CertThumbprint = "F8B88429298FB5FAF50C0F98DB4C7B292172D221",
     [string]$PfxPath = "C:\Certs\mgm-origin.pfx",
-    [string]$PfxPassword = "MGM@NetworkVault2026!",
+    [string]$PfxPassword = "",
     [string]$SiteName = "MGM Network Vault",
     [string]$SitePath = "C:\inetpub\network-vault",
     [int]$AppPort = 8080,
@@ -78,12 +78,21 @@ if (Test-Path $caRootPath) {
 # 2. Check or create PFX if needed
 $keyPath = "C:\Certs\mgm-origin.key"
 $pemPath = "C:\Certs\mgm-origin.pem"
+function Get-PfxPassword {
+    if ([string]::IsNullOrEmpty($script:PfxPassword)) {
+        $sec = Read-Host "PFX password for $PfxPath" -AsSecureString
+        $script:PfxPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+        if ([string]::IsNullOrEmpty($script:PfxPassword)) { throw "A PFX password is required to create or import $PfxPath." }
+    }
+    $script:PfxPassword
+}
 if ((-not (Test-Path $PfxPath)) -and (Test-Path $keyPath) -and (Test-Path $pemPath)) {
     $openssl = "openssl"
     if (Test-Path "C:\Program Files\Git\usr\bin\openssl.exe") {
         $openssl = "C:\Program Files\Git\usr\bin\openssl.exe"
     }
     Write-Host "Generating PFX package from $pemPath and $keyPath..."
+    $null = Get-PfxPassword
     if (Test-Path $caRootPath) {
         & $openssl pkcs12 -export -out $PfxPath -inkey $keyPath -in $pemPath -certfile $caRootPath -passout "pass:$PfxPassword"
     } else {
@@ -95,7 +104,7 @@ if ((-not (Test-Path $PfxPath)) -and (Test-Path $keyPath) -and (Test-Path $pemPa
 if ([string]::IsNullOrWhiteSpace($CertThumbprint) -or (-not (Get-Item "Cert:\LocalMachine\My\$CertThumbprint" -ErrorAction SilentlyContinue))) {
     if (Test-Path $PfxPath) {
         Write-Host "Importing $PfxPath into Cert:\LocalMachine\My..."
-        $secPass = ConvertTo-SecureString $PfxPassword -AsPlainText -Force
+        $secPass = ConvertTo-SecureString (Get-PfxPassword) -AsPlainText -Force
         $imported = Import-PfxCertificate -FilePath $PfxPath -CertStoreLocation "Cert:\LocalMachine\My" -Password $secPass -Exportable
         $CertThumbprint = $imported.Thumbprint
         Write-Host "Imported certificate Thumbprint: $CertThumbprint" -ForegroundColor Green

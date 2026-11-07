@@ -7,16 +7,14 @@ files in the configured directory (e.g. D:/NetworkVault/syslog).
 """
 import datetime
 import logging
-import os
 import re
 import socket
 import threading
-import time
 from pathlib import Path
 
-from . import config
-from .models import Device, db
-from .util import log_event, safe_name
+from . import config, engine
+from .models import Device, log_event
+from .util import safe_name
 
 logger = logging.getLogger("syslog_listener")
 
@@ -80,7 +78,6 @@ def _extract_hostname_from_msg(msg: str) -> str:
     m = re.search(r"<\d+>\S*\s+\S+\s+([A-Za-z0-9_.-]+)", msg)
     if m:
         candidate = m.group(1).strip()
-        # Avoid timestamps or process tags
         if not re.match(r"^\d{4}-\d{2}-\d{2}", candidate) and ":" not in candidate:
             return candidate
     return ""
@@ -92,7 +89,6 @@ def _append_raw_log(ip: str, message: str, log_dir_path: Path, device_name: str 
         log_dir_path.mkdir(parents=True, exist_ok=True)
         today = datetime.date.today().isoformat()
         
-        # Determine host tag for filename
         tag = None
         if device_name:
             tag = safe_name(device_name)
@@ -120,9 +116,8 @@ def _trigger_backup(device_id: int, device_name: str, trigger_reason: str):
         return
 
     logger.info("Executing syslog-triggered backup for %s (id=%s, trigger=%s)", device_name, device_id, trigger_reason)
-    from .engine import start_backup_job
     try:
-        start_backup_job(_app, [device_id], trigger=f"syslog:{trigger_reason}", user="syslog")
+        engine.start_backup_job(_app, [device_id], trigger=f"syslog:{trigger_reason}", user="syslog")
     except Exception as e:
         logger.error("Failed to start syslog backup job for device %s: %s", device_name, e)
 
@@ -161,7 +156,6 @@ def _process_syslog_packet(raw_bytes: bytes, addr: tuple, log_dir_path: Path, de
     except Exception:
         return
 
-    # 1. Match against registered device (if available) to get its name
     device = None
     if _app:
         with _app.app_context():
@@ -169,14 +163,11 @@ def _process_syslog_packet(raw_bytes: bytes, addr: tuple, log_dir_path: Path, de
 
     dev_name = device.name if device else None
 
-    # 2. Log to raw device file on disk (e.g. syslog-MGM-11F-SUBRACK1-SW1-2026-10-13.log)
     _append_raw_log(ip, msg, log_dir_path, device_name=dev_name)
 
-    # 3. Check if it's a commit / configuration save event
     if not is_commit_message(msg):
         return
 
-    # If it's a known device, record log event and trigger debounced backup
     if device and _app:
         device_id = device.id
         device_name = device.name
@@ -189,16 +180,14 @@ def _process_syslog_packet(raw_bytes: bytes, addr: tuple, log_dir_path: Path, de
                 user="syslog"
             )
 
-        # 4. Enqueue with debounce
         _queue_device_backup(device_id, device_name, ip, msg, debounce_sec)
 
 
 def _run_udp_server(host: str, port: int, log_dir_path: Path, debounce_sec: int):
     """UDP listener loop."""
-    global _socket, _running
+    global _socket
     _socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        # Allow reuse address
         _socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         _socket.bind((host, port))
         logger.info("Syslog listener active on UDP %s:%s (Debounce: %ss, Logs: %s)",
@@ -242,13 +231,3 @@ def init_syslog_listener(app):
     )
     _listener_thread.start()
 
-
-def stop_syslog_listener():
-    """Stop the listener cleanly."""
-    global _running, _socket
-    _running = False
-    if _socket:
-        try:
-            _socket.close()
-        except Exception:
-            pass

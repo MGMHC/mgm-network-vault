@@ -6,11 +6,11 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor
 
 from . import alerts
-from .models import Device, db, now
-from .util import log_event
+from .models import Device, db, now, log_event
+from .util import NO_WINDOW
+
 
 IS_WIN = platform.system() == "Windows"
-_NO_WINDOW = 0x08000000 if IS_WIN else 0  # CREATE_NO_WINDOW
 
 
 def ping(host, timeout_ms=1000, count=2):
@@ -18,7 +18,7 @@ def ping(host, timeout_ms=1000, count=2):
           ["ping", "-c", str(count), "-W", str(max(1, timeout_ms // 1000)), host]
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=count * timeout_ms / 1000 + 5,
-                             creationflags=_NO_WINDOW).stdout
+                             creationflags=NO_WINDOW).stdout
     except (subprocess.TimeoutExpired, OSError):
         return None
     # "TTL=" guards against Windows' "Destination host unreachable" replies that exit 0

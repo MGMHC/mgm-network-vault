@@ -4,7 +4,7 @@ from datetime import timedelta
 
 import pytest
 
-from network_vault import engine, machistory, scheduler as sched
+from network_vault import machistory, scheduler as sched, ssh
 from network_vault.models import Device, MacSighting, Setting, db, now
 
 JUNOS_MAC = "show ethernet-switching table | no-more"
@@ -128,13 +128,13 @@ def test_ip_is_attached_from_arp(app, sweep, switches, names):
 def test_one_switch_failing_does_not_stop_the_others(app, sweep, switches, names, monkeypatch):
     switches.script[(names["a"], JUNOS_MAC)] = mac_line(PC, "ge-0/0/14.0")
     switches.script[(names["b"], JUNOS_MAC)] = mac_line(PHONE, "ge-0/0/9.0")
-    real = engine.connect
+    real = ssh.connect
 
     def flaky(device, *a, **k):
         if device.name == names["a"]:
             raise TimeoutError("ssh timed out")
         return real(device, *a, **k)
-    monkeypatch.setattr(engine, "connect", flaky)
+    monkeypatch.setattr(ssh, "connect", flaky)
     summary = sweep()
     assert summary["failed"] == 1
     assert [(r[1], r[2]) for r in rows(app)] == [(names["b"], "ge-0/0/9")]
@@ -356,13 +356,13 @@ def test_deleting_a_device_removes_its_history(app, writer, seed, history):
 # ------------------------------------------------------------------ review fixes
 
 def _block_on(monkeypatch, name, gate):
-    real = engine.connect
+    real = ssh.connect
 
     def connect(device, *a, **k):
         if device.name == name:
             gate.wait(20)
         return real(device, *a, **k)
-    monkeypatch.setattr(engine, "connect", connect)
+    monkeypatch.setattr(ssh, "connect", connect)
 
 
 def _history_logs(app):

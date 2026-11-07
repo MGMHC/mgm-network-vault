@@ -162,7 +162,7 @@ def login_as(app, seed):
 @pytest.fixture()
 def switches(monkeypatch):
     """Fake SSH: scripted output per (switch name, exact command); never opens a connection."""
-    from network_vault import engine
+    from network_vault import ssh
 
     class FakeSwitches:
         def __init__(self):
@@ -207,8 +207,8 @@ def switches(monkeypatch):
             raise v
         return v
 
-    monkeypatch.setattr(engine, "connect", connect)
-    monkeypatch.setattr(engine, "run", run)
+    monkeypatch.setattr(ssh, "connect", connect)
+    monkeypatch.setattr(ssh, "run", run)
     return fake
 
 

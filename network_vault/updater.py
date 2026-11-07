@@ -7,10 +7,11 @@ import threading
 import time
 
 from . import config
-from .util import log_event
+
+from .models import log_event
+from .util import NO_WINDOW
 from .version import __version__
 
-_NO_WINDOW = 0x08000000 if os.name == "nt" else 0  # CREATE_NO_WINDOW
 
 
 def is_git_installation() -> bool:
@@ -20,7 +21,7 @@ def is_git_installation() -> bool:
 
 
 def _git(args, **kwargs):
-    flags = kwargs.pop("creationflags", _NO_WINDOW)
+    flags = kwargs.pop("creationflags", NO_WINDOW)
     return subprocess.run(["git", "-c", "safe.directory=*", *args], creationflags=flags, **kwargs)
 
 
@@ -55,7 +56,6 @@ def check_for_updates(force_fetch: bool = True) -> dict:
                 timeout=20,
             )
 
-        # Count commits behind origin/main
         behind_res = _git(
             ["rev-list", "--count", "HEAD..origin/main"],
             cwd=config.APP_ROOT,
@@ -65,7 +65,6 @@ def check_for_updates(force_fetch: bool = True) -> dict:
         )
         behind = int(behind_res.stdout.strip() or "0") if behind_res.returncode == 0 else 0
 
-        # Latest tag on remote
         tags_res = _git(
             ["tag", "--sort=-v:refname"],
             cwd=config.APP_ROOT,
@@ -76,7 +75,6 @@ def check_for_updates(force_fetch: bool = True) -> dict:
         tags = [t.strip() for t in tags_res.stdout.splitlines() if t.strip()]
         latest_tag = tags[0] if tags else f"v{__version__}"
 
-        # Get summary of new commits if behind
         commits = []
         if behind > 0:
             log_res = _git(
@@ -126,7 +124,6 @@ def apply_update() -> dict:
         }
 
     try:
-        # 1. Fetch latest commits and tags
         _git(
             ["fetch", "origin", "--tags"],
             cwd=config.APP_ROOT,
@@ -136,7 +133,6 @@ def apply_update() -> dict:
             check=True,
         )
 
-        # 2. Checkout main branch and pull changes
         _git(
             ["checkout", "main"],
             cwd=config.APP_ROOT,
@@ -154,7 +150,6 @@ def apply_update() -> dict:
             check=True,
         )
 
-        # 3. Check/update dependencies if requirements exist
         req_file = config.APP_ROOT / "requirements.txt"
         if req_file.exists():
             py_exec = sys.executable
@@ -164,12 +159,11 @@ def apply_update() -> dict:
                 capture_output=True,
                 text=True,
                 timeout=120,
-                creationflags=_NO_WINDOW,
+                creationflags=NO_WINDOW,
             )
 
         log_event(f"Application update applied successfully: {pull_res.stdout.strip()[:200]}", "system", "WARN")
 
-        # 4. Schedule graceful restart
         def restart_worker():
             time.sleep(1.5)  # Let response reach browser
             os._exit(3)      # start.bat / the service task restart the app on exit code 3

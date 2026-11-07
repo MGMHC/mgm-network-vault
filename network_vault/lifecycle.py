@@ -6,7 +6,7 @@ across Juniper Junos, Cisco Catalyst, Cisco Small Business, and other network ha
 """
 import datetime
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Optional, Tuple
 
 # Pre-populated enterprise lifecycle intelligence database
 # Format:
@@ -145,8 +145,6 @@ LIFECYCLE_CATALOG = [
 ]
 
 
-
-
 def match_lifecycle_entry(hw_model: str, model_fallback: str = "") -> Optional[dict]:
     """Find the best matching lifecycle catalog entry for a device model."""
     targets = [hw_model or "", model_fallback or ""]
@@ -186,30 +184,24 @@ def calculate_lifecycle_status(entry: Optional[dict], today: datetime.date = Non
     d_eol = parse_d(entry.get("eol_date"))
     d_eosec = parse_d(entry.get("eosec_date"))
     d_eosw = parse_d(entry.get("eosw_date"))
-    d_eos = parse_d(entry.get("eos_date"))
 
-    # 1. Past Last Date of Support
     if d_eol and today >= d_eol:
         days_past = (today - d_eol).days
         return ("eol", f"End-of-Life ({days_past}d ago)", -days_past)
 
-    # 2. Past Security Fixes
     if d_eosec and today >= d_eosec:
         days_past = (today - d_eosec).days
         return ("eosec", f"No Security Patches ({days_past}d ago)", -days_past)
 
-    # 3. Past Software Maintenance
     if d_eosw and today >= d_eosw:
         days_past = (today - d_eosw).days
         return ("eosw", f"Maintenance Ended ({days_past}d ago)", -days_past)
 
-    # 4. EOL approaching within 365 days
     if d_eol:
         days_left = (d_eol - today).days
         if days_left <= 365:
             return ("eos_soon", f"EOL in {days_left} days", days_left)
 
-    # 5. Fully supported
     days_left = (d_eol - today).days if d_eol else 1000
     return ("supported", "Fully Supported", days_left)
 
@@ -261,11 +253,9 @@ def analyze_device_lifecycle(devices) -> dict:
         entry = match_lifecycle_entry(hw, d.model)
         status_key, status_label, days_remaining = calculate_lifecycle_status(entry, today)
 
-        # Firmware compliance
         rec_sw = entry.get("recommended_sw", "") if entry else ""
         fw_status, fw_label = check_firmware_compliance(sw, rec_sw)
 
-        # Tally KPIs
         if status_key in ("eol", "eosec"):
             kpi["eol"] += 1
         elif status_key in ("eosw", "eos_soon"):
@@ -280,7 +270,6 @@ def analyze_device_lifecycle(devices) -> dict:
         elif fw_status == "diverged":
             kpi["firmware_diverged"] += 1
 
-        # Vendor and family tallies
         vendor_name = entry.get("vendor", "Other") if entry else ("Juniper" if d.is_juniper else "Cisco")
         family_name = entry.get("family", hw or "Unknown") if entry else (hw or "Generic")
         vendor_breakdown[vendor_name] = vendor_breakdown.get(vendor_name, 0) + 1
@@ -310,7 +299,6 @@ def analyze_device_lifecycle(devices) -> dict:
             "notes": entry.get("notes", "") if entry else "",
         })
 
-    # Sort: Critical EOL first, then upcoming EOL, then supported
     severity = {"eol": 0, "eosec": 1, "eosw": 2, "eos_soon": 3, "unknown": 4, "supported": 5}
     items.sort(key=lambda x: (severity.get(x["status_key"], 9), x["device"].name))
 

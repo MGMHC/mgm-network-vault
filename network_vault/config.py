@@ -18,7 +18,6 @@ DEFAULTS = {
     "threads": 12,              # web server worker threads
     "behind_proxy": False,      # true when published through IIS / nginx / a load balancer
     "secure_cookies": False,    # true when users reach the app over HTTPS
-    # Syslog listener settings
     "syslog_enabled": True,     # Enable syslog listener for event-driven backups
     "syslog_port": 514,         # UDP syslog port (standard 514)
     "syslog_debounce_sec": 45,  # Wait N seconds after last commit log before backing up
@@ -31,7 +30,6 @@ if CONFIG_FILE.exists():
     with open(CONFIG_FILE, "rb") as f:
         _toml = tomllib.load(f)
         _file = _toml.get("server", {})
-        # Merge syslog section if present
         if "syslog" in _toml:
             for sk, sv in _toml["syslog"].items():
                 _file[f"syslog_{sk}"] = sv
@@ -47,15 +45,16 @@ def get(key):
     return str(raw)
 
 
-def data_dir():
-    p = Path(get("data_dir"))
+def _abs(raw):
+    p = Path(str(raw).strip())
     return p if p.is_absolute() else APP_ROOT / p
+
+
+def data_dir():
+    # NETWORK_VAULT_DATA: older setups' name for NETWORK_VAULT_DATA_DIR (it never moved the default backup folder)
+    return _abs(os.environ.get("NETWORK_VAULT_DATA") or get("data_dir"))
 
 
 def backup_dir():
     raw = get("backup_dir")
-    if raw and str(raw).strip():
-        p = Path(str(raw).strip())
-        return p if p.is_absolute() else APP_ROOT / p
-    return data_dir() / "backups"
-
+    return _abs(raw) if raw.strip() else _abs(get("data_dir")) / "backups"

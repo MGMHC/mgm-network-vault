@@ -15,8 +15,8 @@ import threading
 
 from .alert_render import TRIGGERS, render, style_from_settings
 from .mailer import get_smtp_config, send_email
-from .models import AlertMessage, User, db, get_int, get_setting, now
-from .util import log_event
+from .models import AlertMessage, Device, User, db, get_bool, get_int, now, log_event
+
 
 TRIGGER_SETTING = {
     "switch_down": "alert_down_enabled",
@@ -26,15 +26,12 @@ TRIGGER_SETTING = {
 
 
 def threshold():
-    try:
-        return max(1, int(get_setting("alert_down_checks") or 2))
-    except (TypeError, ValueError):
-        return 2
+    return max(1, get_int("alert_down_checks"))
 
 
 def trigger_enabled(trigger):
     """True when this trigger is on and outbound email is on."""
-    return get_setting(TRIGGER_SETTING[trigger]) == "1" and get_smtp_config()["enabled"]
+    return get_bool(TRIGGER_SETTING[trigger]) and get_smtp_config()["enabled"]
 
 
 def audience(msg, users):
@@ -101,17 +98,66 @@ def parse_commit(last_commit):
     return (m.group(1), m.group(2)) if m else ("unknown", "")
 
 
+def _item(device, **extra):
+    """One switch in an alert email (the shape alert_render reads)."""
+    return {"id": device.id, "name": device.name, "host": device.host, "site_id": device.site_id,
+            "site": device.site.code if device.site else "", **extra}
+
+
 def _info(device, since):
     minutes = int((now() - since).total_seconds() // 60) if since else None
-    return {
-        "id": device.id,
-        "name": device.name,
-        "host": device.host,
-        "site_id": device.site_id,
-        "site": device.site.code if device.site else "",
-        "since": since,
-        "minutes": minutes,
-    }
+    return _item(device, since=since, minutes=minutes)
+
+
+class BackupRunAlerts:
+    """Backup-failed and config-changed alerts of one backup job: collected per switch, sent when the job ends.
+    Create it inside an app context, before the job's workers start."""
+
+    def __init__(self, manual):
+        self._lock = threading.Lock()
+        self._items = []
+        self._failed = targets("backup_failed") if trigger_enabled("backup_failed") else None
+        self._changed = (targets("config_changed") if trigger_enabled("config_changed")
+                         and (not manual or get_bool("alert_change_manual")) else None)
+
+    def _add(self, tgts, device, **extra):
+        if tgts is not None and would_reach(device.site_id, tgts):
+            with self._lock:
+                self._items.append(_item(device, **extra))
+
+    def backup_failed(self, device, error):
+        # reported once per failure streak; backup_fail_alerted is set by send(), when the email goes out
+        if not device.backup_fail_alerted:
+            self._add(self._failed, device, kind="failed", error=error)
+
+    def config_changed(self, device, last_commit, **change):
+        if self._changed is not None:
+            who, via = parse_commit(last_commit)
+            self._add(self._changed, device, kind="changed", committed_by=who, via=via, when=now(), **change)
+
+    def send(self, app, label):
+        failed = [e for e in self._items if e["kind"] == "failed"]
+        if failed:
+            # Mark switches as reported (once per failure streak) only now that the email goes out, and only
+            # those someone will still hear about - so a restart mid-job or a settings change loses nothing.
+            with app.app_context():
+                if trigger_enabled("backup_failed"):
+                    tg = targets("backup_failed")
+                    failed = [e for e in failed if would_reach(e["site_id"], tg)]
+                    for e in failed:
+                        d = db.session.get(Device, e["id"])
+                        if d:
+                            d.backup_fail_alerted = True
+                    db.session.commit()
+                else:
+                    failed = []
+        for trig, kinds in (("backup_failed", {"failed": failed}),
+                            ("config_changed", {"changed": [e for e in self._items if e["kind"] == "changed"]})):
+            try:
+                dispatch(app, trig, kinds, {"trigger_label": label})
+            except Exception as e:  # noqa: BLE001 - an alert problem must never affect the backup run
+                with app.app_context():
+                    log_event(f"Could not send {trig} alert: {e}", "alert", "WARN", user="monitor")
 
 
 def collect(device, old_status, new_status, old_since, limit=None, scheduled=True, sending=True):
@@ -152,7 +198,7 @@ def dispatch(app, trigger, by_kind, ctx=None):
     if not by_kind:
         return
     with app.app_context():
-        if trigger == "switch_down" and get_setting("alert_down_recovery") != "1":
+        if trigger == "switch_down" and not get_bool("alert_down_recovery"):
             by_kind.pop("up", None)
         if not by_kind or not trigger_enabled(trigger):
             return
@@ -163,7 +209,7 @@ def _send_all(app, trigger, by_kind, ctx):
     with app.app_context():
         tgts = targets(trigger)
         base = dict(ctx, style=style_from_settings(), app_url=get_smtp_config()["app_url"], checks=threshold(),
-                    diff_lines=max(0, get_int("alert_change_diff_lines") or 0))
+                    diff_lines=max(0, get_int("alert_change_diff_lines")))
         if trigger == "switch_down":
             base.setdefault("down_count", len(by_kind.get("down", [])))
             base.setdefault("recovered_count", len(by_kind.get("up", [])))

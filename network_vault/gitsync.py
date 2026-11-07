@@ -26,6 +26,7 @@ Every configuration change becomes one commit dated with the backup time; every 
 that changed something gets an annotated tag `backup/YYYY-MM-DD_HHMMSS`.
 """
 import base64
+import logging
 import os
 import re
 import shutil
@@ -34,35 +35,19 @@ import threading
 from datetime import timedelta
 from pathlib import Path
 
-from .models import Backup, Device, Site, db, get_setting, now, set_setting
-from .util import BASE_DIR, decrypt, encrypt, log_event, read_backup_file, safe_name
+from .models import DEFAULT_SETTINGS, Backup, Device, Site, db, get_bool, get_setting, now, set_setting, log_event
+from .util import BASE_DIR, NO_WINDOW, decrypt, encrypt, read_backup_file, safe_name
 
-# ──────────────────────────────────────────────────────────────────── paths ──
+logger = logging.getLogger("network_vault.gitsync")
 
-REPOS_BASE = BASE_DIR / "git-repos"        # per-site local working copies live here
-REPO_DIR   = REPOS_BASE / "MGMHC"          # backward-compat alias → default site repo
 
-# ────────────────────────────────────────────────────────── locking / state ──
+REPOS_BASE = BASE_DIR / "git-repos"
 
-_lock = threading.RLock()                           # guards _site_locks dict
+
+_lock = threading.RLock()
 _site_locks: dict = {}
 _safe_dirs_registered: set = set()
-_NO_WINDOW = 0x08000000 if os.name == "nt" else 0  # CREATE_NO_WINDOW on Windows
 
-# ─────────────────────────────────────────────────────────────── settings ───
-
-GIT_DEFAULTS = {
-    "git_enabled":      "0",
-    "git_url":          "",
-    "git_branch":       "main",            # legacy/fallback – not used per-site
-    "git_token_enc":    "",
-    "git_author_name":  "MGM Network Vault",
-    "git_author_email": "network-vault@mgmhealthcare.local",
-    "git_redact":       "1",               # mask secrets in the GitHub copy
-    "git_tag_runs":     "1",               # annotated tag per backup run
-    "git_last_push":    "",
-    "git_last_error":   "",
-}
 
 # Runtime state for the UI (initial history import runs in the background)
 progress = {"busy": False, "message": "", "done": 0, "total": 0}
@@ -72,16 +57,9 @@ class GitError(RuntimeError):
     pass
 
 
-def setting(key):
-    v = get_setting(key)
-    return GIT_DEFAULTS[key] if v is None else v
-
-
 def is_enabled():
-    return setting("git_enabled") == "1" and bool(setting("git_url"))
+    return get_bool("git_enabled") and bool(get_setting("git_url"))
 
-
-# ─────────────────────────────────────────────────── per-site helpers ───────
 
 def _safe_code(code: str) -> str:
     """Sanitise a site code into a valid git branch / directory name."""
@@ -100,7 +78,7 @@ def _get_site_lock(site_code: str) -> threading.RLock:
         return _site_locks[site_code]
 
 
-def _all_initialized_sites() -> list:
+def initialized_sites() -> list:
     """Site codes that have a local git repo initialized under REPOS_BASE."""
     if not REPOS_BASE.exists():
         return []
@@ -115,8 +93,6 @@ def _device_site_code(device) -> str:
     return None
 
 
-# ─────────────────────────────────────────────────────── git plumbing ───────
-
 def _ensure_safe_directory(repo_dir: Path):
     key = str(repo_dir)
     if key in _safe_dirs_registered:
@@ -127,7 +103,7 @@ def _ensure_safe_directory(repo_dir: Path):
             subprocess.run(
                 ["git", "config", scope, "--add", "safe.directory", path],
                 capture_output=True, text=True, timeout=10,
-                creationflags=_NO_WINDOW,
+                creationflags=NO_WINDOW,
             )
         except Exception:
             pass
@@ -135,23 +111,23 @@ def _ensure_safe_directory(repo_dir: Path):
 
 
 def _auth_header():
-    token = decrypt(setting("git_token_enc"))
+    token = decrypt(get_setting("git_token_enc"))
     if not token:
         return None
     return "Authorization: Basic " + base64.b64encode(f"x-access-token:{token}".encode()).decode()
 
 
 def _scrub(text):
-    token = decrypt(setting("git_token_enc"))
+    token = decrypt(get_setting("git_token_enc"))
     hdr = _auth_header()
     for secret in filter(None, [token, hdr, hdr and hdr.split()[-1]]):
         text = text.replace(secret, "***")
     return text
 
 
-def git(*args, auth=False, check=True, date=None, timeout=180, repo_dir=None):
-    """Run a git command inside the given (or default) repo directory."""
-    rd = Path(repo_dir) if repo_dir else REPO_DIR
+def git(*args, repo_dir, auth=False, check=True, date=None, timeout=180):
+    """Run a git command inside the given repo directory."""
+    rd = Path(repo_dir)
     _ensure_safe_directory(rd)
     env = os.environ.copy()
     env.update(GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never", LC_ALL="C")
@@ -160,8 +136,8 @@ def git(*args, auth=False, check=True, date=None, timeout=180, repo_dir=None):
         ("core.autocrlf",     "false"),
         ("core.quotepath",    "off"),
         ("safe.directory",    "*"),
-        ("user.name",         setting("git_author_name")),
-        ("user.email",        setting("git_author_email")),
+        ("user.name",         get_setting("git_author_name")),
+        ("user.email",        get_setting("git_author_email")),
     ]
     if auth and _auth_header():
         cfg.append(("http.extraHeader", _auth_header()))
@@ -174,7 +150,7 @@ def git(*args, auth=False, check=True, date=None, timeout=180, repo_dir=None):
     try:
         r = subprocess.run(cmd, cwd=rd, env=env, capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=timeout,
-                           creationflags=_NO_WINDOW)
+                           creationflags=NO_WINDOW)
     except FileNotFoundError as e:
         raise GitError("Git is not installed on this server (https://git-scm.com/download/win)") from e
     except subprocess.TimeoutExpired as e:
@@ -184,10 +160,8 @@ def git(*args, auth=False, check=True, date=None, timeout=180, repo_dir=None):
     return r.stdout.strip() if check else r
 
 
-# ─────────────────────────────────────────────────────────── URL helpers ────
-
 def web_url():
-    m = re.match(r"https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", setting("git_url") or "")
+    m = re.match(r"https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", get_setting("git_url") or "")
     return f"https://github.com/{m.group(1)}/{m.group(2)}" if m else None
 
 
@@ -203,15 +177,13 @@ def device_url(device):
         return None
     if isinstance(device, str):
         name = device
-        branch = setting("git_branch") or "main"
+        branch = get_setting("git_branch") or "main"
     else:
         name = device.name
         site_code = _device_site_code(device)
-        branch = _safe_code(site_code) if site_code else (setting("git_branch") or "main")
+        branch = _safe_code(site_code) if site_code else (get_setting("git_branch") or "main")
     return f"{base}/commits/{branch}/devices/{safe_name(name)}"
 
-
-# ──────────────────────────────────────────────────────── secret masking ────
 
 _JUNOS_RULES = [
     (re.compile(r'"\$\d+\$[^"]*"'), '"<masked>"'),                             # $9$ / $1$ / $5$ / $6$ secrets
@@ -235,8 +207,6 @@ def mask(text, juniper):
         text = rx.sub(repl, text)
     return text
 
-
-# ─────────────────────────────────────────────── repository management ──────
 
 README = """# MGM Network Vault - switch configuration archive
 
@@ -266,9 +236,8 @@ repository. Complete, restorable copies are kept by MGM Network Vault on the bac
 """
 
 
-def _has_commits(repo_dir=None):
-    rd = repo_dir or REPO_DIR
-    return git("rev-parse", "--verify", "-q", "HEAD", check=False, repo_dir=rd).returncode == 0
+def _has_commits(repo_dir):
+    return git("rev-parse", "--verify", "-q", "HEAD", check=False, repo_dir=repo_dir).returncode == 0
 
 
 def head(site_code=None):
@@ -280,9 +249,8 @@ def head(site_code=None):
             if not (rd / ".git").exists() or not _has_commits(rd):
                 return None
             return git("rev-parse", "HEAD", repo_dir=rd)
-    # Return dict of all initialized sites
     result = {}
-    for sc in _all_initialized_sites():
+    for sc in initialized_sites():
         result[sc] = head(sc)
     return result
 
@@ -294,7 +262,7 @@ def _init_site_repo(site_code: str):
     rd.mkdir(parents=True, exist_ok=True)
     if not (rd / ".git").exists():
         git("init", "-q", "-b", branch, repo_dir=rd)
-    url = setting("git_url")
+    url = get_setting("git_url")
     remotes = git("remote", check=False, repo_dir=rd).stdout.split()
     if "origin" in remotes:
         git("remote", "set-url", "origin", url, repo_dir=rd)
@@ -303,14 +271,14 @@ def _init_site_repo(site_code: str):
 
 
 def _write_static_files(repo_dir: Path):
-    masked = setting("git_redact") == "1"
+    masked = get_bool("git_redact")
     (repo_dir / "README.md").write_text(README.format(masked=_MASK_NOTE if masked else ""), encoding="utf-8")
     (repo_dir / ".gitattributes").write_text("* text eol=lf\n", encoding="utf-8")
 
 
-def _commit(message, date=None, repo_dir=None):
+def _commit(message, repo_dir, date=None):
     """Stage-and-commit. Returns the new sha, or None if nothing to commit."""
-    rd = repo_dir or REPO_DIR
+    rd = repo_dir
     if git("diff", "--cached", "--quiet", check=False, repo_dir=rd).returncode == 0:
         return None
     git("commit", "-q", "-m", message, date=date, repo_dir=rd)
@@ -320,7 +288,7 @@ def _commit(message, date=None, repo_dir=None):
 def _write_device_files(device, backup, repo_dir: Path):
     folder = repo_dir / "devices" / safe_name(device.name)
     folder.mkdir(parents=True, exist_ok=True)
-    masked = setting("git_redact") == "1"
+    masked = get_bool("git_redact")
     for rel, name in ((backup.path, "config.conf"), (backup.set_path, "config.set"), (backup.info_path, "info.txt")):
         target = folder / name
         if not rel:
@@ -386,12 +354,12 @@ def tag_run(job, head_before):
 
     head_before is a dict {site_code: sha} or None, as returned by head().
     """
-    if not is_enabled() or setting("git_tag_runs") != "1":
+    if not is_enabled() or not get_bool("git_tag_runs"):
         return
     name = f"backup/{job.started:%Y-%m-%d_%H%M%S}"
     base_msg = (f"Backup run #{job.id} ({job.trigger}): {job.ok} ok, {job.failed} failed of {job.total}\n\n")
     head_before = head_before or {}
-    for site_code in _all_initialized_sites():
+    for site_code in initialized_sites():
         try:
             rd = _site_repo(site_code)
             lock = _get_site_lock(site_code)
@@ -416,7 +384,6 @@ def remove_device(name, site_code=None):
     """Remove a device's folder from its site branch."""
     if not is_enabled():
         return
-    # Try to infer site if not supplied
     if not site_code:
         d = Device.query.filter_by(name=name).first()
         if d:
@@ -428,8 +395,7 @@ def remove_device(name, site_code=None):
             f"{name}: device removed from inventory (history kept)",
         )
     else:
-        # Fallback: remove from all initialized site repos
-        for sc in _all_initialized_sites():
+        for sc in initialized_sites():
             _device_change_site(
                 sc,
                 lambda rd: git("rm", "-r", "-q", "--ignore-unmatch", "--", f"devices/{safe_name(name)}", repo_dir=rd),
@@ -450,7 +416,7 @@ def rename_device(old, new, site_code=None):
                 git("mv", "--", f"devices/{safe_name(old)}", f"devices/{safe_name(new)}", repo_dir=rd)
         _device_change_site(site_code, op, f"{new}: renamed from {old}")
     else:
-        for sc in _all_initialized_sites():
+        for sc in initialized_sites():
             def op(rd, _sc=sc):
                 src = rd / "devices" / safe_name(old)
                 if src.exists() and safe_name(old) != safe_name(new):
@@ -482,7 +448,7 @@ def _fail(msg):
 def ahead():
     """Total number of local commits not yet pushed to GitHub, across all site repos."""
     total = 0
-    for site_code in _all_initialized_sites():
+    for site_code in initialized_sites():
         rd = _site_repo(site_code)
         lock = _get_site_lock(site_code)
         try:
@@ -495,8 +461,8 @@ def ahead():
                     total += int(git("rev-list", "--count", "HEAD", repo_dir=rd))
                 else:
                     total += int(git("rev-list", "--count", f"{ref}..HEAD", repo_dir=rd))
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001 - one broken site repo must not hide the others
+            logger.warning("Could not count unpushed commits for site %s: %s", site_code, e)
     return total
 
 
@@ -504,7 +470,7 @@ def push(site_code=None, raise_errors=False):
     """Push one or all site repos to GitHub. Returns True if at least one push succeeded."""
     if not is_enabled():
         return False
-    sites = [site_code] if site_code else _all_initialized_sites()
+    sites = [site_code] if site_code else initialized_sites()
     ok = False
     for sc in sites:
         rd = _site_repo(sc)
@@ -534,25 +500,18 @@ def _push_site_in_app(app, site_code):
         push(site_code)
 
 
-def _push_in_app(app):
-    with app.app_context():
-        push()
-
-
 def retry_push():
     """Scheduler hook: push any commits that couldn't be pushed earlier."""
     if is_enabled() and not progress["busy"] and ahead():
         push()
 
 
-# ─────────────────────────────────────────────────── setup / full sync ───────
-
 def test_connection():
     """Check URL + token can reach the remote. Returns a human-readable result."""
-    url = setting("git_url")
+    url = get_setting("git_url")
     out = git("ls-remote", "--heads", url, auth=True, timeout=60, repo_dir=REPOS_BASE)
-    initialized = _all_initialized_sites()
-    branch_names = [_safe_code(sc) for sc in initialized] if initialized else [setting("git_branch") or "main"]
+    initialized = initialized_sites()
+    branch_names = [_safe_code(sc) for sc in initialized] if initialized else [get_setting("git_branch") or "main"]
     found = [b for b in branch_names if f"refs/heads/{b}" in out]
     missing = [b for b in branch_names if b not in found]
     parts = []
@@ -621,7 +580,6 @@ def full_sync(app, user=None):
                     with lock:
                         _init_site_repo(sc)
 
-                        # Fetch / align with remote branch
                         remote = git("ls-remote", "--heads", "origin", branch,
                                      auth=True, timeout=60, repo_dir=rd)
                         if remote and not _has_commits(rd):
@@ -698,10 +656,9 @@ def full_sync(app, user=None):
 
 def recent_commits(limit=25):
     """Recent commits from the largest / most-active initialized site repo."""
-    # Pick the site with the most commits (or first found)
     best_rd = None
     best_count = -1
-    for sc in _all_initialized_sites():
+    for sc in initialized_sites():
         rd = _site_repo(sc)
         if not _has_commits(rd):
             continue
@@ -726,12 +683,11 @@ def recent_tags(limit=10):
     """Recent backup-run tags across all initialized site repos (merged & sorted)."""
     base = web_url()
     rows = []
-    for sc in _all_initialized_sites():
+    for sc in initialized_sites():
         rd = _site_repo(sc)
         if not _has_commits(rd):
             continue
         try:
-            branch = _safe_code(sc)
             out = git("tag", "-l", "backup/*", "--sort=-creatordate",
                       "--format=%(refname:short)%1f%(contents:subject)", repo_dir=rd)
             for line in out.splitlines():
@@ -746,7 +702,7 @@ def recent_tags(limit=10):
 
 def save_settings(form, user=None):
     """Persist the GitHub settings form. Returns True when the local copy had to be reset."""
-    old_url = setting("git_url")
+    old_url = get_setting("git_url")
     url = form.get("git_url", "").strip()
     url = re.sub(r"^https://[^@/]+@", "https://", url)  # never store credentials in the URL
     if url and not url.startswith("https://"):
@@ -758,8 +714,8 @@ def save_settings(form, user=None):
         raise ValueError("Invalid branch name")
     set_setting("git_url", url)
     set_setting("git_branch", branch)
-    set_setting("git_author_name", form.get("git_author_name", "").strip() or GIT_DEFAULTS["git_author_name"])
-    set_setting("git_author_email", form.get("git_author_email", "").strip() or GIT_DEFAULTS["git_author_email"])
+    set_setting("git_author_name", form.get("git_author_name", "").strip() or DEFAULT_SETTINGS["git_author_name"])
+    set_setting("git_author_email", form.get("git_author_email", "").strip() or DEFAULT_SETTINGS["git_author_email"])
     for key in ("git_enabled", "git_redact", "git_tag_runs"):
         set_setting(key, "1" if form.get(key) in ("on", "1") else "0")
     if form.get("git_token"):
@@ -769,6 +725,19 @@ def save_settings(form, user=None):
         reset_local()
         return True
     return False
+
+
+def run_started():
+    """Call when a backup job starts: the mirror's HEAD, for tagging the run when it ends (None when off)."""
+    return head() if is_enabled() else None
+
+
+def run_finished(job, head_before):
+    """Call when a backup job ends (app context): tag the run and push what is waiting."""
+    if is_enabled():
+        tag_run(job, head_before)
+        if ahead():
+            push()
 
 
 def init(app):

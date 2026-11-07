@@ -10,11 +10,12 @@ from datetime import timedelta
 
 from sqlalchemy import or_
 
-from . import engine
-from .models import Device, MacSighting, db, get_int, get_setting, now, set_setting
-from .operations import (_is_firewall, clean_mac, format_mac, is_ip, is_uplink_port, query_arp,
-                         query_mac_table)
-from .util import log_event
+from . import ssh
+from .models import Device, MacSighting, db, get_bool, get_int, now, set_setting, log_event
+from .netutil import clean_mac, format_mac, is_ip
+from .portclass import is_uplink_port
+from .switch_tables import query_arp, query_mac_table
+
 
 MAC_HISTORY_WORKERS = 4      # switches queried at the same time - a sweep must not flood the network
 SWITCH_TIMEOUT = 300         # seconds one switch may take once its turn starts; then it is skipped
@@ -34,7 +35,7 @@ def _is_multicast(clean):
     return bool(int(clean[:2], 16) & 1)
 
 
-def _edge_sightings(device, entries, app):
+def _edge_sightings(device, entries):
     """(mac, port, vlan) of the MACs learned on edge ports of one switch."""
     per_port = {}
     for e in entries:
@@ -44,7 +45,7 @@ def _edge_sightings(device, entries, app):
         port = e["interface"]
         if not port or port == "—" or _is_multicast(e["clean_mac"]):
             continue
-        if is_uplink_port(port, device=device, device_id=device.id, learned_mac_count=per_port[port], app=app):
+        if is_uplink_port(port, device=device, learned_mac_count=per_port[port]):
             continue
         out.append((e["clean_mac"], port, str(e["vlan"] or "")))
     return out
@@ -59,19 +60,13 @@ def _collect_switch(app, device_id):
             if not d:
                 return {"id": device_id, "name": name, "ok": False, "error": "device removed"}
             name = d.name
-            conn = engine.connect(d)
-            try:
+            with ssh.session(d) as conn:
                 macs = query_mac_table(d, conn=conn)
                 arp = query_arp(d, conn=conn) if d.role in ARP_ROLES else []
-            finally:
-                try:
-                    conn.disconnect()
-                except Exception:  # noqa: BLE001
-                    pass
             # query_mac_table swallows command errors and returns []. A live switch always has learned MACs,
             # so an empty table means the command failed or was rejected: report "no data", not "nothing here".
             return {"id": device_id, "name": name, "ok": True, "empty": not macs,
-                    "sightings": _edge_sightings(d, macs, app),
+                    "sightings": _edge_sightings(d, macs),
                     "arp": [(a["clean_mac"], a["ip"]) for a in arp]}
         except Exception as e:  # noqa: BLE001 - timeout / auth / anything: skip this switch
             return {"id": device_id, "name": name, "ok": False, "error": f"{type(e).__name__}: {e}"}
@@ -79,7 +74,7 @@ def _collect_switch(app, device_id):
 
 def _sweep_targets():
     devs = Device.query.filter(Device.enabled.is_(True), Device.credential_id.isnot(None)).all()
-    return sorted((d for d in devs if not _is_firewall(d)), key=lambda d: (d.role not in ARP_ROLES, d.name or ""))
+    return sorted((d for d in devs if not d.is_firewall), key=lambda d: (d.role not in ARP_ROLES, d.name or ""))
 
 
 def _arp_ips(results):
@@ -215,7 +210,7 @@ def run_sweep(app, workers=None):
 def sweep_if_enabled(app):
     """Scheduler entry point: does nothing when the setting is off."""
     with app.app_context():
-        if get_setting("mac_history_enabled") != "1":
+        if not get_bool("mac_history_enabled"):
             return None
     return run_sweep(app)
 

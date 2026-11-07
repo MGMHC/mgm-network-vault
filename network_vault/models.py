@@ -1,8 +1,11 @@
 from datetime import datetime
 import json
+from flask import has_request_context, session
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash, generate_password_hash
 import netaddr
+
+from . import platforms
 
 db = SQLAlchemy()
 
@@ -149,7 +152,6 @@ class Device(db.Model):
     notes = db.Column(db.Text, default="")
     credential_id = db.Column(db.Integer, db.ForeignKey("credential.id"))
 
-    # reachability
     status = db.Column(db.String(16), default="unknown")  # up | down | ssh-down | unknown
     ping_ms = db.Column(db.Float)
     last_checked = db.Column(db.DateTime)
@@ -159,7 +161,6 @@ class Device(db.Model):
     backup_fail_alerted = db.Column(db.Boolean, default=False)  # a backup-failed email went out for this failure streak
     hostname = db.Column(db.String(128))  # the switch's own hostname (show version) - what LLDP neighbours report
 
-    # facts gathered during backup
     sw_version = db.Column(db.String(128))
     hw_model = db.Column(db.String(128))
     serial = db.Column(db.String(64))
@@ -171,7 +172,6 @@ class Device(db.Model):
 
     backups = db.relationship("Backup", backref="device", cascade="all, delete-orphan", lazy="dynamic", order_by="desc(Backup.created_at)")
 
-    # DCIM Rack elevation fields
     rack_id = db.Column(db.Integer, db.ForeignKey("dcim_rack.id", ondelete="SET NULL"), nullable=True, index=True)
     rack_position = db.Column(db.Integer, nullable=True)  # Top RU unit position
     rack_face = db.Column(db.String(10), default="front")  # front | rear | both
@@ -186,12 +186,20 @@ class Device(db.Model):
         return self.hw_model or ("not detected yet" if self.model == "Auto" else self.model)
 
     @property
+    def profile(self):
+        return platforms.profile(self.platform)
+
+    @property
     def is_juniper(self):
-        return (self.platform or "").startswith("juniper")
+        return self.profile.family == "juniper"
 
     @property
     def is_sonicwall(self):
-        return (self.platform or "").startswith("sonicwall")
+        return self.profile.family == "sonicwall"
+
+    @property
+    def is_firewall(self):
+        return (self.role or "") == "firewall" or self.is_sonicwall
 
     @property
     def vc_members(self):
@@ -399,7 +407,6 @@ DEFAULT_SETTINGS = {
     "mac_history_retention_days": "90",
     "mac_history_last_run": "",      # set by the sweep, not by the Settings form
     "mac_history_last_result": "",
-    # SMTP / Password Reset
     "smtp_enabled": "1",
     "smtp_host": "smtp.office365.com",
     "smtp_port": "587",
@@ -409,7 +416,6 @@ DEFAULT_SETTINGS = {
     "smtp_from_name": "MGM Networkvault",
     "smtp_from": "donotreply@mgmhealthcare.in",
     "app_url": "",                  # external base URL (e.g. https://networkvault.mgmhealthcare.in)
-    # Switch-down email alerts
     "alert_down_enabled": "1",
     "alert_down_checks": "2",       # consecutive failed reachability checks before emailing
     "alert_down_recovery": "1",     # also email when a switch comes back
@@ -417,10 +423,19 @@ DEFAULT_SETTINGS = {
     "alert_change_enabled": "1",    # email when a backup finds a configuration change
     "alert_change_manual": "1",     # ... including changes found by manual backups
     "alert_change_diff_lines": "40",  # diff lines shown in the change email (0 = none)
-    # Alert email style (Alerts page)
     "alert_style_color": "#25366C",
     "alert_style_logo": "1",
     "alert_style_footer": "Sent by MGM Network Vault. Manage alerts in Network Vault → Alerts.",
+    "git_enabled": "0",
+    "git_url": "",
+    "git_branch": "main",           # used only before a site has its own branch
+    "git_token_enc": "",
+    "git_author_name": "MGM Network Vault",
+    "git_author_email": "network-vault@mgmhealthcare.local",
+    "git_redact": "1",              # mask secrets in the GitHub copy
+    "git_tag_runs": "1",            # annotated tag per backup run
+    "git_last_push": "",
+    "git_last_error": "",
 }
 
 
@@ -434,6 +449,10 @@ def get_int(key):
         return int(get_setting(key))
     except (TypeError, ValueError):
         return int(DEFAULT_SETTINGS[key])
+
+
+def get_bool(key):
+    return get_setting(key) == "1"
 
 
 def set_setting(key, value):
@@ -450,10 +469,6 @@ def password_version(user):
     import hashlib
     return hashlib.sha256((user.password_hash or "").encode()).hexdigest()[:16]
 
-
-# =============================================================================
-# IPAM Models: VRFs, VLAN Groups, VLANs (with QinQ), Prefixes, IP Addresses, FHRP Groups
-# =============================================================================
 
 class VRF(db.Model):
     __tablename__ = 'ipam_vrf'
@@ -524,7 +539,6 @@ class VLAN(db.Model):
     role = db.Column(db.String(32), default='')  # server, voice, mgmt, dmz, access
     description = db.Column(db.String(256), default='')
     
-    # QinQ Support
     qinq_role = db.Column(db.String(16), nullable=True)  # 'svlan' (Service Provider Outer) | 'cvlan' (Customer Inner) | None
     qinq_svlan_id = db.Column(db.Integer, db.ForeignKey('ipam_vlan.id', ondelete='SET NULL'), nullable=True)
     
@@ -715,10 +729,6 @@ class FHRPGroupAssignment(db.Model):
         }
 
 
-# =============================================================================
-# DCIM Rack Elevations & Physical Cabinets
-# =============================================================================
-
 class RackGroup(db.Model):
     __tablename__ = 'dcim_rack_group'
     id = db.Column(db.Integer, primary_key=True)
@@ -787,7 +797,7 @@ class Rack(db.Model):
         for d in self.devices.all():
             if d.rack_position and (d.rack_face in ('both', face)):
                 h = d.rack_height or 1
-                pos = d.rack_position  # Top unit
+                pos = d.rack_position
                 for u in range(pos - h + 1, pos + 1):
                     dev_map[u] = {
                         'device': {
@@ -886,3 +896,14 @@ class RackReservation(db.Model):
             'user': self.user or '',
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else ''
         }
+
+
+def log_event(message, category="system", level="INFO", device=None, details=None, user=None, commit=True):
+    if user is None:
+        user = session.get("user") if has_request_context() else "scheduler"
+    db.session.add(LogEntry(
+        level=level, category=category, message=message[:512], details=details, user=user,
+        device_id=device.id if device else None, device_name=device.name if device else None,
+    ))
+    if commit:
+        db.session.commit()

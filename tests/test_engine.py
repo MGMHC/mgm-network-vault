@@ -3,7 +3,7 @@ import datetime
 
 import pytest
 
-from network_vault import engine, lifecycle
+from network_vault import engine, lifecycle, ssh
 
 JUNOS = """## Last commit: 2026-03-01 10:00:00 UTC by admin
 ## Last changed: 2026-03-01 10:00:00 UTC
@@ -51,7 +51,7 @@ def test_hash_of_empty_config_is_defined():
 
 
 def test_clean_strips_trailing_blank_and_vc_prompt_lines():
-    out = engine.clean("\r\n\nset a b   \nset c d\n\n{master:0}\n")
+    out = ssh.clean("\r\n\nset a b   \nset c d\n\n{master:0}\n")
     assert out == "set a b\nset c d\n"
 
 

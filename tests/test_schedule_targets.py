@@ -125,5 +125,5 @@ def test_table_and_dashboard_list_every_value_and_exclusions(app, admin, writer,
 
 
 def test_empty_date_shows_a_dash_not_garbled_text():
-    from network_vault.views import fmt_dt
+    from network_vault.web import fmt_dt
     assert fmt_dt(None) == "—"

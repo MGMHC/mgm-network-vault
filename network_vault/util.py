@@ -1,23 +1,19 @@
-"""Shared helpers: secrets, event logging, paths."""
-import json
+"""Shared helpers: data folders, secrets, backup file access."""
 import os
 import re
 import secrets
-from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
 from . import config
-from .models import LogEntry, db
-from .portable import apply_pending_restore
+from .portable import FLASK_KEY_FILE, SECRET_KEY_FILE, apply_pending_restore
 
-# NETWORK_VAULT_DATA is kept as an alias of NETWORK_VAULT_DATA_DIR for older setups
-BASE_DIR = Path(os.environ["NETWORK_VAULT_DATA"]) if os.environ.get("NETWORK_VAULT_DATA") else config.data_dir()
+NO_WINDOW = 0x08000000 if os.name == "nt" else 0  # CREATE_NO_WINDOW: no console window for git/ping
+
+BASE_DIR = config.data_dir()
 BASE_DIR.mkdir(parents=True, exist_ok=True)
 # a restore uploaded earlier is swapped in here - before the keys and database are opened
 apply_pending_restore(BASE_DIR)
-# restored.json is left by the swap (here or by "manage.py import") so the app can log it once
-RESTORED = json.loads((BASE_DIR / "restored.json").read_text(encoding="utf-8"))     if (BASE_DIR / "restored.json").exists() else None
 BACKUP_DIR = config.backup_dir()
 BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -29,8 +25,8 @@ def _key_file(name, factory):
     return p.read_bytes().strip()
 
 
-FLASK_SECRET = _key_file("flask.key", lambda: secrets.token_hex(32).encode())
-_fernet = Fernet(_key_file("secret.key", Fernet.generate_key))
+FLASK_SECRET = _key_file(FLASK_KEY_FILE, lambda: secrets.token_hex(32).encode())
+_fernet = Fernet(_key_file(SECRET_KEY_FILE, Fernet.generate_key))
 
 
 def encrypt(text):
@@ -44,21 +40,6 @@ def decrypt(token):
         return _fernet.decrypt(token.encode()).decode()
     except InvalidToken:
         return ""
-
-
-def log_event(message, category="system", level="INFO", device=None, details=None, user=None, commit=True):
-    if user is None:
-        try:
-            from flask import has_request_context, session
-            user = session.get("user") if has_request_context() else "scheduler"
-        except Exception:
-            user = None
-    db.session.add(LogEntry(
-        level=level, category=category, message=message[:512], details=details, user=user,
-        device_id=device.id if device else None, device_name=device.name if device else None,
-    ))
-    if commit:
-        db.session.commit()
 
 
 def safe_name(name):

@@ -40,15 +40,14 @@ FORMAT = 1
 MAGIC = b"NVAULTX1"
 CHUNK = 1024 * 1024
 APP_NAME = "MGM Network Vault"
-DATA_FILES = ("network_vault.db", "secret.key", "flask.key")
+DB_FILE, SECRET_KEY_FILE, FLASK_KEY_FILE = DATA_FILES = ("network_vault.db", "secret.key", "flask.key")
+RESTORED_FILE = "restored.json"  # left by the swap so the app can log the restore once
 PENDING = "restore-pending"
 
 
 class ExportError(Exception):
     pass
 
-
-# --------------------------------------------------------------------------- crypto
 
 def _key(passphrase, salt):
     return Scrypt(salt=salt, length=32, n=2 ** 15, r=8, p=1).derive(passphrase.encode())
@@ -94,9 +93,7 @@ def _decrypt_file(src, dst, passphrase):
             idx += 1
 
 
-# --------------------------------------------------------------------------- export
-
-def _counts(db_path):
+def counts(db_path):
     con = sqlite3.connect(db_path)
     try:
         return {t: con.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
@@ -105,19 +102,19 @@ def _counts(db_path):
         con.close()
 
 
-def export_archive(base_dir, out_path, passphrase, config_file=None, backup_dir=None):
+def export_archive(base_dir, backup_dir, out_path, passphrase, config_file=None):
     """Write an encrypted export of the data folder to out_path. Returns the manifest."""
     if len(passphrase or "") < 10:
         raise ExportError("Use a passphrase of at least 10 characters.")
     base_dir = Path(base_dir)
-    bk_dir = Path(backup_dir) if backup_dir else (base_dir / "backups")
+    bk_dir = Path(backup_dir)
     tmp = base_dir / "tmp"
     tmp.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     db_copy, zip_path = tmp / f"export-{stamp}.db", tmp / f"export-{stamp}.zip"
     try:
         # consistent snapshot even while backups are running
-        src = sqlite3.connect(base_dir / "network_vault.db")
+        src = sqlite3.connect(base_dir / DB_FILE)
         dst = sqlite3.connect(db_copy)
         with dst:
             src.backup(dst)
@@ -129,11 +126,11 @@ def export_archive(base_dir, out_path, passphrase, config_file=None, backup_dir=
             "format": FORMAT, "app": APP_NAME, "app_version": __version__,
             "created": datetime.now().isoformat(timespec="seconds"),
             "source_host": socket.gethostname(), "source_data_dir": str(base_dir),
-            "counts": _counts(db_copy), "backup_files": len(backup_files),
+            "counts": counts(db_copy), "backup_files": len(backup_files),
         }
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
             z.writestr("manifest.json", json.dumps(manifest, indent=2))
-            z.write(db_copy, "data/network_vault.db")
+            z.write(db_copy, f"data/{DB_FILE}")
             for name in ("secret.key", "flask.key"):
                 z.write(base_dir / name, f"data/{name}")
             for p in backup_files:
@@ -146,8 +143,6 @@ def export_archive(base_dir, out_path, passphrase, config_file=None, backup_dir=
         for p in (db_copy, zip_path):
             p.unlink(missing_ok=True)
 
-
-# --------------------------------------------------------------------------- import
 
 def stage_restore(base_dir, in_path, passphrase):
     """Decrypt + verify an export and unpack it to data/restore-pending. Returns the manifest."""
@@ -189,8 +184,7 @@ def stage_restore(base_dir, in_path, passphrase):
                         shutil.copyfileobj(fi, fo)
             if "config.toml" in names:
                 (pending / "config.toml.from-export").write_bytes(z.read("config.toml"))
-        # sanity check the database before we accept it
-        con = sqlite3.connect(pending / "data" / "network_vault.db")
+        con = sqlite3.connect(pending / "data" / DB_FILE)
         try:
             if con.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise ExportError("The database inside the export is damaged.")
@@ -235,12 +229,20 @@ def apply_pending_restore(base_dir):
     if (pending / "config.toml.from-export").exists():
         shutil.move(str(pending / "config.toml.from-export"), str(base_dir / "config.toml.from-export"))
     manifest["previous_data_kept_in"] = str(keep)
-    (base_dir / "restored.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    (base_dir / RESTORED_FILE).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     shutil.rmtree(pending, ignore_errors=True)
     return manifest
 
 
-# --------------------------------------------------------------------------- application package
+def pop_restored(base_dir):
+    """The manifest of a restore swapped in at this start (once), or None."""
+    f = Path(base_dir) / RESTORED_FILE
+    if not f.exists():
+        return None
+    manifest = json.loads(f.read_text(encoding="utf-8"))
+    f.unlink()
+    return manifest
+
 
 PACKAGE_EXCLUDE_DIRS = {".venv", "data", "logs", "__pycache__", ".git", "node_modules"}
 PACKAGE_EXCLUDE_FILES = {"config.toml"}  # server-specific; config.example.toml is included

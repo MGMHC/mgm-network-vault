@@ -48,10 +48,10 @@ def main():
     ap.add_argument("--version", action="version", version=f"MGM Network Vault {__version__}")
     a = ap.parse_args()
 
-    from network_vault.util import BASE_DIR  # noqa: E402 - after argparse so --help works without data
+    from network_vault.util import BACKUP_DIR, BASE_DIR  # noqa: E402 - after argparse so --help works without data
 
     if a.cmd == "export":
-        m = portable.export_archive(BASE_DIR, a.file, _passphrase(confirm=True), config.CONFIG_FILE)
+        m = portable.export_archive(BASE_DIR, BACKUP_DIR, a.file, _passphrase(confirm=True), config.CONFIG_FILE)
         print(f"Exported {m['counts']['device']} devices, {m['counts']['backup']} backups, "
               f"{m['backup_files']} files -> {a.file}")
     elif a.cmd == "import":
@@ -88,9 +88,9 @@ def main():
         print(f"Config file: {config.CONFIG_FILE} ({'found' if config.CONFIG_FILE.exists() else 'not found - defaults'})")
         print(f"Data folder: {BASE_DIR}")
         print(f"Listening:   {config.get('host')}:{config.get('port')}  (running: {_app_running()})")
-        db = BASE_DIR / "network_vault.db"
+        db = BASE_DIR / portable.DB_FILE
         if db.exists():
-            print("Counts:     ", portable._counts(db))
+            print("Counts:     ", portable.counts(db))
 
 
 if __name__ == "__main__":

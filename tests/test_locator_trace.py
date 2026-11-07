@@ -6,7 +6,7 @@ import time
 import pytest
 
 from conftest import LLDP_HEADER as HDR, lldp_row
-from network_vault import operations as O
+from network_vault import locator
 
 MAC = "84a93e76eab4"
 COLON = "84:a9:3e:76:ea:b4"
@@ -30,13 +30,13 @@ def topo(seed):
 @pytest.fixture()
 def locate(app, switches, monkeypatch):
     """run(ids, query, ...) -> (result, events). Keeps worker count small and restores it."""
-    monkeypatch.setattr(O, "LOCATOR_WORKERS", 4)
+    monkeypatch.setattr(locator, "LOCATOR_WORKERS", 4)
 
     def run(ids, query=MAC, full=False, user_site_ids=None, cancel_after=None):
         rid = f"t{time.time()}"
         if cancel_after:
-            threading.Timer(cancel_after, lambda: O.cancel_locator_run(rid)).start()
-        evs = [json.loads(line) for line in O.stream_locate_host(app, ids, query, run_id=rid, full=full,
+            threading.Timer(cancel_after, lambda: locator.cancel_locator_run(rid)).start()
+        evs = [json.loads(line) for line in locator.stream_locate_host(app, ids, query, run_id=rid, full=full,
                                                                   user_site_ids=user_site_ids)]
         res = next((e["result"] for e in evs if e["type"] == "complete"), None)
         return res, evs
@@ -163,7 +163,7 @@ def test_progress_follows_the_trace(locate, topo, switches, base):
     assert any("hop 1" in t and topo["a"] in t for t in steps)
     assert pcts == sorted(pcts) and pcts[-1] > 0 and max(pcts) < 100
     assert prog[-1]["done"] >= 3 and prog[-1]["total"] == len(topo["hc_ids"])
-    state = O.get_locator_run(evs[0]["run_id"])
+    state = locator.get_locator_run(evs[0]["run_id"])
     assert state["status"] == "complete" and state["step"]
 
 

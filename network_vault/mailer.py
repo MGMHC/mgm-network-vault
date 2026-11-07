@@ -10,8 +10,8 @@ from email.utils import formataddr, parseaddr
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from .models import Setting, User, db, get_setting
-from .util import FLASK_SECRET, decrypt, encrypt, log_event
+from .models import DEFAULT_SETTINGS, User, db, get_bool, get_int, get_setting
+from .util import FLASK_SECRET, decrypt
 
 logger = logging.getLogger("mailer")
 
@@ -20,14 +20,14 @@ def get_smtp_config():
     """Return dictionary of current SMTP settings."""
     pass_enc = get_setting("smtp_pass_enc") or ""
     return {
-        "enabled": get_setting("smtp_enabled") == "1",
-        "host": get_setting("smtp_host") or "smtp.office365.com",
-        "port": int(get_setting("smtp_port") or 587),
-        "encryption": (get_setting("smtp_encryption") or "starttls").lower(),
+        "enabled": get_bool("smtp_enabled"),
+        "host": get_setting("smtp_host") or DEFAULT_SETTINGS["smtp_host"],
+        "port": get_int("smtp_port"),
+        "encryption": (get_setting("smtp_encryption") or DEFAULT_SETTINGS["smtp_encryption"]).lower(),
         "user": get_setting("smtp_user") or "",
         "password": decrypt(pass_enc) if pass_enc else "",
-        "from_name": get_setting("smtp_from_name") or "MGM Networkvault",
-        "from_addr": get_setting("smtp_from") or "donotreply@mgmhealthcare.in",
+        "from_name": get_setting("smtp_from_name") or DEFAULT_SETTINGS["smtp_from_name"],
+        "from_addr": get_setting("smtp_from") or DEFAULT_SETTINGS["smtp_from"],
         "app_url": (get_setting("app_url") or "").rstrip("/"),
     }
 
@@ -61,7 +61,6 @@ def send_email(to_email: str, subject: str, html_body: str, text_body: str = Non
     msg["To"] = to_email
 
     if not text_body:
-        # Fallback plain text representation
         text_body = "Please view this message in an email client that supports HTML."
 
     alt.attach(MIMEText(text_body, "plain", "utf-8"))

@@ -7,184 +7,15 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
-from . import gitsync
-from .models import Backup, Device, Job, db, get_int, get_setting, now
-from .util import BACKUP_DIR, decrypt, log_event, safe_name
-
-import paramiko
-from netmiko.cisco.cisco_s300 import CiscoS300SSH
-from netmiko.channel import SSHChannel
-from netmiko.exceptions import NetmikoAuthenticationException
-from netmiko.ssh_dispatcher import CLASS_MAPPER, platforms
-
-
-
-class CiscoC1300SSH(CiscoS300SSH):
-    """Cisco C1300 / CBS / SG switch driver with fallback for in-band SSH login.
-
-    On Cisco C1300 and Small Business switches, standard SSH password authentication
-    ('ip ssh password-auth') is disabled by factory default. In that case, standard
-    Paramiko auth_password fails with 'Bad authentication type; allowed types: []'.
-    This driver attempts standard SSH auth first; if that fails, it falls back to
-    transport auth_none followed by interactive in-band terminal login ('User Name:', 'Password:').
-    """
-
-    def establish_connection(self, width: int = 511, height: int = 1000) -> None:
-        try:
-            return super().establish_connection(width=width, height=height)
-        except NetmikoAuthenticationException:
-            return self._establish_inband_connection(width=width, height=height)
-
-    def _establish_inband_connection(self, width: int = 511, height: int = 1000) -> None:
-        import time
-        self.remote_conn_pre = self._build_ssh_client()
-        sock = (self.host, self.port)
-        t = paramiko.Transport(sock)
-        if self.disabled_algorithms:
-            t.disabled_algorithms = self.disabled_algorithms
-        t.start_client(timeout=self.conn_timeout)
-        try:
-            t.auth_none(self.username)
-        except Exception:
-            pass
-
-        if not t.is_authenticated():
-            t.close()
-            raise NetmikoAuthenticationException(
-                f"Failed to authenticate to {self.host}:{self.port} (neither password nor in-band allowed)"
-            )
-
-        # Attach transport to SSHClient wrapper so Netmiko / Paramiko cleanup tears it down cleanly
-        if self.remote_conn_pre:
-            self.remote_conn_pre._transport = t
-
-        self.remote_conn = t.open_session()
-        self.remote_conn.get_pty(term="vt100", width=width, height=height)
-        self.remote_conn.invoke_shell()
-        self.remote_conn.settimeout(self.blocking_timeout)
-
-        buf = ""
-        start = time.time()
-        timeout = max(10, self.auth_timeout)
-        while time.time() - start < timeout:
-            if self.remote_conn.recv_ready():
-                chunk = self.remote_conn.recv(1024).decode(self.encoding, errors="ignore")
-                buf += chunk
-                if any(prompt in buf for prompt in ["User Name:", "User Name :", "login as:"]):
-                    break
-            time.sleep(0.1)
-
-        if any(prompt in buf for prompt in ["User Name:", "User Name :", "login as:"]):
-            self.remote_conn.send((self.username + "\r").encode(self.encoding))
-            buf = ""
-            start = time.time()
-            while time.time() - start < timeout:
-                if self.remote_conn.recv_ready():
-                    chunk = self.remote_conn.recv(1024).decode(self.encoding, errors="ignore")
-                    buf += chunk
-                    if "Password:" in buf or "Password :" in buf:
-                        break
-                time.sleep(0.1)
-
-        if "Password:" in buf or "Password :" in buf:
-            self.remote_conn.send((self.password + "\r").encode(self.encoding))
-            buf = ""
-            start = time.time()
-            while time.time() - start < timeout:
-                if self.remote_conn.recv_ready():
-                    chunk = self.remote_conn.recv(1024).decode(self.encoding, errors="ignore")
-                    buf += chunk
-                    if any(p in buf for p in [">", "#"]):
-                        break
-                time.sleep(0.1)
-
-        self.channel = SSHChannel(conn=self.remote_conn, encoding=self.encoding)
-        return None
-
-    def disconnect(self) -> None:
-        """Gracefully exit and ensure Paramiko transport is terminated to free VTY lines."""
-        try:
-            super().disconnect()
-        finally:
-            if self.remote_conn_pre and hasattr(self.remote_conn_pre, "_transport") and self.remote_conn_pre._transport:
-                try:
-                    self.remote_conn_pre._transport.close()
-                except Exception:
-                    pass
-
-
-class SonicWallSonicOSSSH(CiscoS300SSH):
-    """Driver for SonicWall firewalls running SonicOS Enhanced (NSa, TZ, SuperMassive).
-
-    Handles SonicOS interactive terminal negotiation, in-band secondary password prompts,
-    paging disable ('no cli pager session' on SonicOS 7/8, 'no cli pager' on SonicOS 6),
-    and command execution over SSH.
-    """
-
-    def establish_connection(self, width: int = 511, height: int = 1000) -> None:
-        super().establish_connection(width=width, height=height)
-        # Check if SonicOS presents an interactive in-band Password: prompt after SSH banner
-        import time
-        time.sleep(0.5)
-        buf = ""
-        start = time.time()
-        while time.time() - start < 4:
-            if self.remote_conn.recv_ready():
-                buf += self.remote_conn.recv(1024).decode(self.encoding, errors="ignore")
-                if "password:" in buf.lower():
-                    break
-            time.sleep(0.1)
-
-        if "password:" in buf.lower():
-            self.remote_conn.send((self.password + "\n").encode(self.encoding))
-            time.sleep(0.5)
-            # Wait for base prompt to appear
-            start = time.time()
-            while time.time() - start < 6:
-                if self.remote_conn.recv_ready():
-                    buf += self.remote_conn.recv(1024).decode(self.encoding, errors="ignore")
-                    if any(p in buf for p in [">", "#"]):
-                        break
-                time.sleep(0.1)
-
-    def session_preparation(self) -> None:
-        self._test_channel_read(pattern=r"[>#]")
-        self.set_base_prompt()
-        self.disable_paging()
-
-    def disable_paging(self, command: str = "no cli pager session", delay_factor: float = 1.0) -> str:
-        output = ""
-        for cmd in ("no cli pager session", "no cli pager"):
-            try:
-                output = self.send_command_timing(cmd)
-                if "% Error" not in output:
-                    break
-            except Exception:
-                pass
-        return output
-
-
-
-CLASS_MAPPER["cisco_s300"] = CiscoC1300SSH
-CLASS_MAPPER["sonicwall_sonicos"] = SonicWallSonicOSSSH
-if "sonicwall_sonicos" not in platforms:
-    platforms.append("sonicwall_sonicos")
-
-NETMIKO_TYPE = {
-    "juniper_junos": "juniper_junos",
-    "cisco_c1300": "cisco_s300",
-    "cisco_s300": "cisco_s300",
-    "cisco_ios": "cisco_ios",
-    "sonicwall_sonicos": "sonicwall_sonicos",
-}
-
+from . import alerts, gitsync, ssh
+from .models import Backup, Device, Job, db, get_bool, get_int, now, log_event
+from .util import BACKUP_DIR, read_backup_file, safe_name
 
 # Lines that change without a real config change; ignored for change detection.
 VOLATILE = re.compile(
     r"^(## Last (commit|changed):|! Last configuration change|! NVRAM config last updated|"
     r"! No configuration change since|Building configuration|Current configuration\s*:|"
     r"! Time:|ntp clock-period|.*System Time:.*|.*Up Time:.*)", re.I)
-VC_PROMPT_LINE = re.compile(r"^\{(master|backup|linecard)(:\d+)?\}\s*$", re.I)
 
 
 _device_locks = {}
@@ -196,102 +27,6 @@ def _lock_for(device_id):
         return _device_locks.setdefault(device_id, threading.Lock())
 
 
-# --------------------------------------------------------------------------- connection
-
-def connect(device, retries=2, backoff_base=3):
-    import time
-    from netmiko import ConnectHandler
-
-    cred = device.credential
-    if not cred:
-        raise RuntimeError("No credential profile assigned to this device")
-    t = get_int("ssh_timeout")
-    params = dict(
-        device_type=NETMIKO_TYPE.get(device.platform, device.platform),
-        host=device.host, port=device.port or 22,
-        username=cred.username, password=decrypt(cred.password_enc),
-        secret=decrypt(cred.secret_enc),
-        conn_timeout=t, auth_timeout=t, banner_timeout=t, timeout=t,
-        fast_cli=False, global_delay_factor=1,
-    )
-    if device.legacy_ssh:
-        # Old Junos (EX2200/EX3300 on 12.x) and older Cisco: force classic ssh-rsa signatures
-        params["disabled_algorithms"] = {"pubkeys": ["rsa-sha2-256", "rsa-sha2-512"]}
-
-    attempt = 0
-    while True:
-        try:
-            conn = ConnectHandler(**params)
-            if device.platform.startswith("cisco") and params["secret"]:
-                try:
-                    if not conn.check_enable_mode():
-                        conn.enable()
-                except Exception:
-                    pass
-            return conn
-        except Exception as e:
-            msg = str(e).lower()
-            # Retry transient SSH handshake / banner / connection drops (e.g. switch VTY exhaustion or CPU spike)
-            is_transient = any(needle in msg for needle in (
-                "error reading ssh protocol banner",
-                "eof",
-                "connection reset",
-                "connection closed",
-                "banner_timeout",
-                "tcp connection to device failed",
-            ))
-            if is_transient and attempt < retries:
-                attempt += 1
-                delay = backoff_base * attempt
-                log_event(
-                    f"Transient SSH handshake issue on {device.name} ({e}); retrying in {delay}s (attempt {attempt}/{retries})",
-                    "backup", "WARN", device, commit=True
-                )
-                time.sleep(delay)
-                continue
-
-            # If banner failed, check if switch sent a clear text disconnect message (e.g. VTY line limit reached)
-            if "error reading ssh protocol banner" in msg:
-                import socket
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(2.0)
-                    s.connect((device.host, device.port or 22))
-                    raw_banner = s.recv(512).decode("ascii", errors="ignore").strip()
-                    s.close()
-                    if "maximum number of simultaneous connections" in raw_banner.lower():
-                        raise RuntimeError(
-                            f"Switch VTY line exhaustion on {device.name} ({device.host}): "
-                            f"Server reached maximum number of simultaneous connections. "
-                            f"Clear idle SSH sessions on switch via console/web or reduce exec-timeout."
-                        ) from e
-                    elif raw_banner and not raw_banner.startswith("SSH-"):
-                        raise RuntimeError(
-                            f"SSH protocol banner rejected by {device.name} ({device.host}): {raw_banner}"
-                        ) from e
-                except RuntimeError:
-                    raise
-                except Exception:
-                    pass
-
-            raise
-
-
-
-def run(conn, cmd):
-    out = conn.send_command(cmd, read_timeout=get_int("read_timeout"), strip_prompt=True, strip_command=True)
-    return clean(out)
-
-
-def clean(text):
-    lines = (text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    while lines and (not lines[-1].strip() or VC_PROMPT_LINE.match(lines[-1].strip())):
-        lines.pop()
-    while lines and not lines[0].strip():
-        lines.pop(0)
-    return "\n".join(l.rstrip() for l in lines) + "\n"
-
-
 def normalized(text):
     return [l for l in (text or "").splitlines() if not VOLATILE.match(l.strip())]
 
@@ -299,8 +34,6 @@ def normalized(text):
 def config_hash(text):
     return hashlib.sha256("\n".join(normalized(text)).encode()).hexdigest()
 
-
-# --------------------------------------------------------------------------- fact parsing
 
 def parse_vc(text):
     members = []
@@ -388,58 +121,59 @@ def apply_facts(device, facts, vc, actor):
             log_event("Virtual Chassis recovered: all members present", "device", "INFO", device, commit=False, user=actor)
 
 
-# --------------------------------------------------------------------------- collection
+def _first(conn, *cmds, optional=False):
+    """Output of the first command the device accepts (SonicOS and Cisco versions differ in command names)."""
+    for i, cmd in enumerate(cmds):
+        try:
+            return ssh.run(conn, cmd)
+        except Exception:  # noqa: BLE001 - try the next form
+            if i == len(cmds) - 1 and not optional:
+                raise
+    return ""
+
+
+def _read_facts(conn, device, vc_members):
+    """version, inventory, the (command, output) pairs for the info file, and VC members (Juniper) or None."""
+    family = device.profile.family
+    vc = None
+    if family == "juniper":
+        version = ssh.run(conn, "show version | no-more")
+        inventory = ssh.run(conn, "show chassis hardware | no-more")
+        parts = [("show version", version), ("show chassis hardware", inventory)]
+        if vc_members:
+            vc_out = ssh.run(conn, "show virtual-chassis | no-more")
+            parts.append(("show virtual-chassis", vc_out))
+            vc = parse_vc(vc_out)
+    elif family == "sonicwall":
+        version = _first(conn, "show status", "show version")
+        inventory = _first(conn, "show system", optional=True)
+        parts = [("show status", version), ("show system", inventory)]
+    else:
+        version = ssh.run(conn, "show version")
+        inventory = _first(conn, "show inventory", optional=True)
+        parts = [("show version", version), ("show inventory", inventory)]
+        if vc_members:
+            parts.append(("stack", ssh.run(conn, device.profile.stack_cmd)))
+    return version, inventory, parts, vc
+
 
 def collect(device):
     """Return dict(config, set_config, info, facts, vc, last_commit). Raises on failure."""
-    conn = connect(device)
-    try:
-        info_parts, vc, last_commit, set_cfg = [], None, None, None
+    set_cfg, last_commit = None, None
+    with ssh.session(device) as conn:
         if device.is_juniper:
-            config = run(conn, "show configuration | no-more")
-            set_cfg = run(conn, "show configuration | display set | no-more")
-            version = run(conn, "show version | no-more")
-            inventory = run(conn, "show chassis hardware | no-more")
-            commits = run(conn, "show system commit | no-more")
-            info_parts += [("show version", version), ("show chassis hardware", inventory),
-                           ("show system commit", commits)]
-            if device.is_vc:
-                vc_out = run(conn, "show virtual-chassis | no-more")
-                info_parts.append(("show virtual-chassis", vc_out))
-                vc = parse_vc(vc_out)
+            config = ssh.run(conn, "show configuration | no-more")
+            set_cfg = ssh.run(conn, "show configuration | display set | no-more")
+        elif device.is_sonicwall:
+            config = _first(conn, "show current-config", "export current-config cli")
+        else:
+            config = ssh.run(conn, "show running-config")
+        version, inventory, info_parts, vc = _read_facts(conn, device, device.is_vc)
+        if device.is_juniper:
+            commits = ssh.run(conn, "show system commit | no-more")
+            info_parts.insert(2, ("show system commit", commits))
             m = re.search(r"^\s*0\s+(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d.*)$", commits, re.M)
             last_commit = m.group(1).strip() if m else None
-        elif device.is_sonicwall:
-            # SonicWall SonicOS: disable pager and export current configuration
-            try:
-                config = run(conn, "show current-config")
-            except Exception:
-                config = run(conn, "export current-config cli")
-            try:
-                version = run(conn, "show status")
-            except Exception:
-                version = run(conn, "show version")
-            try:
-                inventory = run(conn, "show system")
-            except Exception:
-                inventory = ""
-            info_parts += [("show status", version), ("show system", inventory)]
-        else:
-            config = run(conn, "show running-config")
-            version = run(conn, "show version")
-            try:
-                inventory = run(conn, "show inventory")
-            except Exception:
-                inventory = ""
-            info_parts += [("show version", version), ("show inventory", inventory)]
-            if device.is_vc:
-                stack = run(conn, "show stack" if device.platform == "cisco_c1300" else "show switch")
-                info_parts.append(("stack", stack))
-    finally:
-        try:
-            conn.disconnect()
-        except Exception:
-            pass
 
     if len(normalized(config)) < 5 or re.search(r"(syntax error|invalid input|unknown command)", config[:300], re.I):
         raise RuntimeError("Configuration output looks invalid:\n" + config[:500])
@@ -456,40 +190,13 @@ def discover_device(device_id, user=None):
     if not device:
         return False
     try:
-        conn = connect(device)
-        try:
-            vc = None
-            if device.is_juniper:
-                version = run(conn, "show version | no-more")
-                inventory = run(conn, "show chassis hardware | no-more")
-                vc_out = run(conn, "show virtual-chassis | no-more")
-                vc = parse_vc(vc_out) or None
-            elif device.is_sonicwall:
-                try:
-                    version = run(conn, "show status")
-                except Exception:
-                    version = run(conn, "show version")
-                try:
-                    inventory = run(conn, "show system")
-                except Exception:
-                    inventory = ""
-            else:
-                version = run(conn, "show version")
-                try:
-                    inventory = run(conn, "show inventory")
-                except Exception:
-                    inventory = ""
-        finally:
-            try:
-                conn.disconnect()
-            except Exception:
-                pass
+        with ssh.session(device) as conn:
+            version, inventory, _, vc = _read_facts(conn, device, vc_members=device.is_juniper)
     except Exception as e:  # noqa: BLE001
-
         log_event("Model detection failed - will retry on next backup", "device", "WARN", device,
                   details=f"{type(e).__name__}: {e}", user=actor)
         return False
-    apply_facts(device, parse_facts(device, version, inventory), vc, actor)
+    apply_facts(device, parse_facts(device, version, inventory), vc or None, actor)
     log_event(f"Detected model {device.hw_model or '?'} ({device.model}), software {device.sw_version or '?'}",
               "device", "INFO", device, commit=False, user=actor)
     db.session.commit()
@@ -514,18 +221,17 @@ def start_discover_job(app, device_ids, user=None):
     threading.Thread(target=runner, daemon=True, name="discover").start()
 
 
-def _alert_item(device, **extra):
-    return dict(id=device.id, name=device.name, host=device.host, site_id=device.site_id,
-                site=device.site.code if device.site else "", **extra)
+def trigger_label(trigger):
+    """scheduled | commit-triggered | manual, for a job trigger such as 'schedule:<name>' or 'syslog:commit'."""
+    if trigger.startswith("schedule"):
+        return "scheduled"
+    return "commit-triggered" if trigger.startswith("syslog") else "manual"
 
 
-def backup_device(device_id, trigger="manual", user=None, alert=None):
-    """Back up one device. Must be called inside an app context. Returns 'ok' | 'unchanged' | 'failed'.
-
-    alert: optional dict from start_backup_job - {"events": list, "lock": Lock, "failed": targets|None,
-    "changed": targets|None}. Backup-failed / config-changed alert items are appended to events."""
-    from . import alerts
-    actor = user or ("scheduler" if trigger.startswith("schedule") else "system")
+def backup_device(device_id, trigger="manual", user=None, run_alerts=None):
+    """Back up one device inside an app context. Returns 'ok' | 'unchanged' | 'failed' | 'skipped' (busy).
+    run_alerts (alerts.BackupRunAlerts) is told about failures and configuration changes."""
+    actor = user or ("scheduler" if trigger_label(trigger) == "scheduled" else "system")
     lock = _lock_for(device_id)
     if not lock.acquire(blocking=False):
         return "skipped"
@@ -540,11 +246,8 @@ def backup_device(device_id, trigger="manual", user=None, alert=None):
             device.last_backup_status = "failed"
             device.last_backup_error = err[:2000]
             device.last_backup_at = now()
-            if (alert and alert["failed"] is not None and not device.backup_fail_alerted
-                    and alerts.would_reach(device.site_id, alert["failed"])):
-                # marked as reported (backup_fail_alerted) only when the job sends it - see start_backup_job
-                with alert["lock"]:
-                    alert["events"].append(_alert_item(device, kind="failed", error=err))
+            if run_alerts:
+                run_alerts.backup_failed(device, err)
             log_event(f"Backup failed ({trigger})", "backup", "ERROR", device, details=err, user=actor)
             return "failed"
 
@@ -556,7 +259,6 @@ def backup_device(device_id, trigger="manual", user=None, alert=None):
         added = removed = 0
         diff_lines = []  # first changed lines, for the config-changed alert email
         if prev and changed:
-            from .util import read_backup_file
             use_set = bool(data["set_config"] and prev.set_path)
             old = normalized(read_backup_file(prev.set_path if use_set else prev.path))
             new = normalized(data["set_config"] if use_set else data["config"])
@@ -577,7 +279,7 @@ def backup_device(device_id, trigger="manual", user=None, alert=None):
         device.last_backup_error = None
         device.backup_fail_alerted = False
 
-        if prev and not changed and get_setting("skip_unchanged") == "1":
+        if prev and not changed and get_bool("skip_unchanged"):
             log_event(f"Backup OK - configuration unchanged, not stored ({trigger})", "backup", "INFO", device, user=actor)
             return "unchanged"
 
@@ -609,13 +311,9 @@ def backup_device(device_id, trigger="manual", user=None, alert=None):
             log_event(f"Backup OK - {'first backup' if not prev else 'no changes'} ({trigger})",
                       "backup", "INFO", device, commit=False, user=actor)
         db.session.commit()
-        if (changed and prev and alert and alert["changed"] is not None
-                and alerts.would_reach(device.site_id, alert["changed"])):
-            who, via = alerts.parse_commit(data["last_commit"])
-            with alert["lock"]:
-                alert["events"].append(_alert_item(
-                    device, kind="changed", added=added, removed=removed, committed_by=who, via=via, when=now(),
-                    diff=diff_lines, diff_total=added + removed, prev_id=prev.id, backup_id=backup.id))
+        if changed and prev and run_alerts:
+            run_alerts.config_changed(device, data["last_commit"], added=added, removed=removed, diff=diff_lines,
+                                      diff_total=added + removed, prev_id=prev.id, backup_id=backup.id)
         gitsync.record(backup.id)
         apply_retention(device)
         return "ok" if changed or not prev else "unchanged"
@@ -651,8 +349,6 @@ def delete_backup(b, commit=True):
         db.session.commit()
 
 
-# --------------------------------------------------------------------------- jobs
-
 def start_backup_job(app, device_ids, trigger="manual", wait=False, user=None):
     with app.app_context():
         job = Job(kind="backup", trigger=trigger, total=len(device_ids))
@@ -660,21 +356,14 @@ def start_backup_job(app, device_ids, trigger="manual", wait=False, user=None):
         db.session.commit()
         job_id = job.id
         workers = max(1, get_int("max_workers"))
-        git_head_before = gitsync.head() if gitsync.is_enabled() else None
-        from . import alerts
-        manual = not (trigger.startswith("schedule") or trigger.startswith("syslog"))
-        alert = {
-            "events": [], "lock": threading.Lock(),
-            "failed": alerts.targets("backup_failed") if alerts.trigger_enabled("backup_failed") else None,
-            "changed": (alerts.targets("config_changed")
-                        if alerts.trigger_enabled("config_changed")
-                        and (not manual or get_setting("alert_change_manual") == "1") else None),
-        }
+        git_head_before = gitsync.run_started()
+        label = trigger_label(trigger)
+        run_alerts = alerts.BackupRunAlerts(manual=label == "manual")
 
     def worker(dev_id):
         with app.app_context():
             try:
-                result = backup_device(dev_id, trigger, user, alert=alert)
+                result = backup_device(dev_id, trigger, user, run_alerts=run_alerts)
             except Exception as e:  # noqa: BLE001
                 log_event(f"Unexpected backup error: {e}", "backup", "ERROR")
                 result = "failed"
@@ -700,37 +389,9 @@ def start_backup_job(app, device_ids, trigger="manual", wait=False, user=None):
             log_event(f"Backup job #{job_id} finished ({trigger}): {j.ok} ok ({j.unchanged} unchanged), "
                       f"{j.failed} failed of {j.total}", "backup",
                       "ERROR" if j.failed else "INFO", user=user or "system")
-            label = ("scheduled" if trigger.startswith("schedule") else
-                     "commit-triggered" if trigger.startswith("syslog") else "manual")
-        ev = alert["events"]
-        failed = [e for e in ev if e["kind"] == "failed"]
-        if failed:
-            # Mark switches as reported (once per failure streak) only now that the email goes out, and only
-            # those someone will still hear about - so a restart mid-job or a settings change loses nothing.
-            with app.app_context():
-                if alerts.trigger_enabled("backup_failed"):
-                    tg = alerts.targets("backup_failed")
-                    failed = [e for e in failed if alerts.would_reach(e["site_id"], tg)]
-                    for e in failed:
-                        d = db.session.get(Device, e["id"])
-                        if d:
-                            d.backup_fail_alerted = True
-                    db.session.commit()
-                else:
-                    failed = []
-        for trig, kinds in (("backup_failed", {"failed": failed}),
-                            ("config_changed", {"changed": [e for e in ev if e["kind"] == "changed"]})):
-            try:
-                alerts.dispatch(app, trig, kinds, {"trigger_label": label})
-            except Exception as e:  # noqa: BLE001 - an alert problem must never affect the backup run
-                with app.app_context():
-                    log_event(f"Could not send {trig} alert: {e}", "alert", "WARN", user="monitor")
+        run_alerts.send(app, label)
         with app.app_context():
-            j = db.session.get(Job, job_id)
-            if gitsync.is_enabled():
-                gitsync.tag_run(j, git_head_before)
-                if gitsync.ahead():
-                    gitsync.push()
+            gitsync.run_finished(db.session.get(Job, job_id), git_head_before)
 
     if wait:
         runner()
@@ -739,59 +400,48 @@ def start_backup_job(app, device_ids, trigger="manual", wait=False, user=None):
     return job_id
 
 
-# --------------------------------------------------------------------------- live tools
-
 def live_command(device, kind, a=None, b=None):
     """Run a read-only live tool on a device. Returns (title, text)."""
-    conn = connect(device)
-    try:
+    with ssh.session(device) as conn:
         if kind == "test":
             return "Connection test", f"Connected OK. Prompt: {conn.find_prompt()}\n"
         if kind == "commits" and device.is_juniper:
-            return "Commit history", run(conn, "show system commit | no-more")
+            return "Commit history", ssh.run(conn, "show system commit | no-more")
         if kind == "rollback" and device.is_juniper:
             a, b = int(a or 1), int(b or 0)
-            out = run(conn, f"show system rollback {a} compare {b} | no-more")
+            out = ssh.run(conn, f"show system rollback {a} compare {b} | no-more")
             return f"Changes from rollback {a} to rollback {b}", out if out.strip() else "(no differences)\n"
         if kind == "vc":
             if device.is_juniper:
-                out = run(conn, "show virtual-chassis | no-more")
+                out = ssh.run(conn, "show virtual-chassis | no-more")
                 device.vc_members_json = json.dumps(parse_vc(out))
                 db.session.commit()
                 return "Virtual Chassis", out
-            return "Stack", run(conn, "show stack" if device.platform == "cisco_c1300" else "show switch")
+            return "Stack", ssh.run(conn, device.profile.stack_cmd)
         if kind == "unsaved" and not device.is_juniper:
-            running = run(conn, "show running-config")
-            startup = run(conn, "show startup-config")
+            running = ssh.run(conn, "show running-config")
+            startup = ssh.run(conn, "show startup-config")
             diff = list(difflib.unified_diff(normalized(startup), normalized(running),
                                              "startup-config", "running-config", lineterm=""))
             return "Unsaved changes (startup vs running)", "\n".join(diff) + "\n" if diff else \
                 "Running config matches startup config - nothing unsaved.\n"
         if kind == "optics":
             if device.is_juniper:
-                return "Optical Transceiver Diagnostics (DOM/DDM)", run(conn, "show interfaces diagnostics optics | no-more")
-            if device.platform == "cisco_c1300":
-                try:
-                    return "Optical Transceiver Diagnostics", run(conn, "show optical-transceiver-diagnostics")
-                except Exception:
-                    return "Optical Transceiver Diagnostics", run(conn, "show fiber-ports optical-transceiver")
-            return "Optical Transceiver Diagnostics", run(conn, "show interfaces transceiver detail")
+                return "Optical Transceiver Diagnostics (DOM/DDM)", ssh.run(conn, "show interfaces diagnostics optics | no-more")
+            if device.profile.netmiko == "cisco_s300":
+                return "Optical Transceiver Diagnostics", _first(conn, "show optical-transceiver-diagnostics",
+                                                                 "show fiber-ports optical-transceiver")
+            return "Optical Transceiver Diagnostics", ssh.run(conn, "show interfaces transceiver detail")
         if kind == "macs":
             if device.is_juniper:
-                return "MAC Address Table", run(conn, "show ethernet-switching table | no-more")
+                return "MAC Address Table", ssh.run(conn, "show ethernet-switching table | no-more")
             if device.is_sonicwall:
-                return "ARP / MAC Table", run(conn, "show arp-cache")
-            return "MAC Address Table", run(conn, "show mac address-table")
+                return "ARP / MAC Table", ssh.run(conn, "show arp-cache")
+            return "MAC Address Table", ssh.run(conn, "show mac address-table")
         if kind == "arp":
             if device.is_juniper:
-                return "ARP Table", run(conn, "show arp no-resolve | no-more")
+                return "ARP Table", ssh.run(conn, "show arp no-resolve | no-more")
             if device.is_sonicwall:
-                return "ARP Table", run(conn, "show arp-cache")
-            return "ARP Table", run(conn, "show ip arp")
+                return "ARP Table", ssh.run(conn, "show arp-cache")
+            return "ARP Table", ssh.run(conn, "show ip arp")
         raise ValueError("Unsupported tool for this platform")
-
-    finally:
-        try:
-            conn.disconnect()
-        except Exception:
-            pass

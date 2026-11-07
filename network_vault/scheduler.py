@@ -5,8 +5,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from .models import Device, Job, LogEntry, Schedule, db, get_int, get_setting, now
-from .util import log_event
+from . import engine, gitsync, machistory, reach
+from .models import Device, Job, LogEntry, Schedule, db, get_bool, get_int, now, log_event
+
 
 scheduler = BackgroundScheduler(job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 900})
 _app = None
@@ -42,7 +43,6 @@ def resolve_targets(s):
 
 
 def run_schedule(schedule_id):
-    from .engine import start_backup_job
     with _app.app_context():
         s = db.session.get(Schedule, schedule_id)
         if not s or not s.enabled:
@@ -50,7 +50,7 @@ def run_schedule(schedule_id):
         ids = resolve_targets(s)
         name = s.name
         log_event(f"Schedule '{name}' started: {len(ids)} device(s)", "schedule", user="scheduler")
-    job_id = start_backup_job(_app, ids, trigger=f"schedule:{name}", wait=True)
+    job_id = engine.start_backup_job(_app, ids, trigger=f"schedule:{name}", wait=True)
     with _app.app_context():
         s = db.session.get(Schedule, schedule_id)
         j = db.session.get(Job, job_id)
@@ -61,17 +61,14 @@ def run_schedule(schedule_id):
 
 
 def reachability_tick():
-    from .reach import check_devices
-    check_devices(_app)
+    reach.check_devices(_app)
 
 
 def mac_history_tick():
-    from . import machistory
     machistory.sweep_if_enabled(_app)
 
 
 def _git_retry():
-    from . import gitsync
     with _app.app_context():
         gitsync.retry_push()
 
@@ -85,10 +82,8 @@ def housekeeping():
             db.session.commit()
             if n:
                 log_event(f"Housekeeping: purged {n} log entries older than {days} days", user="system")
-        from .engine import apply_retention
         for d in Device.query.all():
-            apply_retention(d)
-        from . import machistory
+            engine.apply_retention(d)
         machistory.purge_old()
 
 
@@ -106,7 +101,7 @@ def sync_schedules():
             except Exception as e:  # noqa: BLE001
                 log_event(f"Schedule '{s.name}' has an invalid trigger: {e}", "schedule", "ERROR", user="system")
         interval = get_int("ping_interval_min")
-        history_hours = get_int("mac_history_interval_hours") if get_setting("mac_history_enabled") == "1" else 0
+        history_hours = get_int("mac_history_interval_hours") if get_bool("mac_history_enabled") else 0
     if history_hours > 0:  # off by default: nothing is registered, so nothing sweeps
         scheduler.add_job(mac_history_tick, IntervalTrigger(hours=history_hours), id="mac-history",
                           name="MAC/IP history sweep")
@@ -124,7 +119,6 @@ def init_scheduler(app):
     global _app
     _app = app
     scheduler.add_job(housekeeping, CronTrigger(hour=3, minute=30), id="housekeeping", replace_existing=True)
-    from . import gitsync
     gitsync.init(app)
     scheduler.add_job(_git_retry, IntervalTrigger(minutes=15), id="git-retry", replace_existing=True)
     sync_schedules()

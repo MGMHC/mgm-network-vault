@@ -9,7 +9,7 @@ from datetime import timedelta
 from html import escape
 from pathlib import Path
 
-from .models import get_setting, now
+from .models import DEFAULT_SETTINGS, get_bool, get_setting, now
 
 LOGO_PATH = Path(__file__).parent / "static" / "mgm-logo.png"
 LOGO_CID = "mgmlogo"
@@ -52,7 +52,8 @@ KIND_TITLES = {"down": "Switch down", "up": "Switch recovered", "failed": "Backu
                "changed": "Configuration changed"}
 
 _FIELD_RE = re.compile(r"\{\{|\}\}|\{(\w+)\}")
-_HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+DEFAULT_COLOR = DEFAULT_SETTINGS["alert_style_color"]
 
 
 def fill(text, fields, html):
@@ -95,8 +96,8 @@ def wording(msg, kind):
 def style_from_settings():
     color = (get_setting("alert_style_color") or "").strip()
     return {
-        "color": color if _HEX_RE.match(color) else "#25366C",
-        "logo": get_setting("alert_style_logo") == "1",
+        "color": color if HEX_RE.match(color) else DEFAULT_COLOR,
+        "logo": get_bool("alert_style_logo"),
         "footer": get_setting("alert_style_footer") or "",
     }
 
@@ -220,8 +221,8 @@ def _content(kind, items, ctx, color):
 
 def render(trigger, kind, msg, items, ctx):
     """Return (subject, html, text, inline_images) for one email."""
-    style = ctx.get("style") or {"color": "#25366C", "logo": False, "footer": ""}
-    color = style["color"] if _HEX_RE.match(style.get("color") or "") else "#25366C"
+    style = ctx.get("style") or {"color": DEFAULT_COLOR, "logo": False, "footer": ""}
+    color = style["color"] if HEX_RE.match(style.get("color") or "") else DEFAULT_COLOR
     fields = _fields(trigger, kind, items, ctx)
     w = wording(msg, kind)
     subject = " ".join(fill(w["subject"], fields, False).split())[:250] or KIND_TITLES[kind]
