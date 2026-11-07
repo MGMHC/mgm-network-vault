@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+## [1.19.1] - 2026-11-07
+
+### Added
+- **Working animation in scan windows**: Hardware Health, Optical Health and the Port Audit ("Probe Live Link States") now show a slowly turning dotted globe in the log panel while a scan runs, with a caption naming the stages every scan goes through and the elapsed time. When live log lines arrive it shrinks to a small icon in the panel header; it stops when the scan finishes. It keeps turning, at half speed, when Windows animations are off (the browser then asks pages to reduce motion), since it is the only sign the scan is alive.
+
+### Fixed
+- **Port Audit window layout**: the log panel of the "Probing Live Switch Port Operational Status" window had no height and its header wrapped, because it used style classes that did not exist. It now matches the other scan windows.
+
 ## [1.19.0] - 2026-11-07
 
 ### Added

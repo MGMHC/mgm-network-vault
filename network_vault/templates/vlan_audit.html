@@ -287,7 +287,7 @@
 </div>
 
 <!-- Live Port State Probe Progress Modal -->
-<div id="probeProgressModal" class="op-modal-backdrop" style="display: none;">
+<div id="probeProgressModal" class="op-modal-backdrop" data-orb style="display: none;">
   <div class="op-modal" role="dialog" aria-modal="true" aria-labelledby="probeModalTitle">
     <div class="op-modal-header" onclick="restoreProbeModal(event)">
       <div>
@@ -310,31 +310,34 @@
     <!-- Progress Bar & KPIs -->
     <div class="op-progress-section" onclick="restoreProbeModal(event)">
       <div class="op-progress-info">
-        <span id="probeModalStatusText" class="op-progress-status">Connecting to campus switches…</span>
-        <span id="probeModalPercent" class="op-progress-percent">0%</span>
+        <span id="probeModalStatusText" class="font-bold">Connecting to campus switches…</span>
+        <span id="probeModalPercent" class="mono font-bold" style="color:var(--accent);">0%</span>
       </div>
       <div class="op-progress-bar">
         <div id="probeModalBarFill" class="op-progress-fill" style="width:0%;"></div>
       </div>
       <div class="op-progress-stats">
-        <span>Switches Probed: <b id="modalStatSwitches">0 / 0</b></span>
-        <span>Connected: <b id="modalStatConnected" style="color:var(--ok);">0</b></span>
-        <span>Dormant (Unused): <b id="modalStatDormant" style="color:var(--warn);">0</b></span>
+        <div class="op-stat-pill">Switches Probed: <b id="modalStatSwitches">0 / 0</b></div>
+        <div class="op-stat-pill">Connected: <b id="modalStatConnected" style="color:var(--ok);">0</b></div>
+        <div class="op-stat-pill">Dormant (Unused): <b id="modalStatDormant" style="color:var(--warn);">0</b></div>
       </div>
     </div>
 
     <!-- Live Terminal Logs -->
     <div class="op-terminal">
       <div class="op-terminal-header">
-        <span class="op-terminal-title">Live Port Audit Stream</span>
-        <div class="op-terminal-actions">
-          <label class="op-terminal-scroll-toggle">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="color:var(--accent);">●</span>
+          <span>Live Port Audit Stream</span>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center;">
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;">
             <input type="checkbox" id="probeAutoScroll" checked> Auto-scroll
           </label>
-          <button type="button" class="btn sm" onclick="copyProbeLogs()">Copy Logs</button>
+          <button type="button" class="btn sm" onclick="copyProbeLogs()" style="padding:2px 8px;font-size:11px;">Copy Logs</button>
         </div>
       </div>
-      <div id="probeTerminalLogs" class="op-terminal-body"></div>
+      <div id="probeTerminalLogs" class="op-terminal-logs"></div>
     </div>
 
     <div class="op-modal-footer">
