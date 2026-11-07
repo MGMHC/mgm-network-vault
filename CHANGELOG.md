@@ -1,5 +1,26 @@
 ## [Unreleased]
 
+## [1.21.0] - 2026-11-07
+
+### Changed
+- **Code reorganised by feature**: the network operations code (Port Locator, MAC history, optics, hardware health, VLAN audit) and the web pages are now split into one module per feature instead of two very large files, and SSH sessions, platform differences, site access rules and settings defaults each live in one place. Pages, URLs and saved data are unchanged.
+- **VLAN audit, IPAM and rack pages show only your sites**: users who are limited to some sites now see the VLAN audit (page and CSV export), IPAM data and racks of those sites only, plus records shared by all sites. Group Administrators still see everything.
+- **Removed two unused API endpoints**: `POST /api/operations/port-locator` and `POST /api/operations/optics` (the pages use the streaming versions, which are unchanged). Scripts that called them directly must use `/api/operations/port-locator/stream` and `/api/operations/optics/stream`.
+
+### Fixed
+- **Port Audit live link states were never kept**: the live port status from "Probe Live Link States" was meant to be saved and shown on the audit page, but saving and loading always failed silently. It now works.
+- **Port Audit counted Cisco ports twice**: the connected / dormant totals of a live probe were doubled for Cisco switches.
+- **`manage.py export` missed backups**: when `backup_dir` is set in `config.toml`, the command-line export now includes the backup files (the web export already did).
+- **Uplink detection agreed with itself**: the Port Locator, MAC history and VLAN audit now use one rule for which port descriptions mark a link to another switch, and a new backup of a switch is used right away instead of after a restart.
+- **Enable mode failures are logged**: when a Cisco switch refuses the enable password, a warning now appears in Logs instead of later commands failing without a reason.
+- **GitHub mirror**: a broken local site repository is now logged instead of looking like "nothing to push".
+
+### Security
+- **IPAM and rack changes respect site access**: a user can now only create, change, move or delete VLANs, prefixes, IP addresses, VRFs, FHRP groups, racks and reservations of sites they have access to (Group Administrators: all sites).
+- **Settings page writes only its own settings**: the Settings form can no longer be used to change GitHub or alert settings, which belong to the Group-Administrator-only GitHub and Alerts pages.
+- **Device form checks the platform**: an unknown platform value is rejected.
+- **IIS setup script has no built-in PFX password**: `deploy/iis/setup-iis.ps1` now asks for the PFX password when it needs to create or import a certificate, instead of using a default written in the script. If a certificate was ever exported with the old default password, export it again with a new one.
+
 ## [1.20.0] - 2026-11-07
 
 ### Added
