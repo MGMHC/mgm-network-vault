@@ -6,7 +6,7 @@ from flask import Blueprint, abort, request, session
 
 from . import config, gitsync, theme
 from .models import Device, Site, User, db, now
-from .version import __version__
+from .version import RELEASES_URL, __version__
 
 
 bp = Blueprint("web", __name__)
@@ -261,6 +261,7 @@ def template_context():
         "current_user": session.get("user"),
         "current_user_obj": user,
         "app_version": __version__,
+        "releases_url": RELEASES_URL,
         "all_sites": all_sites,
         "user_available_sites": sites,
         "active_site": active,

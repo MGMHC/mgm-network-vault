@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% from '_macros.html' import icon %}
 {% block title %}Sign in{% endblock %}
 {% block bare %}
 <div class="login-wrap">
@@ -6,7 +7,7 @@
     <div class="login-brand">
       <img src="{{ url_for('static', filename='mgm-logo.png') }}" alt="MGM Healthcare">
       <h1>Network Vault</h1>
-      <div class="muted">Switch configuration backup · v{{ app_version }}</div>
+      <div class="muted">Switch configuration backup · <a href="{{ releases_url }}" target="_blank" rel="noopener" title="Release notes on GitHub">{{ icon('git') }} v{{ app_version }}</a></div>
     </div>
     {% with msgs = get_flashed_messages(with_categories=true) %}{% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}{% endwith %}
     <form method="post">
