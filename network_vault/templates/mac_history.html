@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}MAC/IP History{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1>MAC/IP History</h1>
+    <div class="sub">
+      {% if last_run %}Last sweep {{ last_run.replace('T', ' ') }} &middot; {{ last_result }}{% else %}No sweep has run yet.{% endif %}
+      {% if running %} &middot; a sweep is running now{% endif %}
+    </div>
+    <div class="sub">
+      {% if enabled %}Sweeps every {{ interval }} hour{{ '' if interval == 1 else 's' }}, history kept {{ retention }} days.
+      {% else %}Automatic sweeps are off. A Group Administrator can turn them on in Settings.{% endif %}
+    </div>
+  </div>
+  <div class="actions">
+    {% if current_user_obj and current_user_obj.can_write %}
+    <form method="post" action="{{ url_for('web.mac_history_sweep') }}" class="actions">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="q" value="{{ q }}">
+      <button class="btn primary" {{ 'disabled' if running }}>{{ icon('refresh') }}Run sweep now</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+<div class="card flush">
+  <form class="filters" method="get">
+    <div><label>Search</label><input type="search" name="q" value="{{ q }}" placeholder="MAC (any format), IP, switch name or port" autofocus></div>
+    <button class="btn">Search</button> <a class="btn" href="{{ url_for('web.mac_history') }}">Reset</a>
+  </form>
+  <div class="table-wrap"><table>
+    <thead><tr><th>MAC</th><th>IP</th><th>Switch</th><th>Port</th><th>VLAN</th><th>First seen</th><th>Last seen</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="mono">{{ r.mac[0:2] }}:{{ r.mac[2:4] }}:{{ r.mac[4:6] }}:{{ r.mac[6:8] }}:{{ r.mac[8:10] }}:{{ r.mac[10:12] }}</td>
+        <td class="mono">{{ r.ip or '' }}</td>
+        <td><a href="{{ url_for('web.device_detail', dev_id=r.device_id) }}">{{ r.device.name }}</a></td>
+        <td class="mono">{{ r.port }}</td>
+        <td>{% if r.vlan %}<span class="badge blue">{{ r.vlan }}</span>{% endif %}</td>
+        <td class="small mono">{{ r.first_seen|dt }}</td>
+        <td class="small mono">{{ r.last_seen|dt }}</td>
+      </tr>
+    {% else %}<tr><td colspan="7" class="empty">{{ 'Nothing matches that search.' if q else 'No history yet. Turn on MAC/IP history in Settings, or run a sweep.' }}</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  {% if rows|length >= limit %}<div class="pager"><span class="muted small">Showing the newest {{ limit }} rows. Narrow the search to see others.</span></div>{% endif %}
+</div>
+{% endblock %}

@@ -718,9 +718,13 @@ def start_backup_job(app, device_ids, trigger="manual", wait=False, user=None):
                     db.session.commit()
                 else:
                     failed = []
-        alerts.dispatch(app, "backup_failed", {"failed": failed}, {"trigger_label": label})
-        alerts.dispatch(app, "config_changed", {"changed": [e for e in ev if e["kind"] == "changed"]},
-                        {"trigger_label": label})
+        for trig, kinds in (("backup_failed", {"failed": failed}),
+                            ("config_changed", {"changed": [e for e in ev if e["kind"] == "changed"]})):
+            try:
+                alerts.dispatch(app, trig, kinds, {"trigger_label": label})
+            except Exception as e:  # noqa: BLE001 - an alert problem must never affect the backup run
+                with app.app_context():
+                    log_event(f"Could not send {trig} alert: {e}", "alert", "WARN", user="monitor")
         with app.app_context():
             j = db.session.get(Job, job_id)
             if gitsync.is_enabled():

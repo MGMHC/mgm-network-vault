@@ -1,5 +1,18 @@
 ## [Unreleased]
 
+## [1.19.0] - 2026-11-07
+
+### Added
+- **MAC/IP history** (Operations > MAC/IP History): every few hours the vault reads the MAC table of each switch (and the ARP table of the distribution/core switches) and remembers where each MAC address was seen: switch, port, VLAN, IP, first seen and last seen. Search by MAC in any format, IP, switch name or port. Uplink ports are left out, so only the port a device is really plugged into is kept. It is off until a Group Administrator turns it on in Settings (default every 4 hours, kept 90 days; older rows are removed nightly). It only runs the same read-only `show` commands as the Port Locator, a few switches at a time; a switch that times out is skipped and logged. Users with write access can start a sweep from the page. The Port Locator also shows a "Seen before" list of a MAC's last locations.
+- **Automated tests**: a pytest suite (`tests/`, 243 tests) covering sign-in and access rules, themes, Port Locator parsing and tracing, config diffs, backups, change alerts, MAC/IP history and every page loading. Install with `pip install -r requirements-dev.txt` and run `python -m pytest`. A guard test fails if the package ever gains a real import-time cycle.
+
+### Changed
+- **IIS: live progress no longer held back**: `deploy/iis/web.config` turns off dynamic compression under `/api/operations/`, so progress lines reach the browser as they happen. `docs/WINDOWS-SERVER.md` section 6.6 covers the matching ARR setting (`responseBufferLimit=0`). Copy the new `web.config` to the site folder and run `iisreset` after updating.
+
+### Fixed
+- **Racks and IPAM summary boxes**: the KPI strip at the top of these pages lost its layout because its styles lived only on the VLAN audit page; they now come from the shared stylesheet.
+- **Alert emails can never disturb a backup run**: a problem building or sending a config-changed or backup-failed email is now logged (Logs, category `alert`) and the run carries on, including the GitHub sync step that follows it.
+
 ## [1.18.2] - 2026-11-07
 
 ### Fixed

@@ -2,6 +2,7 @@
 import csv
 import io
 import re
+import threading
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -11,10 +12,10 @@ from flask import (Blueprint, Response, abort, current_app, flash, jsonify, redi
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import selectinload
 
-from . import config, engine, gitsync, lifecycle, mailer, operations, portable, reach, theme, updater
+from . import config, engine, gitsync, lifecycle, machistory, mailer, operations, portable, reach, theme, updater
 from .diffing import side_by_side, stats, unified
 from .models import (DEFAULT_SETTINGS, MODELS, PLATFORMS, ROLES, USER_ROLES, Backup, Credential, Device, Job,
-                     LogEntry, Schedule, Site, User, db, get_int, get_setting, now, password_version,
+                     LogEntry, MacSighting, Schedule, Site, User, db, get_int, get_setting, now, password_version,
                      set_setting)
 from .scheduler import make_trigger, next_run, resolve_targets, run_schedule, sync_schedules
 from .util import BACKUP_DIR, BASE_DIR, decrypt, encrypt, log_event, read_backup_file, safe_name
@@ -788,6 +789,7 @@ def device_delete(dev_id):
         engine.delete_backup(b, commit=False)
     log_event(f"Device '{d.name}' ({d.host}) deleted with its backups", "device", "WARN", commit=False)
     name = d.name
+    MacSighting.query.filter_by(device_id=d.id).delete(synchronize_session=False)
     db.session.delete(d)
     db.session.commit()
     gitsync.remove_device(name)
@@ -1035,6 +1037,45 @@ def _locator_scope(data):
         q_devs = q_devs.filter(Device.id.in_([int(i) for i in device_ids if str(i).isdigit()]))
     user_site_ids = None if (not u or u.is_group_admin) else list(u.allowed_site_ids or [])
     return [d.id for d in q_devs.filter_by(enabled=True).all() if d.credential_id], user_site_ids
+
+
+def _history_query():
+    """Sightings joined to their switch and limited to the sites the user may see."""
+    return _site_filter(MacSighting.query.join(Device, Device.id == MacSighting.device_id), Device)
+
+
+@bp.route("/operations/mac-history")
+def mac_history():
+    q = request.args.get("q", "").strip()
+    rows = machistory.search(_history_query(), q)
+    return render_template(
+        "mac_history.html", q=q, rows=rows, limit=machistory.SEARCH_LIMIT, running=machistory.is_running(),
+        enabled=get_setting("mac_history_enabled") == "1", interval=get_int("mac_history_interval_hours"),
+        retention=get_int("mac_history_retention_days"), last_run=get_setting("mac_history_last_run"),
+        last_result=get_setting("mac_history_last_result"))
+
+
+@bp.route("/operations/mac-history/sweep", methods=["POST"])
+@require_write
+def mac_history_sweep():
+    if machistory.is_running():
+        flash("A sweep is already running.", "ok")
+    else:
+        app = current_app._get_current_object()
+        log_event("MAC/IP history sweep requested", "history")
+        threading.Thread(target=machistory.run_sweep, args=(app,), daemon=True, name="mac-history-manual").start()
+        flash("Sweep started. Reload this page in a minute to see the result.", "ok")
+    return redirect(url_for("web.mac_history", q=request.form.get("q", "")))
+
+
+@bp.route("/api/operations/mac-history/<mac>")
+def api_mac_history(mac):
+    cm = operations.clean_mac(mac)
+    if not cm:
+        return jsonify(error="Not a valid MAC address."), 400
+    rows = (_history_query().filter(MacSighting.mac == cm).order_by(MacSighting.last_seen.desc(), MacSighting.id.desc())
+            .limit(5).all())
+    return jsonify(rows=[machistory.row_dict(r) for r in rows])
 
 
 @bp.route("/api/operations/port-locator", methods=["POST"])
@@ -2091,7 +2132,8 @@ def credential_delete(cid):
     return redirect(url_for("web.credentials"))
 
 
-GROUP_ADMIN_SETTINGS = {"smtp_enabled", "smtp_host", "smtp_port", "smtp_encryption", "smtp_user",
+GROUP_ADMIN_SETTINGS = {"mac_history_enabled", "mac_history_interval_hours", "mac_history_retention_days",
+                        "smtp_enabled", "smtp_host", "smtp_port", "smtp_encryption", "smtp_user",
                         "smtp_pass_enc", "smtp_from_name", "smtp_from", "app_url"}
 
 
@@ -2105,7 +2147,17 @@ def settings():
                 continue  # owned by the Alerts page
             if k in GROUP_ADMIN_SETTINGS and not me.is_group_admin:
                 continue  # mail server and public URL affect every site's password resets
-            if k == "skip_unchanged":
+            if k in ("mac_history_last_run", "mac_history_last_result"):
+                continue  # written by the sweep
+            if k == "mac_history_enabled":
+                set_setting(k, "1" if _bool(k) else "0")
+            elif k in ("mac_history_interval_hours", "mac_history_retention_days"):
+                raw = request.form.get(k, "").strip()
+                if raw.isdigit() and int(raw) >= 1:
+                    set_setting(k, raw)
+                elif raw:
+                    flash(f"{k.replace('_', ' ')} must be a whole number of at least 1 - kept the old value", "error")
+            elif k == "skip_unchanged":
                 set_setting(k, "1" if _bool(k) else "0")
             elif k == "smtp_enabled":
                 set_setting(k, "1" if request.form.get(k) == "1" else "0")

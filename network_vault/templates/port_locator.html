@@ -141,6 +141,9 @@
     <h3 id="emptyTitle">Host Not Located</h3>
     <p id="emptyMsg" class="muted small" style="max-width:560px;margin:8px auto 0;">No active forwarding entries found for this IP or MAC address on reachable campus switches.</p>
   </div>
+
+  <!-- MAC/IP history: where this MAC was seen before (filled in by loadSeenBefore) -->
+  <div id="seenBeforeWrap" style="margin-top:20px;"></div>
 </div>
 
 <!-- Trace Progress Window with Live Logging Modal -->
@@ -768,7 +771,33 @@ async function handleLocate(e, full = false, scope = null) {
   }
 }
 
+async function loadSeenBefore(mac) {
+  const wrap = document.getElementById('seenBeforeWrap');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  if (!mac) return;
+  try {
+    const resp = await fetch('/api/operations/mac-history/' + encodeURIComponent(mac), {headers: {'Accept': 'application/json'}});
+    if (!resp.ok) return;
+    const rows = (await resp.json()).rows || [];
+    if (!rows.length) return;
+    wrap.innerHTML = `<div class="card flush">
+      <div class="card-head"><h2>Seen before</h2><span class="muted small">Last locations recorded by MAC/IP history</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Switch</th><th>Port</th><th>VLAN</th><th>IP</th><th>First seen</th><th>Last seen</th></tr></thead>
+        <tbody>${rows.map(r => `<tr>
+          <td><a href="/devices/${r.switch_id}">${escapeHtml(r.switch)}</a></td>
+          <td class="mono">${escapeHtml(r.port)}</td>
+          <td>${r.vlan ? `<span class="badge blue">${escapeHtml(r.vlan)}</span>` : ''}</td>
+          <td class="mono">${escapeHtml(r.ip)}</td>
+          <td class="small mono">${escapeHtml(r.first_seen)}</td>
+          <td class="small mono">${escapeHtml(r.last_seen)}</td></tr>`).join('')}</tbody>
+      </table></div></div>`;
+  } catch (e) { /* history is optional: the locator result stands without it */ }
+}
+
 function renderLocatorResults(data, queryStr) {
+  loadSeenBefore(data.resolved_mac);
   const contentCard = document.getElementById('contentCard');
   const emptyCard = document.getElementById('emptyCard');
 

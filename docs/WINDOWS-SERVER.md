@@ -238,6 +238,7 @@ The script:
 - rewrites every request to `http://127.0.0.1:8080/...`, and sets `X-Forwarded-Proto: https` and `X-Forwarded-Host`
 - raises the upload limit to 4 GB so `.nvault` exports can be imported
 - adds security headers (HSTS, nosniff, SAMEORIGIN)
+- turns off dynamic compression under `/api/operations/`, so live progress (Port Locator, Hardware Health, Optical Health, VLAN audit, lifecycle fetch) reaches the browser step by step
 
 Publish the app at the **root** of its own host name, e.g. `https://netvault.mgmhealthcare.in/`. A sub-path such as `/netvault` isn't supported.
 
@@ -245,6 +246,26 @@ Publish the app at the **root** of its own host name, e.g. `https://netvault.mgm
 - Open `https://netvault.mgmhealthcare.in`. The padlock should show and the login page should load.
 - Sign in and click around. If a page bounces you back to the login page, check that `secure_cookies = true` is only set when you're using HTTPS.
 - Logs → Category *auth* shows the real client IP of each login, which confirms `X-Forwarded-For` is working.
+- Run a Port Locator search. The progress window should show each step (e.g. "Following LLDP, hop 1: …") as it happens. If it sits on "Tracing …" and then jumps to the result, see 6.6.
+
+### 6.6 Live progress jumps straight to the end
+The live progress windows read one line per step from the app. IIS breaks this when it collects the whole answer before sending it. Two settings cause that; check both in an **administrator** PowerShell:
+
+1. **ARR response buffer** must be `0`:
+   ```powershell
+   & "$env:windir\system32\inetsrv\appcmd.exe" list config -section:system.webServer/proxy | Select-String responseBufferLimit
+   ```
+   If it isn't `responseBufferLimit="0"`, set it (or re-run `deploy\iis\setup-iis.ps1`):
+   ```powershell
+   & "$env:windir\system32\inetsrv\appcmd.exe" set config -section:system.webServer/proxy /responseBufferLimit:"0" /commit:apphost
+   ```
+   In IIS Manager this is *server* → **Application Request Routing Cache** → **Server Proxy Settings** → *Response buffer threshold (KB)* = 0.
+2. **Dynamic compression** must be off for `/api/operations/`. The `<location path="api/operations">` block at the end of `deploy\iis\web.config` does this; make sure the site folder has the current `web.config`. If IIS reports the `urlCompression` section is locked, unlock it once:
+   ```powershell
+   & "$env:windir\system32\inetsrv\appcmd.exe" unlock config -section:system.webServer/urlCompression
+   ```
+
+Then `iisreset` and try a Port Locator search again. (Since v1.18.2 the Port Locator also polls the trace's status, so it shows progress even without these fixes; the other scans need them.)
 
 ## 7. Day-to-day operation
 
@@ -298,6 +319,7 @@ As an admin, navigate to **Settings → Software Update** and click **Check for 
 | IIS shows **500.50 URL Rewrite error** | The `HTTP_X_FORWARDED_*` server variables aren't allowed. See 6.3 B step 3. |
 | IIS shows **404.13** on import | The upload limit wasn't raised. Make sure `web.config` is in the site folder. |
 | Redirects go to `http://127.0.0.1:8080/...` | `behind_proxy` isn't `true`, or *Preserve host header* / `X-Forwarded-Host` is missing. |
+| Progress bars sit still, then jump to 100% | IIS is buffering the live stream. See 6.6. |
 | Logged out right after signing in | `secure_cookies = true` but you're browsing over plain HTTP. Use the HTTPS address. |
 | GitHub sync fails | Check outbound 443 to github.com, and the token's expiry date (GitHub sync page → Test connection). |
 

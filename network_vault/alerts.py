@@ -171,11 +171,11 @@ def _send_all(app, trigger, by_kind, ctx):
             items = [dict(i, kind=kind) for i in items]
             per_msg = {}
             for e in plan_emails(items, tgts):
-                subject, html, text, images = render(trigger, kind, e["msg"], e["items"],
-                                                     dict(base, recipient_name=e["name"]))
                 try:
+                    subject, html, text, images = render(trigger, kind, e["msg"], e["items"],
+                                                         dict(base, recipient_name=e["name"]))
                     ok, err = send_email(e["address"], subject, html, text, inline_images=images)
-                except Exception as ex:  # noqa: BLE001 - one bad recipient must not stop the rest
+                except Exception as ex:  # noqa: BLE001 - one bad recipient or email must not stop the rest
                     ok, err = False, str(ex)
                 rec = per_msg.setdefault(e["msg"].id, {"name": e["msg"].name, "sent": 0, "names": set()})
                 if ok:

@@ -334,6 +334,23 @@ class AlertMessage(db.Model):
         return [e.strip() for e in re.split(r"[,;\s]+", self.extra_emails or "") if e.strip()]
 
 
+class MacSighting(db.Model):
+    """MAC/IP history: one row per (mac, switch, edge port, vlan) with when it was first and last seen there."""
+    __tablename__ = "mac_sighting"
+    __table_args__ = (db.UniqueConstraint("mac", "device_id", "port", "vlan", name="uq_mac_sighting_place"),
+                      db.Index("ix_mac_sighting_device_port", "device_id", "port"))
+    id = db.Column(db.Integer, primary_key=True)
+    mac = db.Column(db.String(12), nullable=False, index=True)    # clean lowercase hex, 12 chars
+    ip = db.Column(db.String(45), nullable=True, index=True)      # latest IP seen in ARP for this MAC
+    device_id = db.Column(db.Integer, db.ForeignKey("device.id"), nullable=False)
+    port = db.Column(db.String(64), nullable=False)
+    vlan = db.Column(db.String(64), nullable=False, default="")
+    first_seen = db.Column(db.DateTime, nullable=False, default=now)
+    last_seen = db.Column(db.DateTime, nullable=False, default=now, index=True)
+
+    device = db.relationship("Device")
+
+
 class Setting(db.Model):
     key = db.Column(db.String(64), primary_key=True)
     value = db.Column(db.String(512))
@@ -348,6 +365,12 @@ DEFAULT_SETTINGS = {
     "max_workers": "8",             # parallel SSH sessions
     "ssh_timeout": "30",
     "read_timeout": "180",
+    # MAC/IP history (scheduled sweep of the switches' MAC and ARP tables; off until switched on)
+    "mac_history_enabled": "0",
+    "mac_history_interval_hours": "4",
+    "mac_history_retention_days": "90",
+    "mac_history_last_run": "",      # set by the sweep, not by the Settings form
+    "mac_history_last_result": "",
     # SMTP / Password Reset
     "smtp_enabled": "1",
     "smtp_host": "smtp.office365.com",

@@ -11,6 +11,7 @@ Web app for backing up Juniper EX (EX2200 / EX2300 / EX3300, including Virtual C
 | **On-demand & Scheduled Backups** | Parallel backups on demand or on automated schedules (hourly, daily, weekly, custom cron) targeting all switches, specific groups, roles, platforms, or custom selections. |
 | **Change Detection & Visual Diff** | Content-hashed backups (variable timestamps and volatile lines ignored). Side-by-side and unified diffs with line-level addition/removal metrics, Junos `display set` diffing, and `.diff` file downloads. |
 | **LLDP-Traced Port Locator** | Searches MAC or IP addresses across the campus. Traces from distribution/core switches down through LLDP neighbour hops (including LAG / `ae` bundles and Cisco port-channels) directly to the edge access port in 2–3 switch queries instead of scanning the whole fleet. Supports Group/Location scope filtering and full-path tracing. |
+| **MAC/IP History** | Optional scheduled sweep (Settings, off by default) that reads each switch's MAC table and the distribution/core ARP tables with the same read-only commands as the Port Locator, and keeps where every MAC was seen (switch, edge port, VLAN, IP, first/last seen) for 90 days by default. Searchable by MAC, IP, switch or port under Operations; the Port Locator shows a "Seen before" list. |
 | **Centralized Email Alerts** | Dedicated **Alerts** control center (`Admin → Alerts`) with customized HTML templates, live preview, test emails, and per-message recipient routing across three core triggers: **Switch Down / Recovered**, **Backup Failed**, and **Config Changed** (with masked diff snippets). |
 | **IPAM & Subnets** | IPv4 subnet and IP address management with automatic switch ARP table discovery, VRF scoping, VLAN tagging, gateway assignment, utilization meters, and duplicate IP detection. |
 | **VLAN & Port Audit** | Live VLAN matrix across all switches and dormant port auditing (identifies unused ports down for 30, 60, or 90+ days to reclaim switch capacity). |
@@ -62,6 +63,7 @@ A read-only non-config administrator user or standard administrator account.
 
 Under the **Operations** navigation menu:
 - **Port Locator** (`/operations/port-locator`): Trace any MAC or IP address directly to its physical switch and port via automated LLDP topology traversal.
+- **MAC/IP History** (`/operations/mac-history`): where each MAC and IP was seen before, recorded by a scheduled sweep (enable it in Settings).
 - **Hardware Health** (`/operations/health`): Fleet-wide environmentals, fans, power supplies, CPU/memory usage, and chassis temperature sensors.
 - **Optical Health** (`/operations/optics`): Real-time optical transceiver power (dBm), transmitter bias, and link health diagnostics.
 - **IPAM & Subnets** (`/ipam`): Campus subnet planner and IP tracker with ARP discovery.
@@ -134,6 +136,19 @@ Navigate to **Admin &rarr; Export & migrate**:
 - **Export**: Creates a single passphrase-encrypted `.nvault` bundle containing the database, keys, and backups.
 - **Import**: Restores an `.nvault` archive onto a new server with automatic pre-restore backup safeguards.
 - CLI equivalents: `python manage.py export backup.nvault` and `python manage.py import backup.nvault`.
+
+## Running the tests
+
+```text
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+The suite (about 190 tests, under 15 seconds) is offline and self-contained: it builds a fresh empty
+database in a temporary folder, creates its own users, sites and switches, and replaces SSH with scripted
+switch output, so it never touches `data/`, `config.toml`, backups or real devices. Run it before each
+release. It covers login and role/site limits, the theme API, Port Locator parsing and tracing, config
+hashing and diffing, lifecycle rules, and that every main page renders.
 
 ## Versions & Releases
 

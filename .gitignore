@@ -7,3 +7,8 @@ __pycache__/
 *.pyc
 *.old
 .superpowers/
+
+# Local Claude Code / graphify setup (not shared)
+CLAUDE.md
+.claude/
+graphify-out/

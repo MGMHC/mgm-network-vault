@@ -5,7 +5,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from .models import Device, Job, LogEntry, Schedule, db, get_int, now
+from .models import Device, Job, LogEntry, Schedule, db, get_int, get_setting, now
 from .util import log_event
 
 scheduler = BackgroundScheduler(job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 900})
@@ -63,6 +63,11 @@ def reachability_tick():
     check_devices(_app)
 
 
+def mac_history_tick():
+    from . import machistory
+    machistory.sweep_if_enabled(_app)
+
+
 def _git_retry():
     from . import gitsync
     with _app.app_context():
@@ -81,6 +86,8 @@ def housekeeping():
         from .engine import apply_retention
         for d in Device.query.all():
             apply_retention(d)
+        from . import machistory
+        machistory.purge_old()
 
 
 def sync_schedules():
@@ -88,7 +95,7 @@ def sync_schedules():
     if _app is None:  # scheduler not started (e.g. tests / flask shell)
         return
     for job in scheduler.get_jobs():
-        if job.id.startswith("sched-") or job.id == "reachability":
+        if job.id.startswith("sched-") or job.id in ("reachability", "mac-history"):
             job.remove()
     with _app.app_context():
         for s in Schedule.query.filter_by(enabled=True).all():
@@ -97,6 +104,10 @@ def sync_schedules():
             except Exception as e:  # noqa: BLE001
                 log_event(f"Schedule '{s.name}' has an invalid trigger: {e}", "schedule", "ERROR", user="system")
         interval = get_int("ping_interval_min")
+        history_hours = get_int("mac_history_interval_hours") if get_setting("mac_history_enabled") == "1" else 0
+    if history_hours > 0:  # off by default: nothing is registered, so nothing sweeps
+        scheduler.add_job(mac_history_tick, IntervalTrigger(hours=history_hours), id="mac-history",
+                          name="MAC/IP history sweep")
     if interval > 0:
         scheduler.add_job(reachability_tick, IntervalTrigger(minutes=interval), id="reachability",
                           name="Reachability check", next_run_time=now() + timedelta(seconds=10))
