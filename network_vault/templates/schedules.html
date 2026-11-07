@@ -17,7 +17,8 @@
             {% elif s.frequency == 'weekly' %}Weekly {{ s.day_of_week }} at {{ s.time }}
             {% elif s.frequency == 'monthly' %}Monthly on day {{ s.day_of_month }} at {{ s.time }}
             {% else %}cron <code>{{ s.cron }}</code>{% endif %}</td>
-        <td>{{ s.target }}{% if s.target in ('group', 'role', 'platform') %}: <b>{{ s.target_value }}</b>{% endif %} <span class="muted small">({{ n }} device{{ '' if n == 1 else 's' }})</span></td>
+        <td>{{ s.target }}{% if s.target in ('group', 'role', 'platform') %}: <b>{% for v in s.target_values %}{{ PLATFORMS.get(v, v) if s.target == 'platform' else v }}{{ ', ' if not loop.last }}{% endfor %}</b>{% endif %} <span class="muted small">({{ n }} device{{ '' if n == 1 else 's' }})</span>
+          {% if s.excluded_ids and s.target != 'devices' %}<div class="muted small">excluding {% for i in s.excluded_ids %}{{ excluded_names.get(i, '#' ~ i) }}{{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}</td>
         <td>{% if nr and s.enabled %}{{ nr.strftime('%Y-%m-%d %H:%M') }} <div class="muted small">{{ nr|ago }}</div>{% else %}—{% endif %}</td>
         <td>{{ s.last_run|dt }}<div class="muted small">{{ s.last_result or '' }}</div></td>
         <td>{% if s.enabled %}<span class="badge ok">enabled</span>{% else %}<span class="badge">disabled</span>{% endif %}</td>
@@ -56,13 +57,17 @@
     <div class="field"><label>Targets</label>
       <select name="target" id="target">{% for k, v in [('all','All enabled devices'),('group','Device group'),('role','Role (core / access…)'),('platform','Platform'),('devices','Selected devices')] %}
         <option value="{{ k }}" {{ 'selected' if (s.target if s else 'all') == k }}>{{ v }}</option>{% endfor %}</select></div>
-    <div class="field" data-target="group"><label>Group</label><select name="target_group">{% for g in groups %}<option {{ 'selected' if s and s.target_value == g }}>{{ g }}</option>{% endfor %}</select></div>
-    <div class="field" data-target="role"><label>Role</label><select name="target_role">{% for r in ROLES %}<option {{ 'selected' if s and s.target_value == r }}>{{ r }}</option>{% endfor %}</select></div>
-    <div class="field" data-target="platform"><label>Platform</label><select name="target_platform">{% for k, v in PLATFORMS.items() %}<option value="{{ k }}" {{ 'selected' if s and s.target_value == k }}>{{ v }}</option>{% endfor %}</select></div>
+    {% set picked = s.target_values if s and s.target in ('group', 'role', 'platform') else [] %}
+    {% set kept_groups = picked|reject('in', groups)|list if s and s.target == 'group' else [] %}
+    <div class="field" data-target="group"><label>Groups</label><select name="target_group" multiple data-lg-multi data-placeholder="Pick one or more groups">{% for g in groups + kept_groups %}<option value="{{ g }}" {{ 'selected' if g in picked }}>{{ g }}</option>{% endfor %}</select></div>
+    <div class="field" data-target="role"><label>Roles</label><select name="target_role" multiple data-lg-multi data-placeholder="Pick one or more roles">{% for r in ROLES %}<option value="{{ r }}" {{ 'selected' if r in picked }}>{{ r }}</option>{% endfor %}</select></div>
+    <div class="field" data-target="platform"><label>Platforms</label><select name="target_platform" multiple data-lg-multi data-placeholder="Pick one or more platforms">{% for k, v in PLATFORMS.items() %}<option value="{{ k }}" {{ 'selected' if k in picked }}>{{ v }}</option>{% endfor %}</select></div>
+    {% set chosen = s.device_ids if s and s.target == 'devices' else [] %}
+    <div class="field" data-target="devices"><label>Devices</label><select name="target_devices" multiple data-lg-multi data-placeholder="Pick one or more devices">{% for d in devices %}<option value="{{ d.id }}" {{ 'selected' if d.id in chosen }}>{{ d.name }}</option>{% endfor %}</select></div>
+    {% set skip = s.excluded_ids if s else [] %}
+    <div class="field" data-target="all group role platform"><label>Exclude devices</label><select name="exclude_devices" multiple data-lg-multi data-placeholder="None excluded">{% for d in devices %}<option value="{{ d.id }}" {{ 'selected' if d.id in skip }}>{{ d.name }}{{ ' · ' ~ d.group if d.group }}</option>{% endfor %}</select>
+      <div class="help">Never back these up, even when they match the targets.</div></div>
   </div>
-  <div class="field" data-target="devices"><label>Devices</label>
-    {% set chosen = (s.target_value if s and s.target == 'devices' else '').split(',') %}
-    <div class="actions">{% for d in devices %}<label class="check"><input type="checkbox" name="target_devices" value="{{ d.id }}" {{ 'checked' if d.id|string in chosen }}> {{ d.name }}</label>{% endfor %}</div></div>
   <label class="check"><input type="checkbox" name="enabled" {{ 'checked' if not s or s.enabled }}> Enabled</label>
   <div class="actions"><button class="btn primary">Save schedule</button>{% if s %}<a class="btn" href="{{ url_for('web.schedules') }}">Cancel</a>{% endif %}</div>
 </form>
@@ -72,7 +77,7 @@
   function sync() {
     const f = document.getElementById('freq').value, t = document.getElementById('target').value;
     document.querySelectorAll('[data-show]').forEach(e => e.style.display = e.dataset.show.split(' ').includes(f) ? '' : 'none');
-    document.querySelectorAll('[data-target]').forEach(e => e.style.display = e.dataset.target === t ? '' : 'none');
+    document.querySelectorAll('[data-target]').forEach(e => e.style.display = e.dataset.target.split(' ').includes(t) ? '' : 'none');
   }
   document.getElementById('freq').addEventListener('change', sync);
   document.getElementById('target').addEventListener('change', sync);

@@ -1,6 +1,7 @@
 """HTTP routes."""
 import csv
 import io
+import json
 import re
 import threading
 import zipfile
@@ -122,7 +123,7 @@ def _authorized_device_ids(ids, need_backup=True):
 
 @bp.app_template_filter("dt")
 def fmt_dt(v):
-    return v.strftime("%Y-%m-%d %H:%M:%S") if v else "â€”"
+    return v.strftime("%Y-%m-%d %H:%M:%S") if v else "—"
 
 
 @bp.app_template_filter("ago")
@@ -1742,13 +1743,30 @@ def compare_download():
 def schedules():
     q_sched = _site_filter(Schedule.query, Schedule)
     items = [(s, next_run(s.id), len(resolve_targets(s))) for s in q_sched.order_by(Schedule.name)]
-    
+    excluded = {i for s, _, _ in items for i in s.excluded_ids}
+    excluded_names = dict(db.session.query(Device.id, Device.name).filter(Device.id.in_(excluded))) if excluded else {}
+
     g_q = _site_filter(db.session.query(Device.group).distinct(), Device)
     dev_q = _site_filter(Device.query, Device)
     groups = sorted((g for (g,) in g_q if g), key=_group_sort_key)
     edit = db.session.get(Schedule, int(request.args.get("edit", 0) or 0))
-    return render_template("schedules.html", items=items, groups=groups, edit=edit,
+    return render_template("schedules.html", items=items, groups=groups, edit=edit, excluded_names=excluded_names,
                            devices=dev_q.order_by(Device.name).all(), ROLES=ROLES, PLATFORMS=PLATFORMS)
+
+
+_SCHEDULE_TARGETS = ("all", "group", "role", "platform", "devices")
+
+
+def _picked_ids(field: str) -> str:
+    """Comma-separated, de-duplicated device ids from a multi-select form field."""
+    return ",".join(dict.fromkeys(x for x in request.form.getlist(field) if x.isdigit()))
+
+
+def _picked_values(target: str) -> list[str]:
+    """Groups / roles / platforms picked in the form; unknown roles and platforms are dropped."""
+    vals = [v.strip() for v in request.form.getlist(f"target_{target}") if v.strip()]
+    known = {"role": set(ROLES), "platform": set(PLATFORMS)}.get(target)
+    return list(dict.fromkeys(v for v in vals if known is None or v in known))
 
 
 @bp.route("/schedules/save", methods=["POST"])
@@ -1766,10 +1784,21 @@ def schedule_save():
     s.day_of_month = int(request.form.get("day_of_month") or 1)
     s.cron = request.form.get("cron", "").strip()
     s.target = request.form.get("target", "all")
+    if s.target not in _SCHEDULE_TARGETS:
+        s.target = "all"
     if s.target == "devices":
-        s.target_value = ",".join(request.form.getlist("target_devices"))
+        s.target_value = _picked_ids("target_devices")
+        s.exclude_devices = ""          # picking devices one by one leaves nothing to exclude
     else:
-        s.target_value = request.form.get(f"target_{s.target}", "")
+        s.exclude_devices = _picked_ids("exclude_devices")
+        s.target_value = ""
+        if s.target != "all":
+            vals = _picked_values(s.target)
+            if not vals:
+                db.session.rollback()
+                flash(f"Pick at least one {s.target} for this schedule", "error")
+                return redirect(url_for("web.schedules", edit=sid) if sid else url_for("web.schedules"))
+            s.target_value = json.dumps(vals)
     s.enabled = _bool("enabled")
     if not sid:
         s.site_id = _active_site_id() or (list(u.allowed_site_ids)[0] if (u and u.allowed_site_ids) else None)
@@ -1790,7 +1819,9 @@ def schedule_save():
         db.session.add(s)
     db.session.commit()
     sync_schedules()
-    log_event(f"Schedule '{s.name}' saved ({s.frequency}, target={s.target} {s.target_value})", "schedule")
+    what = ", ".join(s.target_values) if s.target in ("group", "role", "platform") else s.target_value
+    excl = f", excluding {len(s.excluded_ids)} device(s)" if s.excluded_ids else ""
+    log_event(f"Schedule '{s.name}' saved ({s.frequency}, target={s.target} {what}{excl})", "schedule")
     flash("Schedule saved", "ok")
     return redirect(url_for("web.schedules"))
 

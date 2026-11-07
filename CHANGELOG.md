@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+## [1.20.0] - 2026-11-07
+
+### Added
+- **Backup schedules: pick several targets and exclude devices**: Groups, Roles and Platforms are now multi-select (for example Level-4 and Level-5, or core and distribution), and a new **Exclude devices** list skips chosen switches even when they match, e.g. "all of Level-4 except two". The device lists are searchable. The Schedules table and the Dashboard show every picked value and what is excluded. Existing schedules keep working unchanged. A schedule that targets groups, roles or platforms must have at least one picked.
+
+### Fixed
+- Empty dates (e.g. "Last run" of a schedule that never ran) showed garbled characters instead of a dash.
+
 ## [1.19.1] - 2026-11-07
 
 ### Added

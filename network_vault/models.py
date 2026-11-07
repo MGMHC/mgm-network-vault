@@ -248,12 +248,40 @@ class Schedule(db.Model):
     day_of_week = db.Column(db.String(64), default="sun")
     day_of_month = db.Column(db.Integer, default=1)
     cron = db.Column(db.String(64), default="")
-    target = db.Column(db.String(16), default="all")  # all | group | role | platform | list
-    target_value = db.Column(db.String(128), default="")
+    target = db.Column(db.String(16), default="all")  # all | group | role | platform | devices
+    # group / role / platform: JSON list of values (older rows hold one plain value);
+    # devices: comma-separated device ids.
+    target_value = db.Column(db.Text, default="")
+    exclude_devices = db.Column(db.Text, default="")  # comma-separated device ids never backed up
     enabled = db.Column(db.Boolean, default=True)
     last_run = db.Column(db.DateTime)
     last_result = db.Column(db.String(32))
     next_run = db.Column(db.DateTime)
+
+    @property
+    def target_values(self) -> list[str]:
+        """The groups, roles or platforms this schedule backs up."""
+        raw = (self.target_value or "").strip()
+        if not raw.startswith("["):
+            return [raw] if raw else []
+        try:
+            vals = json.loads(raw)
+        except ValueError:
+            return []
+        return [str(v) for v in vals if str(v).strip()] if isinstance(vals, list) else []
+
+    @property
+    def device_ids(self) -> list[int]:
+        """Device ids for the 'devices' target."""
+        return _id_list(self.target_value)
+
+    @property
+    def excluded_ids(self) -> list[int]:
+        return _id_list(self.exclude_devices)
+
+
+def _id_list(csv: str | None) -> list[int]:
+    return [int(x) for x in (csv or "").split(",") if x.strip().isdigit()]
 
 
 class Job(db.Model):

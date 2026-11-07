@@ -25,17 +25,19 @@ def make_trigger(s):
     return CronTrigger.from_crontab(s.cron)
 
 
+_TARGET_COLUMNS = {"group": Device.group, "role": Device.role, "platform": Device.platform}
+
+
 def resolve_targets(s):
+    """Ids of the enabled devices a schedule backs up, minus its excluded devices."""
     q = Device.query.filter_by(enabled=True)
-    if s.target == "group":
-        q = q.filter(Device.group == s.target_value)
-    elif s.target == "role":
-        q = q.filter(Device.role == s.target_value)
-    elif s.target == "platform":
-        q = q.filter(Device.platform == s.target_value)
+    if s.target in _TARGET_COLUMNS:
+        q = q.filter(_TARGET_COLUMNS[s.target].in_(s.target_values))   # nothing picked -> nothing
     elif s.target == "devices":
-        ids = [int(x) for x in (s.target_value or "").split(",") if x.strip().isdigit()]
-        q = q.filter(Device.id.in_(ids or [-1]))
+        q = q.filter(Device.id.in_(s.device_ids))
+    excluded = s.excluded_ids
+    if excluded and s.target != "devices":
+        q = q.filter(Device.id.notin_(excluded))
     return [d.id for d in q.all()]
 
 

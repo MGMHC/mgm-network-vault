@@ -196,7 +196,7 @@
     <div class="card-head"><h2>Upcoming schedules</h2><a href="{{ url_for('web.schedules') }}" class="small">Manage →</a></div>
     <table><tbody>
       {% for s, nr in schedules %}
-        <tr><td><b>{{ s.name }}</b><div class="muted small">{{ s.frequency }} · {{ s.target }}{{ ' ' ~ s.target_value if s.target not in ('all','devices') }}</div></td>
+        <tr><td><b>{{ s.name }}</b><div class="muted small">{{ s.frequency }} · {{ s.target }}{{ ' ' ~ s.target_values|join(', ') if s.target not in ('all','devices') }}{{ ' · excluding ' ~ s.excluded_ids|length if s.excluded_ids and s.target != 'devices' }}</div></td>
             <td class="small">{{ nr.strftime('%a %d %b %H:%M') if nr else '—' }}<div class="muted">{{ nr|ago if nr }}</div></td>
             <td class="small muted">{{ s.last_result or '' }}</td></tr>
       {% else %}<tr><td class="empty">No active schedules. <a href="{{ url_for('web.schedules') }}">Create one</a>.</td></tr>{% endfor %}

@@ -622,15 +622,17 @@ function closeAllLiquidPopovers() {
 function initLiquidSelects(root = document) {
   const container = root || document;
   const selects = [];
-  if (container.nodeType === 1 && container.matches && container.matches('select:not([multiple]):not(.no-liquid)')) {
+  if (container.nodeType === 1 && container.matches && container.matches('select:not([multiple]):not(.no-liquid), select[multiple][data-lg-multi]')) {
     selects.push(container);
   } else if (container.querySelectorAll) {
-    selects.push(...container.querySelectorAll('select:not([multiple]):not(.no-liquid)'));
+    selects.push(...container.querySelectorAll('select:not([multiple]):not(.no-liquid), select[multiple][data-lg-multi]'));
   }
 
   selects.forEach(select => {
     if (select.dataset.lgEnhanced) return;
     select.dataset.lgEnhanced = 'true';
+    // <select multiple data-lg-multi>: options toggle, the list stays open, the label lists the picks.
+    const multi = select.multiple;
 
     // Build custom liquid glass wrapper
     const wrapper = document.createElement('div');
@@ -682,8 +684,19 @@ function initLiquidSelects(root = document) {
 
     const labelSpan = document.createElement('span');
     labelSpan.className = 'lg-select-label-text';
-    const initialOpt = select.options[select.selectedIndex] || select.options[0];
-    labelSpan.textContent = initialOpt ? initialOpt.textContent : '';
+
+    function refreshLabel() {
+      if (!multi) {
+        const o = select.options[select.selectedIndex] || select.options[0];
+        labelSpan.textContent = o ? o.textContent : '';
+        return;
+      }
+      const picked = Array.from(select.selectedOptions).map(o => o.textContent.trim());
+      labelSpan.textContent = !picked.length ? (select.dataset.placeholder || 'None')
+        : picked.length <= 2 ? picked.join(', ') : `${picked.slice(0, 2).join(', ')} +${picked.length - 2}`;
+      labelSpan.style.opacity = picked.length ? '' : '0.6';
+      trigger.title = picked.join(', ');
+    }
 
     const chevronSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     chevronSvg.setAttribute('class', 'lg-select-chevron');
@@ -708,6 +721,7 @@ function initLiquidSelects(root = document) {
 
     const optionsList = document.createElement('div');
     optionsList.className = 'lg-select-options';
+    if (multi) optionsList.setAttribute('aria-multiselectable', 'true');
 
     let searchInput = null;
     let optionElements = [];
@@ -767,6 +781,13 @@ function initLiquidSelects(root = document) {
 
         optEl.addEventListener('click', (e) => {
           e.stopPropagation();
+          if (multi) {
+            opt.selected = !opt.selected;
+            optEl.classList.toggle('selected', opt.selected);
+            refreshLabel();
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            return;
+          }
           select.value = opt.value;
           labelSpan.textContent = opt.textContent;
           optionElements.forEach(el => el.classList.remove('selected'));
@@ -779,8 +800,7 @@ function initLiquidSelects(root = document) {
         optionElements.push(optEl);
       });
 
-      const selOpt = select.options[select.selectedIndex];
-      labelSpan.textContent = selOpt ? selOpt.textContent : (select.options[0] ? select.options[0].textContent : '');
+      refreshLabel();
     }
 
     popover.appendChild(optionsList);
@@ -817,17 +837,14 @@ function initLiquidSelects(root = document) {
       popover.style.display = 'flex';
 
       // Sync active selected state & hidden options
-      const curOpt = select.options[select.selectedIndex];
-      if (curOpt) {
-        labelSpan.textContent = curOpt.textContent;
-      }
+      refreshLabel();
       let visibleCount = 0;
       optionElements.forEach((el, i) => {
         const opt = select.options[i];
         if (!opt) return;
         const isHidden = opt.hidden || opt.style.display === 'none';
         el.style.display = isHidden ? 'none' : '';
-        el.classList.toggle('selected', opt.value === select.value || opt.selected);
+        el.classList.toggle('selected', multi ? opt.selected : (opt.value === select.value || opt.selected));
         if (!isHidden) visibleCount++;
       });
 
@@ -880,6 +897,11 @@ function initLiquidSelects(root = document) {
     });
 
     select.addEventListener('change', () => {
+      if (multi) {
+        refreshLabel();
+        optionElements.forEach((el, i) => el.classList.toggle('selected', !!(select.options[i] && select.options[i].selected)));
+        return;
+      }
       const selOpt = select.options[select.selectedIndex];
       if (selOpt) {
         labelSpan.textContent = selOpt.textContent;
@@ -1209,7 +1231,7 @@ function initLiquidComponents() {
       for (const m of mutations) {
         for (const node of m.addedNodes) {
           if (node.nodeType === 1) {
-            if (node.matches?.('select:not([multiple]):not(.no-liquid)') || node.querySelector?.('select:not([multiple]):not(.no-liquid)')) {
+            if (node.matches?.('select:not([multiple]):not(.no-liquid), select[multiple][data-lg-multi]') || node.querySelector?.('select:not([multiple]):not(.no-liquid), select[multiple][data-lg-multi]')) {
               needsSelectInit = true;
               break;
             }
