@@ -160,6 +160,7 @@ def apply_update() -> dict:
                 text=True,
                 timeout=120,
                 creationflags=NO_WINDOW,
+                check=True,  # restarting without a new dependency would crash the app on import
             )
 
         log_event(f"Application update applied successfully: {pull_res.stdout.strip()[:200]}", "system", "WARN")
@@ -177,7 +178,7 @@ def apply_update() -> dict:
     except subprocess.CalledProcessError as e:
         err_msg = (e.stderr or e.stdout or str(e)).strip()
         log_event(f"Application update failed: {err_msg}", "system", "ERROR")
-        return {"ok": False, "message": f"Git update failed: {err_msg}"}
+        return {"ok": False, "message": f"Update failed: {err_msg}"}
     except Exception as e:  # noqa: BLE001
         log_event(f"Application update error: {e}", "system", "ERROR")
         return {"ok": False, "message": f"Failed to apply update: {e}"}
