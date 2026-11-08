@@ -150,6 +150,24 @@ def api_device_discover(dev_id):
         return jsonify(ok=False, error=str(e)), 500
 
 
+def _export_rows(it: dict) -> list[tuple[dict, dict]]:
+    """(vc_member, lifecycle row) pairs for one analysed device: one per Virtual Chassis member
+    (Master, Backup, Linecard), each with its own serial, model and EOL dates; else the device itself."""
+    members = it["device"].vc_members
+    if not members:
+        return [({}, it)]
+    rows = []
+    for m in members:
+        hw = m.get("model") or it["hw_model"]
+        entry = lifecycle.match_lifecycle_entry(hw, it["device"].model)
+        _, status_label, _ = lifecycle.calculate_lifecycle_status(entry)
+        rec_sw = entry.get("recommended_sw", "") if entry else ""
+        _, fw_label = lifecycle.check_firmware_compliance(it["sw_version"], rec_sw)
+        rows.append((m, {"hw_model": hw, "serial": m.get("serial") or "N/A", "entry": entry,
+                         "status_label": status_label, "recommended_sw": rec_sw, "fw_label": fw_label}))
+    return rows
+
+
 @bp.route("/operations/lifecycle/export.csv")
 def lifecycle_export_csv():
     q = site_filter(Device.query.filter(Device.enabled.is_(True)), Device)
@@ -159,7 +177,7 @@ def lifecycle_export_csv():
     out = io.StringIO()
     w = csv.writer(out)
     w.writerow([
-        "Switch Name", "IP Address", "Site", "Group / Floor", "Role",
+        "Switch Name", "IP Address", "Site", "Group / Floor", "Role", "VC Member", "VC Role",
         "Hardware Model", "Detected Model", "Serial Number", "Running Software",
         "Recommended Software", "Firmware Status", "Lifecycle Status",
         "End of Sale (EOS)", "End of SW Maintenance (EoSW)", "End of Security Support (EoSec)",
@@ -169,14 +187,16 @@ def lifecycle_export_csv():
     for it in analysis["devices"]:
         d = it["device"]
         site_name = d.site.code if d.site else "N/A"
-        entry = it["entry"] or {}
-        w.writerow([
-            d.name, d.host, site_name, d.group, d.role,
-            d.model, it["hw_model"], it["serial"], it["sw_version"],
-            it["recommended_sw"], it["fw_label"], it["status_label"],
-            it["eos_date"], entry.get("eosw_date", "N/A"), it["eosec_date"],
-            it["eol_date"], it["notes"]
-        ])
+        for member, row in _export_rows(it):
+            entry = row["entry"] or {}
+            w.writerow([
+                d.name, d.host, site_name, d.group, d.role,
+                member.get("id", ""), member.get("role", ""),
+                d.model, row["hw_model"], row["serial"], it["sw_version"],
+                row["recommended_sw"], row["fw_label"], row["status_label"],
+                entry.get("eos_date", "N/A"), entry.get("eosw_date", "N/A"), entry.get("eosec_date", "N/A"),
+                entry.get("eol_date", "N/A"), entry.get("notes", "")
+            ])
 
     return Response(
         BOM + out.getvalue(),
