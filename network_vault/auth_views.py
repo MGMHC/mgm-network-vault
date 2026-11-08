@@ -1,16 +1,29 @@
 """Sign-in, password reset, the account page, and site management/switching."""
+from datetime import timedelta
+
 from flask import abort, flash, jsonify, redirect, render_template, request, session, url_for
 from sqlalchemy import func, or_
 
 from . import config, mailer, theme
-from .models import USER_ROLES, Site, User, db, get_setting, now, password_version, log_event
+from .models import USER_ROLES, LogEntry, Site, User, db, get_setting, now, password_version, log_event
 from .web import bp, current_user, require_group_admin
+
+
+MAX_FAILED_LOGINS = 10   # per username within LOGIN_LOCK_MINUTES, then sign-in is refused
+LOGIN_LOCK_MINUTES = 15
 
 
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        u = User.query.filter_by(username=request.form.get("username", "").strip()).first()
+        name = request.form.get("username", "").strip()
+        failed_msg = f"Failed login for '{name[:64]}'"
+        recent = LogEntry.query.filter(LogEntry.category == "auth", LogEntry.message == failed_msg,
+                                       LogEntry.ts >= now() - timedelta(minutes=LOGIN_LOCK_MINUTES)).count()
+        if recent >= MAX_FAILED_LOGINS:
+            flash(f"Too many failed sign-ins for this account. Try again in {LOGIN_LOCK_MINUTES} minutes.", "error")
+            return render_template("login.html")
+        u = User.query.filter_by(username=name).first()
         if u and u.check_password(request.form.get("password", "")):
             session.clear()
             session.permanent = True
@@ -24,8 +37,7 @@ def login():
             # browsers read "/\host" and "/<tab>/host" as "//host": allow only a plain local path
             local = nxt.startswith("/") and not nxt.startswith("//") and "\\" not in nxt and nxt.isprintable()
             return redirect(nxt if local else url_for("web.dashboard"))
-        log_event(f"Failed login for '{request.form.get('username', '')[:64]}'", "auth", "WARN",
-                  user="-", details=request.remote_addr)
+        log_event(failed_msg, "auth", "WARN", user="-", details=request.remote_addr)
         flash("Invalid username or password", "error")
     return render_template("login.html")
 
