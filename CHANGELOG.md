@@ -1,5 +1,22 @@
 ## [Unreleased]
 
+## [1.22.3] - 2026-11-08
+
+### Fixed
+- **Backup job totals lost results**: when several switches finished at the same moment, their results overwrote each other, so a job could end as "done, 0 failed" with failures in it, and a schedule's "last result" could be wrong. Every result is now counted.
+- **Restore lost the backup files when `backup_dir` is set**: restoring an export put the configuration files in `data/backups`, but the app reads them from `backup_dir` (e.g. `D:\NetworkVault\Config-Backups`), so restored backups opened empty. They now go to `backup_dir`; files already there are kept next to it as `<folder>-pre-restore-<time>`.
+- **Software update could leave the app unable to start**: a failed `pip install` was ignored, the update said "applied" and restarted into code that could not load. A failed install now stops the update with "Update failed: <pip error>". Note: the new code is already downloaded at that point, so fix the install (network, proxy) before restarting by hand.
+- **Backup jobs stuck on "running" after a restart**: a job cut off by a restart (update, restore, crash) is now marked failed at start-up, so the progress toast no longer polls it forever.
+- **Raw syslog files were never deleted**: the daily housekeeping (03:30) now deletes syslog files not written to for longer than the log retention period (Settings).
+- **Pages crashed on a mistyped address value**: values such as `?device=abc` or `?since=yesterday` in the address now give "400 Bad request" instead of an error page.
+
+### Security
+- **Sign-in could redirect to another website**: a crafted link (`/login?next=/\evil.example`) sent users to another site right after they signed in. Only addresses inside the app are followed now.
+- **Password guessing is limited**: after 10 failed sign-ins for one username within 15 minutes, sign-in for that username is refused until the 15 minutes have passed. A locked-out admin can still use `python manage.py reset-password <user>`.
+- **Read-only users can no longer run hardware discovery**: "Fetch live inventory" and the per-device discover button log in to switches and change stored model and serial; they now need the same rights as running a backup.
+- **Sign out needs a click in the app**: signing out is now a protected form, so a link or image on another page cannot sign users out. Old bookmarks to `/logout` no longer work.
+- **SonicWall secrets masked on GitHub**: with "mask secrets" on, encrypted SonicWall values (RADIUS and VPN shared secrets, Wi-Fi keys, admin passwords) were pushed to GitHub unmasked. They are now replaced with `6,<masked>`.
+
 ## [1.22.2] - 2026-11-08
 
 ### Added
