@@ -5,7 +5,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from . import engine, gitsync, machistory, reach
+from . import config, engine, gitsync, machistory, reach, syslog_listener
 from .models import Device, Job, LogEntry, Schedule, db, get_bool, get_int, now, log_event
 
 
@@ -85,6 +85,9 @@ def housekeeping():
         for d in Device.query.all():
             engine.apply_retention(d)
         machistory.purge_old()
+        n = syslog_listener.purge_old_files(config.get("syslog_log_dir"), days)
+        if n:
+            log_event(f"Housekeeping: deleted {n} raw syslog file(s) older than {days} days", user="system")
 
 
 def sync_schedules():
@@ -115,9 +118,19 @@ def next_run(schedule_id):
     return job.next_run_time if job else None
 
 
+def close_interrupted_jobs(app):
+    """Jobs still 'running' at start-up were cut off by a restart; the browser would poll them forever."""
+    with app.app_context():
+        n = Job.query.filter_by(status="running").update({"status": "failed", "finished": now()})
+        db.session.commit()
+        if n:
+            log_event(f"{n} backup job(s) interrupted by a restart marked as failed", "backup", "WARN", user="system")
+
+
 def init_scheduler(app):
     global _app
     _app = app
+    close_interrupted_jobs(app)
     scheduler.add_job(housekeeping, CronTrigger(hour=3, minute=30), id="housekeeping", replace_existing=True)
     gitsync.init(app)
     scheduler.add_job(_git_retry, IntervalTrigger(minutes=15), id="git-retry", replace_existing=True)

@@ -107,6 +107,23 @@ def _append_raw_log(ip: str, message: str, log_dir_path: Path, device_name: str 
         logger.warning("Failed to write to raw syslog file: %s", e)
 
 
+def purge_old_files(log_dir, days):
+    """Delete raw syslog files not written to for `days` days (0 = keep forever). Returns how many."""
+    folder = Path(log_dir)
+    if days <= 0 or not folder.is_dir():
+        return 0
+    cutoff = datetime.datetime.now().timestamp() - days * 86400
+    n = 0
+    for p in folder.glob("syslog-*.log"):
+        try:
+            if p.stat().st_mtime < cutoff:
+                p.unlink()
+                n += 1
+        except OSError as e:  # file busy or gone: try again tomorrow
+            logger.warning("Could not delete old syslog file %s: %s", p, e)
+    return n
+
+
 def _trigger_backup(device_id: int, device_name: str, trigger_reason: str):
     """Callback after debounce timer expires: initiate backup job for device."""
     with _lock:

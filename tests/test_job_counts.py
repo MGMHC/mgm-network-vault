@@ -28,3 +28,19 @@ def test_parallel_workers_count_every_result(app, monkeypatch):
     finally:
         with app.app_context():
             set_setting("max_workers", saved)
+
+
+def test_jobs_cut_off_by_a_restart_are_closed(app):
+    """The browser polls a job until it stops 'running': one cut off by a restart must not run forever."""
+    from network_vault import scheduler
+    with app.app_context():
+        job = Job(kind="backup", trigger="manual", total=3, status="running")
+        db.session.add(job)
+        db.session.commit()
+        job_id = job.id
+    scheduler.close_interrupted_jobs(app)
+    with app.app_context():
+        j = db.session.get(Job, job_id)
+        assert j.status == "failed" and j.finished is not None
+        db.session.delete(j)
+        db.session.commit()
