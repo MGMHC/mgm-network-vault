@@ -20,7 +20,7 @@ VOLATILE = re.compile(
     r"checksum \d+$)", re.I)  # SonicOS export checksum: covers the re-encrypted secrets
 # SonicOS re-encrypts every secret with a fresh salt on each export: compare them as one placeholder.
 # A real secret change still counts, as saving any change moves the 'last-modified-by' line.
-ENCRYPTED = re.compile(r"\b6,[0-9a-fA-F]{16,}")
+ENCRYPTED = gitsync.SONICOS_SECRET
 
 
 _device_locks = {}

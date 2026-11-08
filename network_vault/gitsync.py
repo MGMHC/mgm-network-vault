@@ -202,10 +202,13 @@ _CISCO_RULES = [
 _VOLATILE_INFO = re.compile(r"(uptime is|system up ?time|^\s*uptime)", re.I)
 
 
+SONICOS_SECRET = re.compile(r"\b6,[0-9a-fA-F]{16,}")  # SonicOS stores every secret as 6,<hex>
+
+
 def mask(text, juniper):
     for rx, repl in (_JUNOS_RULES if juniper else _CISCO_RULES):
         text = rx.sub(repl, text)
-    return text
+    return SONICOS_SECRET.sub("6,<masked>", text)
 
 
 README = """# MGM Network Vault - switch configuration archive

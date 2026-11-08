@@ -49,3 +49,10 @@ def test_last_modified_by_gives_author_and_method():
 def test_other_platform_lines_starting_with_time_are_kept():
     assert engine.normalized("set system time-zone Asia/Kolkata\nclock timezone IST 5 30\n") == \
         ["set system time-zone Asia/Kolkata", "clock timezone IST 5 30"]
+
+
+def test_github_mask_hides_sonicos_secrets():
+    from network_vault.gitsync import mask
+    masked = mask(FW, juniper=False)
+    assert not engine.ENCRYPTED.search(masked)
+    assert "shared-secret 6,<masked> confirm-secret 6,<masked>" in masked
