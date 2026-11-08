@@ -35,8 +35,10 @@ def test_login_with_good_and_bad_password(anon, seed):
     assert anon.get("/").status_code == 200
 
 
-def test_open_redirect_in_login_next_is_ignored(anon, seed):
-    r = anon.post("/login?next=//evil.example", data={"username": "t_admin", "password": PASSWORD})
+@pytest.mark.parametrize("nxt", ["//evil.example", "/\\evil.example", "/%5Cevil.example", "/%09/evil.example"])
+def test_open_redirect_in_login_next_is_ignored(anon, seed, nxt):
+    # browsers read "/\host" and "/<tab>/host" as "//host"
+    r = anon.post(f"/login?next={nxt}", data={"username": "t_admin", "password": PASSWORD})
     assert r.status_code == 302 and "evil.example" not in r.headers["Location"]
 
 

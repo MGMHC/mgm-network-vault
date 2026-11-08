@@ -21,7 +21,9 @@ def login():
             db.session.commit()
             log_event("User logged in", "auth", user=u.username, details=request.remote_addr)
             nxt = request.args.get("next") or ""
-            return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("web.dashboard"))
+            # browsers read "/\host" and "/<tab>/host" as "//host": allow only a plain local path
+            local = nxt.startswith("/") and not nxt.startswith("//") and "\\" not in nxt and nxt.isprintable()
+            return redirect(nxt if local else url_for("web.dashboard"))
         log_event(f"Failed login for '{request.form.get('username', '')[:64]}'", "auth", "WARN",
                   user="-", details=request.remote_addr)
         flash("Invalid username or password", "error")
