@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-## [1.22.0] - 2026-11-08
+## [1.22.1] - 2026-11-08
 
 ### Added
 - **Lifecycle CSV lists every Virtual Chassis member**: the "Export Lifecycle Audit (CSV)" now has one row per member of a Juniper Virtual Chassis (Master, Backup and Linecard), each with its own serial number, model and EOL / EOS dates, instead of one row for the whole stack. New **VC Member** and **VC Role** columns; standalone switches still have one row.
@@ -8,6 +8,7 @@
 - **GitHub releases link**: the login page and Settings > Software Update link to the release notes on GitHub.
 
 ### Fixed
+- **Daily "configuration changed" emails from SonicWall firewalls when nobody changed them**: SonicOS re-encrypts every stored password and shared secret with a new random salt each time its configuration is read, and writes the current time, uptime and a checksum into it, so every backup looked changed. These lines are now ignored when comparing, and encrypted values are compared (and shown in emails) as `6,<encrypted>`. A real change still triggers the email: any change a user saves updates the firewall's `last-modified-by` line, and the email now names that user and how they connected (e.g. "committed by dinesh via CLI").
 - **Config-change emails said "committed by unknown" for Cisco switches**: Cisco switches have no commit history, so the author was never found. The backup now reads who made the last change from the running configuration ("Last configuration change ... by mgmadmin"), so the email names the user. It starts with the next backup of each switch; changes made without a user login (e.g. SNMP) still show "unknown".
 
 ## [1.21.0] - 2026-11-07
