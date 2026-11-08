@@ -37,3 +37,21 @@ def test_vc_stack_exports_every_member(app, admin):
 def test_standalone_switch_exports_one_row(admin):
     rows = [r for r in _rows(admin) if r["Switch Name"] == "T-ACC-A"]
     assert len(rows) == 1 and rows[0]["VC Member"] == "" and rows[0]["VC Role"] == ""
+
+
+def test_lifecycle_page_lists_every_member_serial(app, admin):
+    from network_vault.models import Device, db
+    with app.app_context():
+        d = Device.query.filter_by(name="T-DIST").one()
+        d.serial, d.vc_members_json = "CU0218350076", json.dumps(VC)
+        db.session.commit()
+    try:
+        html = admin.get("/operations/lifecycle").data.decode()
+        for m in VC:
+            assert m["serial"] in html
+        assert "1 Backup" in html and "ex2200-24p-4g" in html
+    finally:
+        with app.app_context():
+            d = Device.query.filter_by(name="T-DIST").one()
+            d.serial = d.vc_members_json = None
+            db.session.commit()

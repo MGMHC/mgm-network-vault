@@ -123,7 +123,8 @@
           data-status="{{ it.status_key }}"
           data-vendor="{{ it.vendor }}"
           data-fw="{{ it.fw_status }}"
-          data-search="{{ it.device.name }} {{ it.device.host }} {{ it.hw_model }} {{ it.serial }} {{ it.sw_version }}">
+          {% set members = it.device.vc_members if it.device.vc_members|length > 1 else [] %}
+          data-search="{{ it.device.name }} {{ it.device.host }} {{ it.hw_model }} {{ it.serial }} {{ it.sw_version }}{% for m in members %} {{ m.serial }}{% endfor %}">
         
         <td>
           <a href="{{ url_for('web.device_detail', dev_id=it.device.id) }}" style="font-weight:600">
@@ -139,9 +140,14 @@
 
         <td>
           <span style="font-weight:500">{{ it.hw_model }}</span>
+          {% for m in members %}
+          {# VC member: "1 Backup"; HA unit role already names it: "Secondary (Standby)" #}
+          <div class="small muted mono">{{ m.role if m.id in m.role else m.id ~ ' ' ~ m.role }} · {{ m.serial or 'N/A' }}{% if m.model and not it.device.is_sonicwall %} · {{ m.model }}{% endif %}</div>
+          {% else %}
           {% if it.serial and it.serial != 'N/A' %}
           <div class="small muted mono">{{ it.serial }}</div>
           {% endif %}
+          {% endfor %}
         </td>
 
         <td>

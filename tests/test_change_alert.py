@@ -177,3 +177,22 @@ def test_dispatch_failure_does_not_break_the_backup_job(app, mail, backup, seed,
     _baseline(backup, "x1", "T-ACC-X1")
     backups = backup("x1", BASE_SET.format(n="T-ACC-X1") + "set vlans v80 vlan-id 80\n")
     assert backups[-1].changed
+
+
+def test_junos_comment_only_change_counts(app, seed, monkeypatch):
+    """Junos leaves 'annotate' comments out of 'display set': a comment-only change differs only in the
+    hierarchical config, which is what the hash covers. It must still count as a change."""
+    conf = "system {\n    host-name T-ACC-X1;\n}\nvlans {\n    v10 {\n        vlan-id 10;\n    }\n}\n"
+    state = {"config": conf}
+
+    def fake_collect(device):
+        return {"config": state["config"], "set_config": BASE_SET.format(n="T-ACC-X1"), "info": "",
+                "facts": {}, "vc": None, "last_commit": None}
+
+    monkeypatch.setattr(engine, "collect", fake_collect)
+    dev_id, _ = seed["dev"]["x1"]
+    engine.start_backup_job(app, [dev_id], wait=True)
+    state["config"] = conf.replace("vlans {", "/* uplink VLANs */\nvlans {")
+    engine.start_backup_job(app, [dev_id], wait=True)
+    with app.app_context():
+        assert Backup.query.filter_by(device_id=dev_id).order_by(Backup.id.desc()).first().changed

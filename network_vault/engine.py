@@ -53,19 +53,25 @@ def parse_vc(text):
     return members
 
 
-def parse_ha(config, active_serial, model):
+def parse_ha(config, active_serial, model, status=""):
     """Both units of a SonicOS HA pair, from the config's 'primary-serial' / 'secondary-serial' lines,
-    in the VC member shape. The unit SSH reaches (its serial in 'show status') is the active one."""
+    in the VC member shape. Each unit's state comes from 'show high-availability status'
+    ('Primary State: ACTIVE', 'Found Peer: No'); a peer that is lost or not ACTIVE/STANDBY makes the
+    pair degraded. Without that output (older firmware) the unit SSH reaches is taken as the active one."""
     active = (active_serial or "").replace("-", "").upper()
+    lost_peer = re.search(r"^\s*Found Peer:\s*No\b", status or "", re.M | re.I)
     members = []
     for unit in ("Primary", "Secondary"):
         m = re.search(rf"^\s*{unit.lower()}-serial\s+([0-9A-Fa-f]{{12}})\s*$", config or "", re.M)
         if not m or not m.group(1).strip("0"):
             return []  # no HA, or the peer serial is unset
         serial = m.group(1).upper()
-        state = "Active" if serial == active else "Standby"
-        members.append({"id": unit, "status": "Prsnt", "serial": serial, "model": model or "", "prio": "",
-                        "role": f"{unit} ({state})", "this": serial == active})
+        live = re.search(rf"^\s*{unit} State:\s*(\S.*?)\s*$", status or "", re.M)
+        state = live.group(1).title() if live else ("Active" if serial == active else "Standby")
+        this = state == "Active"
+        present = "Missing" if lost_peer and not this else ("Prsnt" if state in ("Active", "Standby") else state)
+        members.append({"id": unit, "status": present, "serial": serial, "model": model or "", "prio": "",
+                        "role": f"{unit} ({state})", "this": this})
     return members
 
 
@@ -143,17 +149,17 @@ def apply_facts(device, facts, vc, actor):
     if fam:
         device.model = fam
     if vc is not None:
+        kind = "HA pair" if device.is_sonicwall else "Virtual Chassis"
         if len(vc) > 1 and not device.is_vc:
             device.is_vc = True
-            kind = "HA pair" if device.is_sonicwall else "Virtual Chassis"
             log_event(f"{kind} detected ({len(vc)} members)", "device", "INFO", device, commit=False, user=actor)
         was_degraded = device.vc_degraded
         device.vc_members_json = json.dumps(vc)
         if device.vc_degraded and not was_degraded:
-            log_event("Virtual Chassis degraded: member(s) not present", "device", "WARN", device,
+            log_event(f"{kind} degraded: member(s) not present", "device", "WARN", device,
                       details=json.dumps(vc, indent=1), commit=False, user=actor)
         elif was_degraded and not device.vc_degraded:
-            log_event("Virtual Chassis recovered: all members present", "device", "INFO", device, commit=False, user=actor)
+            log_event(f"{kind} recovered: all members present", "device", "INFO", device, commit=False, user=actor)
 
 
 def _first(conn, *cmds, optional=False):
@@ -194,7 +200,7 @@ def _read_facts(conn, device, vc_members):
 
 def collect(device):
     """Return dict(config, set_config, info, facts, vc, last_commit). Raises on failure."""
-    set_cfg, last_commit = None, None
+    set_cfg, last_commit, ha_status = None, None, ""
     with ssh.session(device) as conn:
         if device.is_juniper:
             config = ssh.run(conn, "show configuration | no-more")
@@ -206,6 +212,10 @@ def collect(device):
             config = ssh.run(conn, "show running-config")
             last_commit = parse_ios_last_change(config)
         version, inventory, info_parts, vc = _read_facts(conn, device, device.is_vc)
+        if device.is_sonicwall:
+            ha_status = _first(conn, "show high-availability status", optional=True)
+            if ha_status:
+                info_parts.append(("show high-availability status", ha_status))
         if device.is_juniper:
             commits = ssh.run(conn, "show system commit | no-more")
             info_parts.insert(2, ("show system commit", commits))
@@ -218,7 +228,8 @@ def collect(device):
     info = "".join(f"===== {cmd} =====\n{out}\n" for cmd, out in info_parts)
     facts = parse_facts(device, version, inventory)
     if device.is_sonicwall:
-        vc = parse_ha(config, facts.get("serial") or device.serial, facts.get("hw_model") or device.hw_model) or None
+        vc = parse_ha(config, facts.get("serial") or device.serial, facts.get("hw_model") or device.hw_model,
+                      ha_status) or None
     return dict(config=config, set_config=set_cfg, info=info, facts=facts, vc=vc, last_commit=last_commit)
 
 
@@ -312,7 +323,8 @@ def backup_device(device_id, trigger="manual", user=None, run_alerts=None):
                     # for the alert email: secrets masked like the GitHub copy, very long lines cut
                     body = gitsync.mask(l[1:], device.is_juniper)
                     diff_lines.append(l[0] + (body[:300] + "…" if len(body) > 300 else body))
-            changed = bool(added or removed)  # hash differs only in ignored lines (e.g. stored before a rule change)
+            if not use_set:  # 'display set' omits Junos annotate comments, so an empty set diff proves nothing
+                changed = bool(added or removed)  # hash differs only in ignored lines (e.g. stored before a rule change)
 
         device.last_backup_at = now()
         device.last_backup_status = "ok"
