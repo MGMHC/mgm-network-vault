@@ -15,7 +15,12 @@ from .util import BACKUP_DIR, read_backup_file, safe_name
 VOLATILE = re.compile(
     r"^(## Last (commit|changed):|! Last configuration change|! NVRAM config last updated|"
     r"! No configuration change since|Building configuration|Current configuration\s*:|"
-    r"! Time:|ntp clock-period|.*System Time:.*|.*Up Time:.*)", re.I)
+    r"! Time:|ntp clock-period|.*System Time:.*|.*Up Time:.*|"
+    r"system-time \"|system-uptime \"|time \d\d:\d\d:\d\d$|date \d{4}:\d\d:\d\d$|"  # SonicOS clock
+    r"checksum \d+$)", re.I)  # SonicOS export checksum: covers the re-encrypted secrets
+# SonicOS re-encrypts every secret with a fresh salt on each export: compare them as one placeholder.
+# A real secret change still counts, as saving any change moves the 'last-modified-by' line.
+ENCRYPTED = re.compile(r"\b6,[0-9a-fA-F]{16,}")
 
 
 _device_locks = {}
@@ -28,7 +33,7 @@ def _lock_for(device_id):
 
 
 def normalized(text):
-    return [l for l in (text or "").splitlines() if not VOLATILE.match(l.strip())]
+    return [ENCRYPTED.sub("6,<encrypted>", l) for l in (text or "").splitlines() if not VOLATILE.match(l.strip())]
 
 
 def config_hash(text):
@@ -68,6 +73,13 @@ def parse_ios_last_change(config):
     """'15:05:28 IST Sat Nov 7 2026 by mgmadmin' from the IOS running-config header, or None."""
     m = re.search(r"^! Last configuration change at (.+?)\s*$", config or "", re.M)
     return m.group(1) if m else None
+
+
+def parse_sonicos_last_modified(config):
+    """'11/05/2026 12:46:38 by dinesh via CLI from 10.10.42.65' from SonicOS
+    'last-modified-by "dinesh 10.10.42.65:X26:V99 CLI 11/05/2026 12:46:38"', or None."""
+    m = re.search(r'^last-modified-by "(\S+) ([^\s:]+)\S* (\S+) ([^"]+)"', config or "", re.M)
+    return f"{m.group(4).strip()} by {m.group(1)} via {m.group(3)} from {m.group(2)}" if m else None
 
 
 def parse_hostname(version):
@@ -189,6 +201,7 @@ def collect(device):
             set_cfg = ssh.run(conn, "show configuration | display set | no-more")
         elif device.is_sonicwall:
             config = _first(conn, "show current-config", "export current-config cli")
+            last_commit = parse_sonicos_last_modified(config)
         else:
             config = ssh.run(conn, "show running-config")
             last_commit = parse_ios_last_change(config)
@@ -299,6 +312,7 @@ def backup_device(device_id, trigger="manual", user=None, run_alerts=None):
                     # for the alert email: secrets masked like the GitHub copy, very long lines cut
                     body = gitsync.mask(l[1:], device.is_juniper)
                     diff_lines.append(l[0] + (body[:300] + "…" if len(body) > 300 else body))
+            changed = bool(added or removed)  # hash differs only in ignored lines (e.g. stored before a rule change)
 
         device.last_backup_at = now()
         device.last_backup_status = "ok"
