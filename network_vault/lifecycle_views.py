@@ -41,13 +41,8 @@ def api_lifecycle_fetch_all():
         q.put({"type": "init", "total": total, "msg": f"Starting live inventory and firmware fetch across {total} switches..."})
 
         if not dev_ids:
-            q.put({"type": "complete", "msg": "No switches available with credentials in this scope."})
-            q.put(None)
-            while True:
-                item = q.get()
-                if item is None:
-                    break
-                yield _json.dumps(item) + "\n"
+            yield _json.dumps(q.get()) + "\n"
+            yield _json.dumps({"type": "complete", "msg": "No switches available with credentials in this scope."}) + "\n"
             return
 
         done_cnt = 0

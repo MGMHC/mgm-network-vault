@@ -55,3 +55,10 @@ def test_lifecycle_page_lists_every_member_serial(app, admin):
             d = Device.query.filter_by(name="T-DIST").one()
             d.serial = d.vc_members_json = None
             db.session.commit()
+
+
+def test_fetch_with_nothing_in_scope_reports_and_ends(writer):
+    import json as _json
+    r = writer.post("/api/operations/lifecycle/fetch", json={"device_ids": [999999]}, headers=writer.csrf_headers)
+    lines = [_json.loads(l) for l in r.get_data(as_text=True).splitlines()]
+    assert [l["type"] for l in lines] == ["init", "complete"] and lines[0]["total"] == 0
