@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+## [1.22.2] - 2026-11-08
+
+### Added
+- **Live SonicWall HA status**: each firewall backup now reads `show high-availability status`, so the **HA pair members** table shows each unit's real state (Active, Standby, Idle...) instead of guessing it from which unit Vault reached.
+  - If the firewall reports `Found Peer: No`, the other unit shows as **Missing**; a unit in any state other than Active or Standby is shown with that state. Either way the pair counts as degraded: the device page shows the warning badge, the dashboard counts it, and Logs get "HA pair degraded" (and "recovered" when it is back).
+  - The HA status output is saved in the backup's info file. Firmware without the command keeps the previous behaviour.
+- **Lifecycle & EOL page lists every member**: Virtual Chassis switches and SonicWall HA pairs now show each member under the hardware model, with its role, serial number and (for switches) model, e.g. "1 Backup · CU0218350155 · ex2200-48t-4g" or "Secondary (Standby) · 18C241C5FA9E". Searching the page for a member's serial finds its stack or firewall. Standalone switches are unchanged. The CSV export already had one row per member.
+
+### Fixed
+- **Junos changes that only added or edited a comment were not counted**: since 1.22.1, a Juniper backup whose only change was an `annotate` comment was treated as unchanged (and not stored when "skip unchanged" is on), because Junos leaves comments out of the `display set` view used for the diff. Such changes are now stored and marked as changed again.
+
 ## [1.22.1] - 2026-11-08
 
 ### Added

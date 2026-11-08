@@ -1,3 +1,3 @@
 """Application version - bump this (Semantic Versioning: MAJOR.MINOR.PATCH) for every release."""
-__version__ = "1.22.1"
+__version__ = "1.22.2"
 RELEASES_URL = "https://github.com/MGMHC/mgm-network-vault/releases"
