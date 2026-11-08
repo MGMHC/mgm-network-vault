@@ -93,9 +93,10 @@ def plan_emails(items, tgts):
 
 
 def parse_commit(last_commit):
-    """('mgm-admin', 'cli') from '2026-11-05 10:54:02 IST by mgm-admin via cli commit synchronize'."""
-    m = re.search(r"\bby (\S+) via (\S+)", last_commit or "")
-    return (m.group(1), m.group(2)) if m else ("unknown", "")
+    """('mgm-admin', 'cli') from '2026-11-05 10:54:02 IST by mgm-admin via cli commit synchronize' (Junos);
+    ('mgmadmin', '') from '15:05:28 IST Sat Nov 7 2026 by mgmadmin' (Cisco IOS has no 'via')."""
+    m = re.search(r"\bby (\S+)(?: via (\S+))?", last_commit or "")
+    return (m.group(1), m.group(2) or "") if m else ("unknown", "")
 
 
 def _item(device, **extra):

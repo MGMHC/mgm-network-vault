@@ -64,6 +64,12 @@ def parse_ha(config, active_serial, model):
     return members
 
 
+def parse_ios_last_change(config):
+    """'15:05:28 IST Sat Nov 7 2026 by mgmadmin' from the IOS running-config header, or None."""
+    m = re.search(r"^! Last configuration change at (.+?)\s*$", config or "", re.M)
+    return m.group(1) if m else None
+
+
 def parse_hostname(version):
     """The switch's own hostname from 'show version' (Juniper 'Hostname: x', Cisco 'x uptime is ...')."""
     m = re.search(r"^Hostname:\s*(\S+)", version or "", re.M) or re.search(r"^(\S+)\s+uptime is\b", version or "", re.M)
@@ -185,6 +191,7 @@ def collect(device):
             config = _first(conn, "show current-config", "export current-config cli")
         else:
             config = ssh.run(conn, "show running-config")
+            last_commit = parse_ios_last_change(config)
         version, inventory, info_parts, vc = _read_facts(conn, device, device.is_vc)
         if device.is_juniper:
             commits = ssh.run(conn, "show system commit | no-more")
