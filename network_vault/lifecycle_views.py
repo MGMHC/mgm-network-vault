@@ -3,11 +3,11 @@ import csv
 import io
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from flask import Response, abort, current_app, jsonify, render_template, request, session, stream_with_context
+from flask import Response, current_app, jsonify, render_template, request, session, stream_with_context
 
 from . import engine, lifecycle
 from .models import Device, Site, db, get_int, log_event
-from .web import BOM, bp, current_user, scannable_ids, scoped_devices, site_filter
+from .web import BOM, authorized_device_ids, bp, scannable_ids, scoped_devices, site_filter
 
 
 @bp.route("/operations/lifecycle", endpoint="lifecycle")
@@ -26,7 +26,7 @@ def api_lifecycle_fetch_all():
     and returns real-time progress.
     """
     data = request.get_json(silent=True) or {}
-    dev_ids = scannable_ids(scoped_devices(data))
+    dev_ids = authorized_device_ids(scannable_ids(scoped_devices(data)))  # 403 for read-only users
     app = current_app._get_current_object()
     # Read request-bound values now: the worker threads below have no request context.
     username = session.get("user")
@@ -129,9 +129,7 @@ def api_lifecycle_fetch_all():
 @bp.route("/api/devices/<int:dev_id>/discover", methods=["POST"])
 def api_device_discover(dev_id):
     d = db.get_or_404(Device, dev_id)
-    u = current_user()
-    if not u.has_site_access(d.site_id):
-        abort(403, "Cannot discover device from another site.")
+    authorized_device_ids([dev_id])  # 403 for read-only users and other sites' devices
     try:
         ok = engine.discover_device(dev_id, user=session.get("user"))
         if ok:

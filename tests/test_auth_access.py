@@ -131,3 +131,26 @@ def test_role_flags(app, seed):
         assert not ro.can_write and not ro.can_backup
         assert ro.allowed_site_ids == [seed["hc_id"]]
         assert ro.has_site_access(seed["hc_id"]) and not ro.has_site_access(seed["ml_id"])
+
+
+def test_read_only_cannot_run_discovery(readonly, seed):
+    """Discovery logs in to switches and overwrites model/serial: same rule as /api/detect."""
+    dev_id, _ = seed["dev"]["dist"]
+    assert readonly.post(f"/api/devices/{dev_id}/discover", headers=readonly.csrf_headers).status_code == 403
+    r = readonly.post("/api/operations/lifecycle/fetch", json={}, headers=readonly.csrf_headers)
+    assert r.status_code == 403
+
+
+def test_login_locks_after_repeated_failures(app, anon, seed):
+    from network_vault.auth_views import MAX_FAILED_LOGINS
+    from network_vault.models import LogEntry, db
+    try:
+        for _ in range(MAX_FAILED_LOGINS):
+            anon.post("/login", data={"username": "t_rw", "password": "guess"})
+        r = anon.post("/login", data={"username": "t_rw", "password": PASSWORD})  # right password, too late
+        assert r.status_code == 200 and "Too many failed sign-ins" in r.get_data(as_text=True)
+        assert anon.get("/").status_code == 302  # not signed in
+    finally:
+        with app.app_context():
+            LogEntry.query.filter(LogEntry.message == "Failed login for 't_rw'").delete()
+            db.session.commit()
