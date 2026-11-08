@@ -1,4 +1,5 @@
 """Sign-in, password reset, the account page, and site management/switching."""
+import hmac
 from datetime import timedelta
 
 from flask import abort, flash, jsonify, redirect, render_template, request, session, url_for
@@ -42,8 +43,12 @@ def login():
     return render_template("login.html")
 
 
-@bp.route("/logout")
+@bp.route("/logout", methods=["POST"])
 def logout():
+    # public endpoint, so the global CSRF check skips it: a link or <img> elsewhere must not sign users out
+    token = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
+    if not token or not hmac.compare_digest(str(token), str(session.get("csrf") or "")):
+        abort(400, "CSRF token missing or invalid - reload the page and try again.")
     log_event("User logged out", "auth")
     session.clear()
     return redirect(url_for("web.login"))

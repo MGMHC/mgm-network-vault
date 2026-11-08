@@ -138,9 +138,12 @@
             <span class="nav-user-name">{{ current_user }}</span>
             {% if current_user_obj %}<span class="role-badge role-{{ current_user_obj.role }}">{{ current_user_obj.role }}</span>{% endif %}
           </div>
-          <a href="{{ url_for('web.logout') }}" class="nav-logout-btn" title="Sign out">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          </a>
+          <form method="post" action="{{ url_for('web.logout') }}" style="display:contents">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="nav-logout-btn" title="Sign out" aria-label="Sign out">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            </button>
+          </form>
           <span class="nav-version"><a href="{{ url_for('web.settings') }}#updateCard" title="Version info">v{{ app_version }}</a></span>
         </div>
       </div>
@@ -270,10 +273,13 @@
           <span class="mobile-user-name">{{ current_user }}</span>
           {% if current_user_obj %}<span class="role-badge role-{{ current_user_obj.role }}">{{ current_user_obj.role }}</span>{% endif %}
         </div>
-        <a href="{{ url_for('web.logout') }}" class="mobile-logout-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          Sign out
-        </a>
+        <form method="post" action="{{ url_for('web.logout') }}" style="display:contents">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="mobile-logout-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Sign out
+          </button>
+        </form>
       </div>
       <div class="mobile-version-tag">MGM Network Vault v{{ app_version }}</div>
     </div>
@@ -403,7 +409,6 @@ document.addEventListener('keydown', (e) => {
     "where": {"and": [
       {"selector_matches": ".nav-brand, .nav-item, .dd-item, .subnav-link, .mobile-nav-drawer a"},
       {"not": {"selector_matches": "[download], [data-no-transition], [target=_blank]"}},
-      {"not": {"href_matches": "/logout"}},
       {"not": {"href_matches": "/api/*"}},
       {"not": {"href_matches": "/*.csv"}},
       {"not": {"href_matches": "/*.diff"}},

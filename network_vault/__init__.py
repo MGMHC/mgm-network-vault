@@ -76,6 +76,12 @@ def create_app():
             return redirect(url_for("web.account"))
         return None
 
+    @app.errorhandler(ValueError)
+    def bad_value(e):
+        # int() / fromisoformat() on a query or form value someone typed (?device=abc): 400, not a crash page
+        app.logger.warning("Bad value in %s %s", request.method, request.full_path, exc_info=e)
+        return "Bad request: a value in the address or form is not valid.", 400
+
     @app.after_request
     def static_cache_headers(resp):
         # CSS/JS are linked with ?v=<app version>, so a release changes the URL: let browsers keep

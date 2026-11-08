@@ -154,3 +154,19 @@ def test_login_locks_after_repeated_failures(app, anon, seed):
         with app.app_context():
             LogEntry.query.filter(LogEntry.message == "Failed login for 't_rw'").delete()
             db.session.commit()
+
+
+def test_logout_needs_post_with_csrf(writer):
+    """A plain link or image (<img src=/logout>) on another page must not sign the user out."""
+    assert writer.get("/logout").status_code == 405
+    assert writer.post("/logout").status_code == 400
+    assert writer.get("/").status_code == 200  # still signed in
+    r = writer.post("/logout", headers=writer.csrf_headers)
+    assert r.status_code == 302 and "/login" in r.headers["Location"]
+    assert writer.get("/").status_code == 302
+
+
+def test_bad_query_values_are_400_not_500(writer):
+    for url in ("/logs?device=abc", "/logs?since=yesterday", "/logs?page=x", "/backups?device=x",
+                "/backups/zip?latest=1&device=x", "/compare?a=x&b=1"):
+        assert writer.get(url).status_code == 400, url
