@@ -48,6 +48,22 @@ def parse_vc(text):
     return members
 
 
+def parse_ha(config, active_serial, model):
+    """Both units of a SonicOS HA pair, from the config's 'primary-serial' / 'secondary-serial' lines,
+    in the VC member shape. The unit SSH reaches (its serial in 'show status') is the active one."""
+    active = (active_serial or "").replace("-", "").upper()
+    members = []
+    for unit in ("Primary", "Secondary"):
+        m = re.search(rf"^\s*{unit.lower()}-serial\s+([0-9A-Fa-f]{{12}})\s*$", config or "", re.M)
+        if not m or not m.group(1).strip("0"):
+            return []  # no HA, or the peer serial is unset
+        serial = m.group(1).upper()
+        state = "Active" if serial == active else "Standby"
+        members.append({"id": unit, "status": "Prsnt", "serial": serial, "model": model or "", "prio": "",
+                        "role": f"{unit} ({state})", "this": serial == active})
+    return members
+
+
 def parse_hostname(version):
     """The switch's own hostname from 'show version' (Juniper 'Hostname: x', Cisco 'x uptime is ...')."""
     m = re.search(r"^Hostname:\s*(\S+)", version or "", re.M) or re.search(r"^(\S+)\s+uptime is\b", version or "", re.M)
@@ -111,7 +127,8 @@ def apply_facts(device, facts, vc, actor):
     if vc is not None:
         if len(vc) > 1 and not device.is_vc:
             device.is_vc = True
-            log_event(f"Virtual Chassis detected ({len(vc)} members)", "device", "INFO", device, commit=False, user=actor)
+            kind = "HA pair" if device.is_sonicwall else "Virtual Chassis"
+            log_event(f"{kind} detected ({len(vc)} members)", "device", "INFO", device, commit=False, user=actor)
         was_degraded = device.vc_degraded
         device.vc_members_json = json.dumps(vc)
         if device.vc_degraded and not was_degraded:
@@ -179,8 +196,10 @@ def collect(device):
         raise RuntimeError("Configuration output looks invalid:\n" + config[:500])
 
     info = "".join(f"===== {cmd} =====\n{out}\n" for cmd, out in info_parts)
-    return dict(config=config, set_config=set_cfg, info=info, facts=parse_facts(device, version, inventory),
-                vc=vc, last_commit=last_commit)
+    facts = parse_facts(device, version, inventory)
+    if device.is_sonicwall:
+        vc = parse_ha(config, facts.get("serial") or device.serial, facts.get("hw_model") or device.hw_model) or None
+    return dict(config=config, set_config=set_cfg, info=info, facts=facts, vc=vc, last_commit=last_commit)
 
 
 def discover_device(device_id, user=None):

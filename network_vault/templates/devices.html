@@ -70,7 +70,7 @@
           {% endif %}
           <td class="col-name"><a href="{{ url_for('web.device_detail', dev_id=d.id) }}" {% if d.legacy_ssh
               %}title="Legacy SSH algorithms enabled" {% endif %}><b>{{ d.name }}</b></a>
-            {% if d.is_vc %}<span class="badge blue">VC</span>{% endif %}</td>
+            {% if d.is_vc %}<span class="badge blue">{{ 'HA' if d.is_sonicwall else 'VC' }}</span>{% endif %}</td>
           <td class="col-host mono">{{ d.host }}{% if d.port != 22 %}:{{ d.port }}{% endif %}</td>
           <td class="col-platform">{{ 'Junos' if d.is_juniper else ('C1300' if d.platform == 'cisco_c1300' else 'IOS')
             }}</td>

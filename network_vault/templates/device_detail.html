@@ -61,7 +61,7 @@
 
 {% if d.is_vc %}
 <div class="card flush">
-  <div class="card-head"><h2>{{ 'Virtual Chassis' if d.is_juniper else 'Stack' }} members</h2>
+  <div class="card-head"><h2>{{ 'Virtual Chassis' if d.is_juniper else 'HA pair' if d.is_sonicwall else 'Stack' }} members</h2>
     {% if d.vc_degraded %}<span class="badge warn">Degraded — member not present</span>{% elif d.vc_members %}<span class="badge ok">All members present</span>{% endif %}</div>
   {% if d.vc_members %}
   <div class="table-wrap"><table>
