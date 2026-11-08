@@ -59,7 +59,7 @@ def main():
             sys.exit("The app is running on this machine. Stop it (or the service) first, "
                      "or upload the export on the Settings > Export & migrate page instead.")
         m = portable.stage_restore(BASE_DIR, a.file, _passphrase(confirm=False))
-        done = portable.apply_pending_restore(BASE_DIR)
+        done = portable.apply_pending_restore(BASE_DIR, BACKUP_DIR)
         print(f"Restored export of {m['source_host']} ({m['created']}): {m['counts']['device']} devices, "
               f"{m['counts']['backup']} backups.\nPrevious data kept in {done['previous_data_kept_in']}\n"
               "Start the app again. Server settings from the old machine are in "

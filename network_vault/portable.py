@@ -210,20 +210,32 @@ def cancel_restore(base_dir):
     shutil.rmtree(Path(base_dir) / PENDING, ignore_errors=True)
 
 
-def apply_pending_restore(base_dir):
-    """Swap a staged restore into place. Called at start-up before anything opens the data files."""
+def apply_pending_restore(base_dir, backup_dir):
+    """Swap a staged restore into place. Called at start-up before anything opens the data files.
+    The export's backup files go to backup_dir (config.toml 'backup_dir'), where the app reads them."""
     base_dir = Path(base_dir)
     pending = base_dir / PENDING
     ready = pending / "READY.json"
     if not ready.exists():
         return None
     manifest = json.loads(ready.read_text(encoding="utf-8"))
-    keep = base_dir / f"pre-restore-{datetime.now():%Y%m%d-%H%M%S}"
+    stamp = f"{datetime.now():%Y%m%d-%H%M%S}"
+    keep = base_dir / f"pre-restore-{stamp}"
     keep.mkdir()
     for item in base_dir.iterdir():
         if item.name == PENDING or item.name.startswith("pre-restore-") or item == keep:
             continue
         shutil.move(str(item), str(keep / item.name))
+    restored, bk = pending / "data" / "backups", Path(backup_dir)
+    if restored.exists() and bk.resolve() != (base_dir / "backups").resolve():
+        if bk.exists() and any(bk.iterdir()):
+            old = bk.with_name(f"{bk.name}-pre-restore-{stamp}")  # same drive: a rename, not a copy
+            bk.rename(old)
+            manifest["previous_backups_kept_in"] = str(old)
+        elif bk.exists():
+            bk.rmdir()
+        bk.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(restored), str(bk))
     for item in (pending / "data").iterdir():
         shutil.move(str(item), str(base_dir / item.name))
     if (pending / "config.toml.from-export").exists():

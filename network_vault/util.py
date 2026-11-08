@@ -13,7 +13,7 @@ NO_WINDOW = 0x08000000 if os.name == "nt" else 0  # CREATE_NO_WINDOW: no console
 BASE_DIR = config.data_dir()
 BASE_DIR.mkdir(parents=True, exist_ok=True)
 # a restore uploaded earlier is swapped in here - before the keys and database are opened
-apply_pending_restore(BASE_DIR)
+apply_pending_restore(BASE_DIR, config.backup_dir())
 BACKUP_DIR = config.backup_dir()
 BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
