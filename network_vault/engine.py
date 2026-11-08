@@ -419,15 +419,15 @@ def start_backup_job(app, device_ids, trigger="manual", wait=False, user=None):
             except Exception as e:  # noqa: BLE001
                 log_event(f"Unexpected backup error: {e}", "backup", "ERROR")
                 result = "failed"
-            j = db.session.get(Job, job_id)
-            j.done += 1
+            # add in SQL: workers run in parallel, so reading the count and writing it back loses results
+            bump = {Job.done: Job.done + 1}
             if result == "failed":
-                j.failed += 1
-            elif result == "unchanged":
-                j.unchanged += 1
-                j.ok += 1
-            elif result == "ok":
-                j.ok += 1
+                bump[Job.failed] = Job.failed + 1
+            elif result in ("ok", "unchanged"):
+                bump[Job.ok] = Job.ok + 1
+                if result == "unchanged":
+                    bump[Job.unchanged] = Job.unchanged + 1
+            Job.query.filter_by(id=job_id).update(bump)
             db.session.commit()
 
     def runner():
