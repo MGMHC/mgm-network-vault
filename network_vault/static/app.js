@@ -1253,6 +1253,42 @@ if (document.readyState === 'loading') {
   initLiquidComponents();
 }
 
+// Phones: tables show one card per row (table.stack in app.css). Each cell gets its column header as
+// data-label. Diffs and matrices are left alone and keep scrolling sideways.
+// shortcut: header colspan is ignored, so a table whose header cells span columns gets shifted labels.
+function stackTable(t) {
+  if (!t.tHead || !t.tHead.rows.length || t.matches('.diff, .matrix-grid-table, .no-stack')) return;
+  const heads = Array.from(t.tHead.rows[t.tHead.rows.length - 1].cells, c => c.textContent.trim());
+  t.classList.add('stack');
+  for (const body of t.tBodies) {
+    for (const row of body.rows) {
+      Array.from(row.cells).forEach((c, i) => {
+        const label = c.colSpan > 1 ? '' : (heads[i] || '');
+        if (c.dataset.label !== label) c.dataset.label = label;
+      });
+    }
+  }
+}
+
+function initStackTables() {
+  document.querySelectorAll('table').forEach(stackTable);
+  // rows added later (streamed results, filters) get labelled too
+  new MutationObserver(muts => {
+    const seen = new Set();
+    for (const m of muts) {
+      const t = m.target.closest && m.target.closest('table');
+      if (t && !seen.has(t)) { seen.add(t); stackTable(t); }
+      m.addedNodes.forEach(n => { if (n.querySelectorAll) n.querySelectorAll('table').forEach(stackTable); });
+    }
+  }).observe(document.body, { childList: true, subtree: true });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initStackTables);
+} else {
+  initStackTables();
+}
+
 
 
 

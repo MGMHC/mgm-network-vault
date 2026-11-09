@@ -23,6 +23,15 @@
   color: var(--muted);
   font-size: 13px;
 }
+.rack-layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 20px;
+  align-items: flex-start;
+}
+@media (max-width: 900px) {
+  .rack-layout { grid-template-columns: minmax(0, 1fr); }
+}
 .rack-actions {
   display: flex;
   gap: 10px;
@@ -373,7 +382,7 @@
 </div>
 
 <!-- Main Split Container -->
-<div style="display:grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: flex-start;">
+<div class="rack-layout">
 
   <!-- Left Column: Rack Browser & Filters -->
   <div class="card" style="padding:16px;">
@@ -411,7 +420,7 @@
       </div>
 
       <!-- Controls: Front/Rear & Actions -->
-      <div style="display:flex;align-items:center;gap:10px;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <div class="segmented-control" style="display:flex;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:2px;">
           <button id="faceFrontBtn" class="btn btn-sm primary" onclick="setRackFace('front')" style="padding:4px 12px;border:none;">Front</button>
           <button id="faceRearBtn" class="btn btn-sm" onclick="setRackFace('rear')" style="padding:4px 12px;border:none;">Rear</button>

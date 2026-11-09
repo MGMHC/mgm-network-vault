@@ -1182,6 +1182,7 @@ h3 {
 
   .topbar .sub {
     font-size: 12px !important;
+    overflow-wrap: anywhere;
   }
 
   .topbar .actions {
@@ -1283,8 +1284,58 @@ h3 {
     border-radius: 8px !important;
   }
 
-  table {
-    min-width: 560px;
+  /* Other tables become one card per row: "Header  value" lines, no sideways scrolling.
+     :not(#_) only raises specificity, so these beat per-page column rules (fixed widths, nowrap). */
+  table.stack:not(#_),
+  table.stack:not(#_) tbody,
+  table.stack:not(#_) tr {
+    display: block;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  table.stack:not(#_) thead {
+    display: none;
+  }
+
+  table.stack:not(#_) tr {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  table.stack:not(#_) td {
+    display: flow-root !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    overflow: visible !important;
+    padding: 3px 10px !important;
+    border: 0 !important;
+    text-align: left !important;
+    white-space: normal !important;
+    text-overflow: clip !important;
+    overflow-wrap: anywhere;
+  }
+
+  table.stack:not(#_) td::before {
+    content: attr(data-label);
+    float: left;
+    width: 38%;
+    padding-right: 8px;
+    box-sizing: border-box;
+    color: var(--muted);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  table.stack:not(#_) td[data-label=""]::before {
+    content: none;
+  }
+
+  table.stack:not(#_) td:empty {
+    display: none !important;
   }
 
   th,
