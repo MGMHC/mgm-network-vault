@@ -11,112 +11,93 @@
 </div>
 {% endif %}
 
-<!-- ── Email style ─────────────────────────────────────────────────────────── -->
-<form method="post" action="{{ url_for('web.alerts_style') }}" class="card">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <div class="card-head"><h2>{{ icon('gear') }} Email style</h2></div>
-  <p class="muted small" style="margin:0 0 12px">Shared by every alert email.</p>
-  <div class="form-grid">
-    <div class="field">
-      <label>Header colour</label>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input type="color" id="styleColorPick" value="{{ s.alert_style_color }}" style="width:44px;height:36px;padding:2px" oninput="document.getElementById('styleColor').value=this.value">
-        <input type="text" id="styleColor" name="alert_style_color" value="{{ s.alert_style_color }}" pattern="#[0-9a-fA-F]{6}" style="max-width:120px" oninput="if(/^#[0-9a-fA-F]{6}$/.test(this.value))document.getElementById('styleColorPick').value=this.value">
-      </div>
-    </div>
-    <div class="field">
-      <label>Logo</label>
-      <label class="check"><input type="checkbox" name="alert_style_logo" value="1" {{ 'checked' if s.alert_style_logo == '1' }}> Show the MGM logo in the header</label>
-    </div>
-    <div class="field" style="grid-column:1 / -1">
-      <label>Footer text</label>
-      <input type="text" name="alert_style_footer" value="{{ s.alert_style_footer }}" maxlength="300">
-    </div>
-  </div>
-  <button class="btn primary" style="margin-top:12px">Save style</button>
-</form>
-
+<div class="alert-grid">
 <!-- ── Triggers ─────────────────────────────────────────────────────────────── -->
+{% set trig_help = {
+  'switch_down': 'A switch that answers neither ping nor SSH on the scheduled reachability checks. Pressing "Check" yourself never brings the email forward.',
+  'backup_failed': 'One email per backup run, listing the switches whose backup failed. A switch is reported once until its backup succeeds again.',
+} %}
 {% for trig, label in triggers.items() %}
 <div class="card" id="trigger-{{ trig }}">
   <form method="post" action="{{ url_for('web.alerts_trigger', trigger=trig) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div class="card-head">
       <h2>{{ icon('bell') }} {{ label }}</h2>
       {% set on = s.alert_down_enabled if trig == 'switch_down' else (s.alert_backup_enabled if trig == 'backup_failed' else s.alert_change_enabled) %}
       <label class="check" style="margin:0"><input type="checkbox" name="enabled" value="1" {{ 'checked' if on == '1' }}> <b>On</b></label>
     </div>
+    <p class="muted small ag-desc">{{ trig_help.get(trig, 'One email per backup run, listing switches whose configuration changed, with who committed it and the first lines of the difference.') }}</p>
     {% if trig == 'switch_down' %}
-      <p class="muted small" style="margin:0 0 10px">A switch that answers neither ping nor SSH on the scheduled reachability checks. Pressing "Check" yourself never brings the email forward.</p>
-      <div class="form-grid">
-        <div class="field">
-          <label>Failed checks in a row before emailing</label>
-          <input type="number" name="checks" min="1" max="100" value="{{ s.alert_down_checks }}">
-          <div class="help">{% if (s.ping_interval_min|int) > 0 %}Checks run every {{ s.ping_interval_min }} min, so {{ s.alert_down_checks }} ≈ {{ (s.alert_down_checks|int) * (s.ping_interval_min|int) }} min.{% else %}Scheduled reachability checks are off (Settings), so nothing is sent.{% endif %}</div>
-        </div>
-        <div class="field">
-          <label>Recovery</label>
-          <label class="check"><input type="checkbox" name="recovery" value="1" {{ 'checked' if s.alert_down_recovery == '1' }}> Email again when the switch comes back</label>
-        </div>
+      <div class="ag-row">
+        <label>Email after <input type="number" name="checks" min="1" max="100" value="{{ s.alert_down_checks }}" class="ag-num"> failed checks in a row</label>
+        <span class="muted small">{% if (s.ping_interval_min|int) > 0 %}≈ {{ (s.alert_down_checks|int) * (s.ping_interval_min|int) }} min (every {{ s.ping_interval_min }} min){% else %}Scheduled checks are off (Settings), so nothing is sent.{% endif %}</span>
       </div>
-    {% elif trig == 'backup_failed' %}
-      <p class="muted small" style="margin:0 0 10px">One email per backup run, listing the switches whose backup failed. A switch is reported once until its backup succeeds again.</p>
-    {% else %}
-      <p class="muted small" style="margin:0 0 10px">One email per backup run, listing switches whose configuration changed, with who committed it and the first lines of the difference.</p>
-      <div class="form-grid">
-        <div class="field">
-          <label>Diff lines shown in the email</label>
-          <input type="number" name="diff_lines" min="0" max="500" value="{{ s.alert_change_diff_lines }}">
-          <div class="help">0 shows no diff, only the summary and a link to the full comparison.</div>
-        </div>
-        <div class="field">
-          <label>Manual backups</label>
-          <label class="check"><input type="checkbox" name="manual" value="1" {{ 'checked' if s.alert_change_manual == '1' }}> Also report changes found by manual backups</label>
-        </div>
+      <label class="check"><input type="checkbox" name="recovery" value="1" {{ 'checked' if s.alert_down_recovery == '1' }}> Email again when the switch comes back</label>
+    {% elif trig != 'backup_failed' %}
+      <div class="ag-row">
+        <label>Show <input type="number" name="diff_lines" min="0" max="500" value="{{ s.alert_change_diff_lines }}" class="ag-num"> diff lines in the email</label>
+        <span class="muted small">0 = summary and link only</span>
       </div>
+      <label class="check"><input type="checkbox" name="manual" value="1" {{ 'checked' if s.alert_change_manual == '1' }}> Also report changes found by manual backups</label>
     {% endif %}
-    <button class="btn sm" style="margin-top:10px">Save {{ label|lower }} settings</button>
+    <button class="btn sm" style="margin-top:8px">Save</button>
   </form>
 
-  <h3 style="margin:18px 0 8px;font-size:14px">Messages</h3>
-  <div class="table-wrap"><table>
-    <thead><tr><th>Name</th><th>Sends to</th><th>Sites</th><th>Status</th><th></th></tr></thead>
-    <tbody>
-    {% for m in msgs if m.trigger == trig %}
-      <tr>
-        <td><b>{{ m.name }}</b></td>
-        <td>
+  <h3 class="ag-h3">Messages</h3>
+  <ul class="ag-msgs">
+  {% for m in msgs if m.trigger == trig %}
+    <li>
+      <div style="min-width:0">
+        <span class="dot" style="color:var({{ '--ok' if m.enabled else '--muted' }})" title="{{ 'enabled' if m.enabled else 'disabled' }}"></span>
+        <b>{{ m.name }}</b>{% if not m.enabled %} <span class="muted small">(disabled)</span>{% endif %}
+        <div class="muted small">
           {% set parts = [] %}
           {% if m.to_group_admins %}{% set _ = parts.append('Group admins') %}{% endif %}
           {% if m.to_site_admins %}{% set _ = parts.append('Site admins (own sites)') %}{% endif %}
           {% if m.extra_list %}{% set _ = parts.append(m.extra_list|length ~ ' extra address' ~ ('' if m.extra_list|length == 1 else 'es')) %}{% endif %}
-          {{ parts|join(', ') if parts else '— nobody yet —' }}
-        </td>
-        <td>{% if m.site_ids %}{% for sid in m.site_ids %}<span class="badge blue" style="font-size:10px">{{ site_codes.get(sid, '?') }}</span> {% endfor %}{% else %}All sites{% endif %}</td>
-        <td>{% if m.enabled %}<span class="badge ok">enabled</span>{% else %}<span class="badge">disabled</span>{% endif %}</td>
-        <td class="num">
-          <button type="button" class="btn sm" onclick="openAlertEditor({{ m.id }})">Edit</button>
-          <form method="post" class="inline" action="{{ url_for('web.alerts_message_delete', mid=m.id) }}" data-confirm="Delete message {{ m.name }}?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn sm danger">Delete</button></form>
-        </td>
-      </tr>
-    {% else %}
-      <tr><td colspan="5" class="muted">No messages - nothing is sent for this trigger.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table></div>
-  <form method="post" action="{{ url_for('web.alerts_message_new') }}" style="margin-top:10px">
+          {{ parts|join(', ') if parts else '— nobody yet —' }} ·
+          {% if m.site_ids %}{% for sid in m.site_ids %}<span class="badge blue" style="font-size:10px">{{ site_codes.get(sid, '?') }}</span> {% endfor %}{% else %}All sites{% endif %}
+        </div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button type="button" class="btn sm" onclick="openAlertEditor({{ m.id }})">Edit</button>
+        <form method="post" class="inline" action="{{ url_for('web.alerts_message_delete', mid=m.id) }}" data-confirm="Delete message {{ m.name }}?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn sm danger">Delete</button></form>
+      </div>
+    </li>
+  {% else %}
+    <li class="muted small">No messages - nothing is sent for this trigger.</li>
+  {% endfor %}
+  </ul>
+  <form method="post" action="{{ url_for('web.alerts_message_new') }}" style="margin-top:8px">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="trigger" value="{{ trig }}">
-    <button class="btn sm">+ Add message</button>
-    <span class="muted small">for a different group of people or different wording</span>
+    <button class="btn sm" title="For a different group of people or different wording">+ Add message</button>
   </form>
 </div>
 {% endfor %}
 
+<!-- ── Email style ─────────────────────────────────────────────────────────── -->
+<form method="post" action="{{ url_for('web.alerts_style') }}" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="card-head"><h2>{{ icon('gear') }} Email style</h2></div>
+  <p class="muted small ag-desc">Shared by every alert email.</p>
+  <div class="ag-row">
+    <input type="color" id="styleColorPick" value="{{ s.alert_style_color }}" title="Header colour" style="width:36px;height:30px;padding:2px" oninput="document.getElementById('styleColor').value=this.value">
+    <input type="text" id="styleColor" name="alert_style_color" value="{{ s.alert_style_color }}" pattern="#[0-9a-fA-F]{6}" aria-label="Header colour" style="width:96px" oninput="if(/^#[0-9a-fA-F]{6}$/.test(this.value))document.getElementById('styleColorPick').value=this.value">
+    <label class="check" style="margin:0"><input type="checkbox" name="alert_style_logo" value="1" {{ 'checked' if s.alert_style_logo == '1' }}> MGM logo in header</label>
+  </div>
+  <div class="field" style="margin-top:8px">
+    <label>Footer text</label>
+    <input type="text" name="alert_style_footer" value="{{ s.alert_style_footer }}" maxlength="300">
+  </div>
+  <button class="btn sm primary">Save style</button>
+</form>
+</div>
+
 <!-- ── Recent alerts ───────────────────────────────────────────────────────── -->
 <div class="card flush">
   <div class="card-head" style="padding:14px 16px 0"><h2>Recent alerts</h2></div>
-  <div class="table-wrap"><table>
+  <div class="table-wrap" style="max-height:360px;overflow:auto"><table>
     <thead><tr><th>When</th><th>Level</th><th>What</th></tr></thead>
     <tbody>
     {% for e in recent %}
@@ -327,5 +308,14 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 <style>
 @media (max-width: 900px) { .alert-editor-grid { grid-template-columns: minmax(0,1fr) !important; } }
+.alert-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap:16px; margin-bottom:16px; align-items:start; }
+.alert-grid .card { margin:0; padding:14px 16px; }
+.alert-grid .card-head { padding:0 0 8px; margin-bottom:8px; }
+.ag-desc { margin:0 0 8px; }
+.ag-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin-bottom:6px; }
+.ag-num { width:70px !important; display:inline-block; margin:0 4px; }
+.ag-h3 { margin:14px 0 6px; font-size:13px; }
+.ag-msgs { list-style:none; margin:0; padding:0; }
+.ag-msgs li { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--hair); }
 </style>
 {% endblock %}
