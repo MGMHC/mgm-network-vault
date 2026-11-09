@@ -1,5 +1,15 @@
 ## [Unreleased]
 
+## [1.23.0] - 2026-11-09
+
+### Changed
+- **Alerts page is compact**: the trigger cards and Email style sit side by side (4 across on a wide screen, 3 on a 1366px laptop, 1 on a phone). Each message is one line with who it goes to and which sites, the number settings sit inline ("Email after [2] failed checks in a row ≈ 10 min"), and Recent alerts scrolls inside its card.
+
+### Fixed
+- **Pages had to be swiped sideways on phones**: tables no longer force a minimum width. On screens up to 680px wide each table row is shown as a card with "Header: value" lines, including rows that stream in on the Operations pages. Config diffs and the VLAN matrix still scroll inside their own box.
+- **Users, Racks, IPAM and VLAN audit pages were cut off on phones**: the Users page and the Racks layout now stack into one column, and the Racks buttons and the IPAM and VLAN audit tabs wrap onto a new line. Long backup paths in the Settings header wrap too.
+- **IIS sample config**: `deploy/iis/web.config` clears outbound rewrite rules for `/api/operations` streams. Live progress through IIS can still arrive in one block; that is being investigated.
+
 ## [1.22.3] - 2026-11-08
 
 ### Fixed
