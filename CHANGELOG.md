@@ -1,5 +1,31 @@
 ## [Unreleased]
 
+## [1.23.1] - 2026-11-24
+
+### Changed
+- **Settings are Group Administrator only**: backup retention, log retention, reachability interval, SSH timeouts and parallel sessions apply to every site, so a Site Administrator now sees them read-only. Before, a Site Administrator could set "keep 1 backup" and delete every site's backup history.
+- **At most 4 live scans at once**: Port Locator, Hardware Health, Optical Health and live VLAN audit scans each hold a web worker for the whole scan. A fifth scan now gets "Failed to start" (HTTP 429) instead of freezing the app for everyone.
+- **Usernames**: new usernames may only use letters, digits and `. _ @ -` (1-64 characters).
+- **Device names**: a name whose backup folder would be the same as another device's (e.g. `CORE-SW1` and `core-sw1`, or `SW 1` and `SW_1`) is refused, in the device form and in CSV import.
+
+### Fixed
+- **Backup jobs stuck on "running" and alerts lost**: a database error during one device's backup (e.g. the device deleted mid-backup) stopped the whole job, so it never finished and no backup-failed or config-changed emails were sent. The job now always finishes and sends its alerts.
+- **"Database is locked" during GitHub sync**: a full sync held the database for its whole run, so backups, logins and logging failed until it ended. It now saves after every commit.
+- **Config changes missed while a backup was running**: a syslog-triggered backup that arrived while the same switch was already being backed up was dropped silently. It now waits up to 5 minutes. Backups taken during a GitHub sync now reach GitHub too.
+- **Nightly clean-up stopped on one locked file**: a backup file held open (e.g. by antivirus) stopped retention, MAC history clean-up and syslog clean-up every night. Each device is now handled on its own, and deleted backups are removed from the database before their files, so no backup points at a missing file.
+- **Failed update left new code behind**: when `pip install` fails during a software update, the code is now rolled back to the previous version (local edits to tracked files are kept).
+- **Cisco VLAN names shown as "VLAN10"**: the VLAN audit read `switchport access vlan 10` as a VLAN definition and replaced the real name, which also caused false name mismatches.
+- **Dead fiber shown as "No Telemetry"**: Junos `- Inf dBm` (no light) is now graded bad / Loss of Light.
+- **False heat and fan alarms on Cisco**: temperature thresholds and the "Hotspot" sensor name were read as temperatures or faults, and a power-supply fault marked the fans bad. Each fan and temperature line is now judged on its own, and in a stack the worst member counts.
+- **Firmware check said "Upgrade" to an older version**: running a newer build than the baseline (e.g. `23.4R2-S5` vs `23.4R2-S3.9`) is now compliant; versions from different release trains still show "Upgrade".
+- **IPAM**: an IP is now placed in the most specific subnet (the /24, not the /8), and subnets nest only inside subnets of the same VRF. The page is also faster with many subnets.
+
+### Security
+- **Switch passwords could be sent to a user's own server**: a device that kept another site's credential profile could have its address changed by a user of this site, and the next backup sent that site's password there. The credential's site is now always checked, also in CSV import.
+- **Other sites' data visible**: below Group Administrator, the Logs page and dashboard no longer show other users' sign-in and system entries (usernames, emails, mistyped passwords), and rack pages no longer list other sites' devices.
+- **Script injection (XSS)**: IPAM status values are limited to the known statuses and escaped, VRF and VLAN names in IPAM drop-downs are escaped, usernames are passed safely to the Users page buttons, and the password-reset email escapes the username. A switch name in the Port Locator "found" message is escaped.
+- **Backup folder escape**: a device named `.` or `..` no longer writes backups outside the backup folder.
+
 ## [1.23.0] - 2026-11-09
 
 ### Changed
