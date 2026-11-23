@@ -6,6 +6,11 @@ from .web import bp, check_site, current_user, require_write, selected_site_id, 
 
 
 
+VLAN_STATUSES = {'active', 'reserved', 'deprecated'}
+PREFIX_STATUSES = VLAN_STATUSES | {'container'}
+IP_STATUSES = VLAN_STATUSES | {'dhcp', 'slaac'}
+
+
 @bp.route('/ipam')
 def ipam():
     """IPAM Management Dashboard: Subnets, Visual Utilization, VLANs, QinQ, VRFs, FHRP."""
@@ -41,19 +46,20 @@ def api_ipam_data():
         except Exception:
             return None
 
+    nets = [safe_net(p['prefix']) for p in prefix_dicts]
     hierarchy = []
     for i, p1 in enumerate(prefix_dicts):
-        net1 = safe_net(p1['prefix'])
+        net1 = nets[i]
         parent = None
         best_len = -1
         if net1:
             for j, p2 in enumerate(prefix_dicts):
-                if i != j:
-                    net2 = safe_net(p2['prefix'])
-                    if net2 and net1 in net2 and net1 != net2:
-                        if net2.prefixlen > best_len:
-                            best_len = net2.prefixlen
-                            parent = p2
+                net2 = nets[j]
+                # nest only inside the same VRF; most specific container wins
+                if i != j and net2 and p2.get('vrf_id') == p1.get('vrf_id') and net1 in net2 and net1 != net2:
+                    if net2.prefixlen > best_len:
+                        best_len = net2.prefixlen
+                        parent = p2
         if parent:
             parent['children'].append(p1)
         else:
@@ -173,6 +179,8 @@ def api_ipam_save_vlan():
         return jsonify({'error': 'Valid VLAN ID (1-4094) and Name are required'}), 400
 
     status = data.get('status') or 'active'
+    if status not in VLAN_STATUSES:
+        return jsonify({'error': 'Invalid status'}), 400
     role = (data.get('role') or '').strip()
     desc = (data.get('description') or '').strip()
     group_id = data.get('group_id')
@@ -231,6 +239,8 @@ def api_ipam_save_prefix():
         return jsonify({'error': f'Invalid CIDR Prefix format: {e}'}), 400
 
     status = data.get('status') or 'active'
+    if status not in PREFIX_STATUSES:
+        return jsonify({'error': 'Invalid status'}), 400
     role = (data.get('role') or '').strip()
     is_pool = bool(data.get('is_pool'))
     desc = (data.get('description') or '').strip()
@@ -291,6 +301,8 @@ def api_ipam_save_ip():
         return jsonify({'error': f'Invalid IP address format: {e}'}), 400
 
     status = data.get('status') or 'active'
+    if status not in IP_STATUSES:
+        return jsonify({'error': 'Invalid status'}), 400
     role = (data.get('role') or '').strip()
     dns_name = (data.get('dns_name') or '').strip()
     desc = (data.get('description') or '').strip()
@@ -313,11 +325,12 @@ def api_ipam_save_ip():
     if not prefix_id:
         raw_ip = netaddr.IPAddress(clean_addr.split('/')[0])
         cand = Prefix.query.filter_by(site_id=site_id, vrf_id=vrf_id, family=family).all()
+        best_len = -1
         for cp in cand:
             net = cp.network
-            if net and raw_ip in net:
+            if net and raw_ip in net and net.prefixlen > best_len:  # most specific prefix wins
+                best_len = net.prefixlen
                 prefix_id = cp.id
-                break
 
     if ip_id:
         ip = db.session.get(IPAddress, ip_id)

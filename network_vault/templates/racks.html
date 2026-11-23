@@ -626,20 +626,6 @@
 <script>
 // CSRF comes from app.js (a second `const CSRF` here stopped app.js from loading on this page)
 
-async function api(url, data) {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': CSRF
-    },
-    body: JSON.stringify(data || {})
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || ('HTTP ' + res.status));
-  return json;
-}
-
 let racksData = [];
 let groupsData = [];
 let currentRackId = null;
@@ -899,10 +885,6 @@ function openReserveModal() {
   document.getElementById('reserveModal').style.display = 'flex';
 }
 
-function closeModal(id) {
-  document.getElementById(id).style.display = 'none';
-}
-
 async function saveMount(e) {
   e.preventDefault();
   if (!currentRackId) return toast('No active rack selected', 'bad');
@@ -1017,11 +999,6 @@ async function deleteCurrentRack() {
   } catch (err) {
     toast(err.message, 'bad');
   }
-}
-
-function escapeHtml(str) {
-  if (!str) return '';
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 </script>
 {% endblock %}

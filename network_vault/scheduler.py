@@ -83,7 +83,12 @@ def housekeeping():
             if n:
                 log_event(f"Housekeeping: purged {n} log entries older than {days} days", user="system")
         for d in Device.query.all():
-            engine.apply_retention(d)
+            try:
+                with engine._lock_for(d.id):  # not while a backup of this device is storing a new copy
+                    engine.apply_retention(d)
+            except Exception as e:  # noqa: BLE001 - one device must not stop housekeeping for the rest
+                db.session.rollback()
+                log_event(f"Housekeeping: retention failed: {e}", "backup", "ERROR", d, user="system")
         machistory.purge_old()
         n = syslog_listener.purge_old_files(config.get("syslog_log_dir"), days)
         if n:

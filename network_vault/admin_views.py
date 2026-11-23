@@ -1,5 +1,7 @@
 """Administration: GitHub mirror, export/migrate, credentials, settings and updates."""
 import threading
+from html import escape
+
 from flask import Response, abort, current_app, flash, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from . import config, gitsync, mailer, portable, updater
@@ -261,7 +263,10 @@ SETTINGS_FORM = {
 }
 
 
-GROUP_ADMIN_SETTINGS = {"mac_history_enabled", "mac_history_interval_hours", "mac_history_retention_days",
+# Every setting is global; site admins must not change ones that delete or slow down other sites' data.
+GROUP_ADMIN_SETTINGS = {"retention_count", "retention_days", "skip_unchanged", "ping_interval_min",
+                        "log_retention_days", "max_workers", "ssh_timeout", "read_timeout",
+                        "mac_history_enabled", "mac_history_interval_hours", "mac_history_retention_days",
                         "smtp_enabled", "smtp_host", "smtp_port", "smtp_encryption", "smtp_user",
                         "smtp_pass_enc", "smtp_from_name", "smtp_from", "app_url"}
 
@@ -273,7 +278,7 @@ def settings():
         me = current_user()
         for k, kind in SETTINGS_FORM.items():
             if k in GROUP_ADMIN_SETTINGS and not me.is_group_admin:
-                continue  # mail server and public URL affect every site's password resets
+                continue  # mail server, public URL, retention and timeouts affect every site
             if kind == "bool":
                 set_setting(k, "1" if form_bool(k) else "0")
             elif kind == "count":
@@ -307,7 +312,7 @@ def settings_test_email():
     ok, err = mailer.send_email(
         target,
         "MGM Network Vault - SMTP Test Message",
-        f"<p>This is a test email confirming that outbound email delivery through <b>{get_setting('smtp_host')}</b> is functioning properly.</p>",
+        f"<p>This is a test email confirming that outbound email delivery through <b>{escape(get_setting('smtp_host'))}</b> is functioning properly.</p>",
         "This is a test email confirming that outbound email delivery is functioning properly."
     )
     if ok:

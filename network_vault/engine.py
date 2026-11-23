@@ -2,6 +2,7 @@
 import difflib
 import hashlib
 import json
+import logging
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -25,6 +26,8 @@ ENCRYPTED = gitsync.SONICOS_SECRET
 
 _device_locks = {}
 _locks_guard = threading.Lock()
+SYSLOG_LOCK_WAIT = 300  # seconds a syslog-triggered backup waits for a running backup of the same device
+logger = logging.getLogger("network_vault.engine")
 
 
 def _lock_for(device_id):
@@ -283,8 +286,10 @@ def backup_device(device_id, trigger="manual", user=None, run_alerts=None):
     run_alerts (alerts.BackupRunAlerts) is told about failures and configuration changes."""
     actor = user or ("scheduler" if trigger_label(trigger) == "scheduled" else "system")
     lock = _lock_for(device_id)
-    if not lock.acquire(blocking=False):
+    # a commit landing during a scheduled backup must still be captured, so syslog triggers wait
+    if not lock.acquire(timeout=SYSLOG_LOCK_WAIT if trigger.startswith("syslog") else 0):
         return "skipped"
+    stored_id = None
     try:
         device = db.session.get(Device, device_id)
         if not device:
@@ -366,11 +371,14 @@ def backup_device(device_id, trigger="manual", user=None, run_alerts=None):
         if changed and prev and run_alerts:
             run_alerts.config_changed(device, data["last_commit"], added=added, removed=removed, diff=diff_lines,
                                       diff_total=added + removed, prev_id=prev.id, backup_id=backup.id)
-        gitsync.record(backup.id)
         apply_retention(device)
+        stored_id = backup.id
         return "ok" if changed or not prev else "unchanged"
     finally:
         lock.release()
+        # outside the device lock: record() can wait minutes for a running GitHub sync
+        if stored_id:
+            gitsync.record(stored_id)
 
 
 def apply_retention(device):
@@ -383,22 +391,33 @@ def apply_retention(device):
     if days > 0:
         victims += q.filter(Backup.created_at < now() - timedelta(days=days)).all()
     latest = device.backups.order_by(Backup.created_at.desc()).first()
+    files = []
     for b in {v.id: v for v in victims}.values():
         if latest and b.id == latest.id:
             continue
-        delete_backup(b, commit=False)
+        files += [b.path, b.set_path, b.info_path]
+        db.session.delete(b)
     db.session.commit()
+    unlink_backup_files(files, device)
 
 
-def delete_backup(b, commit=True):
-    for rel in (b.path, b.set_path, b.info_path):
-        if rel:
-            p = BACKUP_DIR / rel
-            if p.exists():
-                p.unlink()
+def delete_backup(b):
+    """Delete a backup row, then its files, so a failed commit leaves no row pointing at missing files."""
+    files = [b.path, b.set_path, b.info_path]
     db.session.delete(b)
-    if commit:
-        db.session.commit()
+    db.session.commit()
+    unlink_backup_files(files)
+
+
+def unlink_backup_files(rels, device=None):
+    """Remove backup files whose rows are already committed as deleted."""
+    for rel in rels:
+        if not rel:
+            continue
+        try:
+            (BACKUP_DIR / rel).unlink(missing_ok=True)
+        except OSError as e:  # e.g. antivirus holding the file on Windows: the row is gone, keep going
+            log_event(f"Could not delete backup file {rel}: {e}", "backup", "WARN", device)
 
 
 def start_backup_job(app, device_ids, trigger="manual", wait=False, user=None):
@@ -417,33 +436,45 @@ def start_backup_job(app, device_ids, trigger="manual", wait=False, user=None):
             try:
                 result = backup_device(dev_id, trigger, user, run_alerts=run_alerts)
             except Exception as e:  # noqa: BLE001
+                db.session.rollback()  # a failed flush leaves the session unusable until rolled back
                 log_event(f"Unexpected backup error: {e}", "backup", "ERROR")
                 result = "failed"
-            # add in SQL: workers run in parallel, so reading the count and writing it back loses results
-            bump = {Job.done: Job.done + 1}
-            if result == "failed":
-                bump[Job.failed] = Job.failed + 1
-            elif result in ("ok", "unchanged"):
-                bump[Job.ok] = Job.ok + 1
-                if result == "unchanged":
-                    bump[Job.unchanged] = Job.unchanged + 1
-            Job.query.filter_by(id=job_id).update(bump)
-            db.session.commit()
+            try:
+                if result == "skipped":
+                    log_event(f"Backup skipped ({trigger}): another backup of this device is running",
+                              "backup", "WARN", db.session.get(Device, dev_id), user=user or "system")
+                # add in SQL: workers run in parallel, so reading the count and writing it back loses results
+                bump = {Job.done: Job.done + 1}
+                if result == "failed":
+                    bump[Job.failed] = Job.failed + 1
+                elif result in ("ok", "unchanged"):
+                    bump[Job.ok] = Job.ok + 1
+                    if result == "unchanged":
+                        bump[Job.unchanged] = Job.unchanged + 1
+                Job.query.filter_by(id=job_id).update(bump)
+                db.session.commit()
+            except Exception:  # noqa: BLE001 - a lost counter must not stop the run
+                db.session.rollback()
+                logger.exception("Backup job #%s: could not record result for device %s", job_id, dev_id)
 
     def runner():
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            list(pool.map(worker, device_ids))
-        with app.app_context():
-            j = db.session.get(Job, job_id)
-            j.finished = now()
-            j.status = "failed" if j.failed and not j.ok else ("partial" if j.failed else "done")
-            db.session.commit()
-            log_event(f"Backup job #{job_id} finished ({trigger}): {j.ok} ok ({j.unchanged} unchanged), "
-                      f"{j.failed} failed of {j.total}", "backup",
-                      "ERROR" if j.failed else "INFO", user=user or "system")
-        run_alerts.send(app, label)
-        with app.app_context():
-            gitsync.run_finished(db.session.get(Job, job_id), git_head_before)
+        try:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                list(pool.map(worker, device_ids))
+        finally:
+            try:
+                with app.app_context():
+                    j = db.session.get(Job, job_id)
+                    j.finished = now()
+                    j.status = "failed" if j.failed and not j.ok else ("partial" if j.failed else "done")
+                    db.session.commit()
+                    log_event(f"Backup job #{job_id} finished ({trigger}): {j.ok} ok ({j.unchanged} unchanged), "
+                              f"{j.failed} failed of {j.total}", "backup",
+                              "ERROR" if j.failed else "INFO", user=user or "system")
+            finally:
+                run_alerts.send(app, label)
+                with app.app_context():
+                    gitsync.run_finished(db.session.get(Job, job_id), git_head_before)
 
     if wait:
         runner()

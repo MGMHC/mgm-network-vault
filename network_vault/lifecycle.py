@@ -222,7 +222,22 @@ def check_firmware_compliance(running_sw: str, recommended_sw: str) -> Tuple[str
     clean_running = running_sw.strip().lower()
     clean_target = recommended_sw.strip().lower()
 
-    if clean_running == clean_target:
+    def _key(v):
+        m = re.search(r"\d", v)  # skip product words such as "SonicOS Enhanced"
+        return [int(t) if t.isdigit() else t for t in re.findall(r"\d+|[a-z]+", v[m.start():])] if m else []
+
+    def _at_least(run, target):
+        a, b = _key(run), _key(target)
+        if not a or not b:
+            return False
+        for x, y in zip(a, b):
+            if type(x) is not type(y):
+                return False  # different release trains (e.g. R vs X): not comparable
+            if x != y:
+                return x > y
+        return len(a) >= len(b)
+
+    if clean_running == clean_target or _at_least(clean_running, clean_target):
         return ("match", "Optimal / Target")
     return ("diverged", f"Upgrade to {recommended_sw}")
 

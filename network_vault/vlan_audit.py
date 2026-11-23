@@ -167,11 +167,13 @@ def parse_cisco_vlans_and_ports(config_text):
     """Parse Cisco IOS / C1300 configuration to extract defined VLANs and interface port allocations."""
     vlans_by_id = {}
 
-    vlan_blocks = re.findall(r'vlan\s+(\d+)\s*\n((?:[ \t]+.*\n)+)', config_text)
+    vlan_blocks = re.findall(r'^vlan\s+(\d+)\s*\n((?:[ \t]+.*\n)+)', config_text, re.M)
     for vid_str, block in vlan_blocks:
         vid = int(vid_str)
         name_m = re.search(r'name\s+(\S+)', block)
         vname = name_m.group(1) if name_m else f"VLAN{vid}"
+        if vid in vlans_by_id and not name_m:
+            continue
         vlans_by_id[vid] = {"id": vid, "name": vname, "desc": ""}
 
     for m in re.finditer(r'vlan\s+(\d+)\s*$', config_text, re.MULTILINE):

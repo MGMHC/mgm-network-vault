@@ -132,19 +132,12 @@ def parse_cisco_ios_health(cpu_text, mem_text, env_text):
             pass
 
     # Environment: FAN is OK, TEMPERATURE is OK, etc.
-    env_lower = env_text.lower()
-    if "fan is ok" in env_lower or "fans status is ok" in env_lower or "fan 1 is ok" in env_lower:
-        res["fans_status"] = "ok"
-    elif "fan" in env_lower and ("fault" in env_lower or "fail" in env_lower or "bad" in env_lower):
-        res["fans_status"] = "bad"
-
-    if "temperature is ok" in env_lower:
-        res["temp_status"] = "ok"
-    elif "temperature" in env_lower and ("fault" in env_lower or "fail" in env_lower or "warn" in env_lower or "hot" in env_lower):
-        res["temp_status"] = "bad"
+    res["fans_status"] = _env_status(env_text, "fan") or res["fans_status"]
+    res["temp_status"] = _env_status(env_text, "temperature") or res["temp_status"]
 
     # Check for specific Celsius values e.g. "Inlet Temperature Value: 34 Degree Celsius"
-    temp_c_matches = re.findall(r"(\d+)\s*(?:degrees?\s*c|celsius)", env_text, re.I)
+    temp_lines = [l for l in env_text.splitlines() if "threshold" not in l.lower() and "temperature" in l.lower()]
+    temp_c_matches = re.findall(r"(\d+)\s*(?:degrees?\s*c|celsius)", " ".join(temp_lines), re.I)
     if temp_c_matches:
         try:
             c_vals = [int(v) for v in temp_c_matches if 10 <= int(v) <= 120]
@@ -158,6 +151,21 @@ def parse_cisco_ios_health(cpu_text, mem_text, env_text):
             pass
 
     return res
+
+
+_ENV_BAD = re.compile(r"\b(fail\w*|fault\w*|bad|warn\w*|hot|critical|not ok)\b")
+_ENV_OK = re.compile(r"\bok\b|\bgood\b|\bnormal\b|\bgreen\b")
+
+
+def _env_status(env_text, word):
+    """'bad' if any line about `word` reports a fault (worst member of a stack wins), 'ok' if one
+    reports ok, else None. Judged per line: a PSU fault or a 'Hotspot' sensor name must not rate the fans."""
+    lines = [l.lower() for l in env_text.splitlines() if word in l.lower() and "threshold" not in l.lower()]
+    if any(_ENV_BAD.search(l) for l in lines):
+        return "bad"
+    if any(_ENV_OK.search(l) for l in lines):
+        return "ok"
+    return None
 
 
 def parse_cisco_c1300_health(cpu_text, env_text):
@@ -177,15 +185,8 @@ def parse_cisco_c1300_health(cpu_text, env_text):
             pass
 
     env_lower = env_text.lower()
-    if "fans status is ok" in env_lower or "fan is ok" in env_lower:
-        res["fans_status"] = "ok"
-    elif "fan" in env_lower and ("fail" in env_lower or "fault" in env_lower):
-        res["fans_status"] = "bad"
-
-    if "temperature is ok" in env_lower:
-        res["temp_status"] = "ok"
-    elif "temperature" in env_lower and ("fail" in env_lower or "warn" in env_lower or "hot" in env_lower):
-        res["temp_status"] = "bad"
+    res["fans_status"] = _env_status(env_text, "fan") or res["fans_status"]
+    res["temp_status"] = _env_status(env_text, "temperature") or res["temp_status"]
 
     if "power supply active" in env_lower or "power is good" in env_lower or "sys pwr good" in env_lower:
         res["psu_status"] = "ok"

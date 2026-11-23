@@ -43,7 +43,8 @@ def decrypt(token):
 
 
 def safe_name(name):
-    return re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_") or "device"
+    s = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_")
+    return s if s.strip(".") else "device"  # "." or ".." would point outside the backup folder
 
 
 def read_backup_file(rel):

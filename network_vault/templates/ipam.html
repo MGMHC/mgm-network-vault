@@ -307,22 +307,6 @@ let ipamData = { prefixes: [], ips: [], vlans: [], vrfs: [], fhrps: [], hierarch
 
 // CSRF comes from app.js (a second `const CSRF` here stopped app.js from loading on this page)
 
-async function api(url, data) {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': CSRF
-    },
-    body: JSON.stringify(data || {})
-  });
-  const json = await res.json();
-  if (!res.ok) {
-    throw new Error(json.error || ('HTTP ' + res.status));
-  }
-  return json;
-}
-
 document.addEventListener('DOMContentLoaded', () => {
   loadIPAMData();
 });
@@ -389,7 +373,7 @@ function renderPrefixes(hierarchy, depth = 0) {
         </div>
       </td>
       <td><span class="badge-status badge-${isV6 ? 'container' : 'active'}">${isV6 ? 'IPv6' : 'IPv4'}</span></td>
-      <td><span class="badge-status badge-${p.status || 'active'}">${p.status || 'active'}</span></td>
+      <td><span class="badge-status badge-${escapeHtml(p.status || 'active')}">${escapeHtml(p.status || 'active')}</span></td>
       <td>${escapeHtml(p.role || '-')}</td>
       <td>${escapeHtml(p.vrf_name || 'Global')}</td>
       <td>${escapeHtml(p.vlan_name || '-')}</td>
@@ -427,7 +411,7 @@ function renderIPs(ips) {
     tr.innerHTML = `
       <td><strong class="mono" style="font-size:13px; color:var(--text);">${escapeHtml(ip.address)}</strong></td>
       <td><span class="mono" style="font-size:12px;">${escapeHtml(ip.dns_name || '-')}</span></td>
-      <td><span class="badge-status badge-${ip.status || 'active'}">${ip.status || 'active'}</span></td>
+      <td><span class="badge-status badge-${escapeHtml(ip.status || 'active')}">${escapeHtml(ip.status || 'active')}</span></td>
       <td>${escapeHtml(ip.role || (ip.fhrp_group_name ? 'VIP (' + ip.fhrp_group_name + ')' : '-'))}</td>
       <td><span class="mono">${escapeHtml(ip.prefix_str || '-')}</span></td>
       <td>${ip.device_name ? `<strong>${escapeHtml(ip.device_name)}</strong> ${ip.interface_name ? '(' + escapeHtml(ip.interface_name) + ')' : ''}` : '-'}</td>
@@ -454,7 +438,7 @@ function renderVLANs(vlans) {
     tr.innerHTML = `
       <td><strong class="mono" style="font-size:14px;color:var(--accent);">VLAN ${v.vid}</strong></td>
       <td><strong>${escapeHtml(v.name)}</strong></td>
-      <td><span class="badge-status badge-${v.status || 'active'}">${v.status || 'active'}</span></td>
+      <td><span class="badge-status badge-${escapeHtml(v.status || 'active')}">${escapeHtml(v.status || 'active')}</span></td>
       <td>${escapeHtml(v.role || '-')}</td>
       <td>${escapeHtml(v.group_name || 'None')}</td>
       <td>${qinq}</td>
@@ -558,14 +542,14 @@ function openAddPrefixModal() {
           <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">VRF Routing Table</label>
           <select id="m_vrf" class="input" style="width:100%;">
             <option value="">Global (Default)</option>
-            ${ipamData.vrfs.map(v => `<option value="${v.id}">${v.name}</option>`).join('')}
+            ${ipamData.vrfs.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('')}
           </select>
         </div>
         <div style="flex:1;">
           <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">VLAN Binding</label>
           <select id="m_vlan" class="input" style="width:100%;">
             <option value="">None</option>
-            ${ipamData.vlans.map(v => `<option value="${v.id}">VLAN ${v.vid} (${v.name})</option>`).join('')}
+            ${ipamData.vlans.map(v => `<option value="${v.id}">VLAN ${v.vid} (${escapeHtml(v.name)})</option>`).join('')}
           </select>
         </div>
       </div>
@@ -623,7 +607,7 @@ function openAddIPModal() {
           <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">VRF Routing Table</label>
           <select id="ip_vrf" class="input" style="width:100%;">
             <option value="">Global (Default)</option>
-            ${ipamData.vrfs.map(v => `<option value="${v.id}">${v.name}</option>`).join('')}
+            ${ipamData.vrfs.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -682,7 +666,7 @@ function openAddVLANModal() {
           <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Enclosing Outer S-VLAN</label>
           <select id="vlan_qinq_svlan" class="input" style="width:100%;">
             <option value="">None</option>
-            ${ipamData.vlans.filter(v => v.qinq_role === 'svlan').map(v => `<option value="${v.id}">VLAN ${v.vid} (${v.name})</option>`).join('')}
+            ${ipamData.vlans.filter(v => v.qinq_role === 'svlan').map(v => `<option value="${v.id}">VLAN ${v.vid} (${escapeHtml(v.name)})</option>`).join('')}
           </select>
         </div>
       </div>
@@ -914,10 +898,6 @@ async function deleteFHRP(id) {
   }
 }
 
-function closeModal(id) {
-  document.getElementById(id).style.display = 'none';
-}
-
 function filterPrefixTable() {
   const q = document.getElementById('prefixSearch').value.toLowerCase();
   document.querySelectorAll('#prefixesTbody tr').forEach(tr => {
@@ -939,23 +919,5 @@ function filterVlanTable() {
   });
 }
 
-function filterVRFTable() {
-  const q = document.getElementById('vrfSearch').value.toLowerCase();
-  document.querySelectorAll('#vrfsTbody tr').forEach(tr => {
-    tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
-  });
-}
-
-function filterFHRPTable() {
-  const q = document.getElementById('fhrpSearch').value.toLowerCase();
-  document.querySelectorAll('#fhrpsTbody tr').forEach(tr => {
-    tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
-  });
-}
-
-function escapeHtml(str) {
-  if (!str) return '';
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 </script>
 {% endblock %}

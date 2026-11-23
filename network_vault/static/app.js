@@ -567,7 +567,7 @@ function pollGlobalLocatorStatus(runId) {
         if (data.status === 'complete' && !window.location.pathname.startsWith('/operations/port-locator')) {
           const hit = data.result && data.result.best_match;
           if (hit) {
-            toast(`🎯 Port Locator: Host physical port pinpointed on <b>${hit.switch_name}</b> (port ${hit.interface})! Click widget below to view.`, 'ok', 7000);
+            toast(`🎯 Port Locator: Host physical port pinpointed on <b>${escapeHtml(hit.switch_name)}</b> (port ${hit.interface})! Click widget below to view.`, 'ok', 7000);
           } else {
             toast(`Port Locator: Trace completed. Click widget below to view results.`, 'ok', 5000);
           }

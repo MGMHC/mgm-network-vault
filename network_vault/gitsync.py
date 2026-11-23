@@ -327,7 +327,8 @@ def _message(device, backup):
 
 def record(backup_id):
     """Commit one stored backup into its site's branch. Never raises."""
-    if not is_enabled() or progress["busy"]:
+    # no skip while a full sync runs: the per-site lock below serialises the two
+    if not is_enabled():
         return None
     try:
         b = db.session.get(Backup, backup_id)
@@ -623,6 +624,7 @@ def full_sync(app, user=None):
                                 sha = _commit(_message(b.device, b), date=b.created_at, repo_dir=rd)
                                 if sha:
                                     b.git_commit = sha
+                                    db.session.commit()  # don't hold the SQLite write lock across git runs
                                 done_count += 1
                                 progress["done"] = done_count
                             db.session.commit()
@@ -637,6 +639,7 @@ def full_sync(app, user=None):
                                     sha = _commit(_message(d, b), date=b.created_at, repo_dir=rd)
                                     if sha:
                                         b.git_commit, n = sha, n + 1
+                                        db.session.commit()
                                 done_count += 1
                                 progress["done"] = done_count
                             db.session.commit()

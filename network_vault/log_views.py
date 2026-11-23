@@ -3,23 +3,29 @@ import csv
 import io
 from datetime import datetime, timedelta
 from flask import Response, flash, redirect, render_template, request, url_for
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 
 from .models import Device, LogEntry, db, now, log_event
 from .web import BOM, bp, current_user, require_group_admin, selected_site_id, site_filter
+
+
+def deviceless_filter(u):
+    """Entries with no device a user may see. Login and system events name users from every site,
+    so below group admin only their own are shown."""
+    if u and u.is_group_admin:
+        return LogEntry.device_id.is_(None)
+    return and_(LogEntry.device_id.is_(None),
+                or_(LogEntry.category.notin_(("auth", "system")), LogEntry.user == (u.username if u else None)))
 
 
 def _log_query():
     q = LogEntry.query
     u = current_user()
     sid = selected_site_id()
-    if sid:
-        dev_ids = [d.id for d in Device.query.filter(Device.site_id == sid).all()]
-        q = q.filter(or_(LogEntry.device_id.in_(dev_ids), LogEntry.device_id.is_(None)))
-    elif u and not u.is_group_admin:
-        allowed = u.allowed_site_ids or []
-        dev_ids = [d.id for d in Device.query.filter(Device.site_id.in_(allowed)).all()]
-        q = q.filter(or_(LogEntry.device_id.in_(dev_ids), LogEntry.device_id.is_(None)))
+    if sid or (u and not u.is_group_admin):
+        sites = [sid] if sid else (u.allowed_site_ids or [])
+        dev_ids = [d.id for d in Device.query.filter(Device.site_id.in_(sites)).all()]
+        q = q.filter(or_(LogEntry.device_id.in_(dev_ids), deviceless_filter(u)))
 
     f = {k: request.args.get(k, "") for k in ("level", "category", "device", "q", "since", "until")}
     if f["level"]:

@@ -41,8 +41,8 @@ def parse_junos_optics(text):
         iface_name = blocks[i].strip()
         body = blocks[i+1]
 
-        rx_match = re.search(r"Receiver signal average optical power\s*:\s*([\d\.]+)\s*mW\s*/\s*(-?[\d\.]+|-Inf)\s*dBm", body)
-        tx_match = re.search(r"Laser output power\s*:\s*([\d\.]+)\s*mW\s*/\s*(-?[\d\.]+|-Inf)\s*dBm", body)
+        rx_match = re.search(r"Receiver signal average optical power\s*:\s*([\d\.]+)\s*mW\s*/\s*(-?[\d\.]+|-?\s*Inf)\s*dBm", body, re.I)
+        tx_match = re.search(r"Laser output power\s*:\s*([\d\.]+)\s*mW\s*/\s*(-?[\d\.]+|-?\s*Inf)\s*dBm", body, re.I)
         temp_match = re.search(r"Module temperature\s*:\s*(-?[\d\.]+)\s*degrees C", body)
         volt_match = re.search(r"Module voltage\s*:\s*([\d\.]+)\s*V", body)
         bias_match = re.search(r"Laser bias current\s*:\s*([\d\.]+)\s*mA", body)
@@ -50,12 +50,12 @@ def parse_junos_optics(text):
         rx_dbm = None
         if rx_match:
             val = rx_match.group(2)
-            rx_dbm = -40.0 if "-Inf" in val else float(val)
+            rx_dbm = float(val) if re.fullmatch(r"-?\d+(\.\d+)?", val) else -40.0
 
         tx_dbm = None
         if tx_match:
             val = tx_match.group(2)
-            tx_dbm = -40.0 if "-Inf" in val else float(val)
+            tx_dbm = float(val) if re.fullmatch(r"-?\d+(\.\d+)?", val) else -40.0
 
         temp_c = float(temp_match.group(1)) if temp_match else None
         volt_v = float(volt_match.group(1)) if volt_match else None

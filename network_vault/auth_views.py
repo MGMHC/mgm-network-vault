@@ -1,5 +1,6 @@
 """Sign-in, password reset, the account page, and site management/switching."""
 import hmac
+import re
 from datetime import timedelta
 
 from flask import abort, flash, jsonify, redirect, render_template, request, session, url_for
@@ -8,6 +9,9 @@ from sqlalchemy import func, or_
 from . import config, mailer, theme
 from .models import USER_ROLES, LogEntry, Site, User, db, get_setting, now, password_version, log_event
 from .web import bp, current_user, require_group_admin
+
+# Usernames end up in HTML, JS handlers and emails; keep them to plain characters.
+USERNAME_RE = re.compile(r"[A-Za-z0-9._@-]{1,64}")
 
 
 MAX_FAILED_LOGINS = 10   # per username within LOGIN_LOCK_MINUTES, then sign-in is refused
@@ -285,8 +289,8 @@ def account():
 
             if role not in USER_ROLES:
                 role = "read-write"
-            if not name or len(pw) < 8:
-                flash("Username required and password must be at least 8 characters", "error")
+            if not USERNAME_RE.fullmatch(name) or len(pw) < 8:
+                flash("Username must be 1-64 letters, digits or . _ @ - and password at least 8 characters", "error")
             elif User.query.filter_by(username=name).first():
                 flash("User already exists", "error")
             else:

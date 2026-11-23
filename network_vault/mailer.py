@@ -1,6 +1,7 @@
 """SMTP mailer and password reset token handling."""
 import logging
 import os
+from html import escape
 import smtplib
 import ssl
 from email.mime.image import MIMEImage
@@ -162,7 +163,7 @@ def send_password_reset_email(user: User, base_url: str) -> tuple[bool, str | No
     <tr>
       <td style="padding: 32px 30px;">
         <h2 style="margin: 0 0 16px; font-size: 18px; color: #1b2547; font-weight: 700;">Password Reset Request</h2>
-        <p style="margin: 0 0 16px; font-size: 15px; line-height: 1.6; color: #374151;">Hello <b>{user.username}</b>,</p>
+        <p style="margin: 0 0 16px; font-size: 15px; line-height: 1.6; color: #374151;">Hello <b>{escape(user.username)}</b>,</p>
         <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.6; color: #374151;">We received a request to reset your password for your <b>MGM Network Vault</b> account. Click the button below to choose a new password:</p>
         
         <!-- Button -->

@@ -9,8 +9,16 @@ from sqlalchemy.orm import selectinload
 
 from . import engine, gitsync, lifecycle, reach
 from .models import MODELS, PLATFORMS, ROLES, Backup, Credential, Device, Job, LogEntry, MacSighting, Schedule, Site, db, now, log_event
+from .log_views import deviceless_filter
 from .scheduler import next_run
+from .util import safe_name
 from .web import BOM, authorized_device_ids, bp, current_user, form_bool, form_ids, group_sort_key, require_write, selected_site_id, site_filter
+
+
+def _folder_clash(name, dev_id=None):
+    """Another device whose backup folder would be the same as `name`'s (Windows folders ignore case)."""
+    key = safe_name(name).lower()
+    return next((o for o in Device.query.filter(Device.id != (dev_id or 0)) if safe_name(o.name).lower() == key), None)
 
 
 @bp.route("/")
@@ -74,7 +82,7 @@ def dashboard():
     u = current_user()
     q_logs = LogEntry.query
     if site_id or (u and not u.is_group_admin):
-        q_logs = q_logs.filter(or_(LogEntry.device_id.in_(dev_ids), LogEntry.device_id.is_(None)))
+        q_logs = q_logs.filter(or_(LogEntry.device_id.in_(dev_ids), deviceless_filter(u)))
     logs = q_logs.order_by(LogEntry.id.desc()).limit(12).all()
 
     q_sched = site_filter(Schedule.query.filter_by(enabled=True), Schedule)
@@ -127,11 +135,11 @@ def device_edit(dev_id=None):
         abort(403, "Cannot edit devices belonging to another site.")
     if request.method == "POST":
         name = request.form.get("name", "").strip()
-        clash = Device.query.filter(Device.name == name, Device.id != (d.id or 0)).first()
+        clash = _folder_clash(name, d.id) if name else None
         if not name or not request.form.get("host", "").strip():
             flash("Name and IP / hostname are required", "error")
         elif clash:
-            flash(f"Another device is already named {name}", "error")
+            flash(f"Name clashes with existing device {clash.name} (same backup folder)", "error")
         else:
             old_name = d.name
             d.name = name
@@ -155,7 +163,8 @@ def device_edit(dev_id=None):
                 # they control - the switch login would hand them its password.
                 if not cred:
                     abort(400, "Unknown credential profile.")
-                if cred.id != d.credential_id and not u.has_site_access(cred.site_id):
+                # also when unchanged: the host may be changed in this same save
+                if not u.has_site_access(cred.site_id):
                     abort(403, "That credential profile belongs to another site.")
                 d.credential_id = cred.id
             else:
@@ -212,13 +221,16 @@ def device_delete(dev_id):
     u = current_user()
     if not u.has_site_access(d.site_id):
         abort(403, "Cannot delete devices belonging to another site.")
+    files = []
     for b in d.backups.all():
-        engine.delete_backup(b, commit=False)
+        files += [b.path, b.set_path, b.info_path]
+        db.session.delete(b)
     log_event(f"Device '{d.name}' ({d.host}) deleted with its backups", "device", "WARN", commit=False)
     name = d.name
     MacSighting.query.filter_by(device_id=d.id).delete(synchronize_session=False)
     db.session.delete(d)
     db.session.commit()
+    engine.unlink_backup_files(files)  # after the commit, so a failed commit leaves the files in place
     gitsync.remove_device(name)
     log_event(f"Device '{name}' deleted", "device")
     flash(f"Device '{name}' deleted", "ok")
@@ -307,6 +319,13 @@ def devices_import():
         d = Device.query.filter_by(name=row["name"]).first()
         if d is not None and not me.has_site_access(d.site_id):
             errors.append(f"line {i}: device '{row['name']}' belongs to another site (skipped)")
+            continue
+        if d is not None and d.credential and not me.has_site_access(d.credential.site_id):
+            # changing the host would send that other site's password to it
+            errors.append(f"line {i}: device '{row['name']}' uses another site's credential profile (skipped)")
+            continue
+        if d is None and (clash := _folder_clash(row["name"])):
+            errors.append(f"line {i}: name clashes with existing device '{clash.name}' (same backup folder, skipped)")
             continue
         new = d is None
         d = d or Device(name=row["name"])

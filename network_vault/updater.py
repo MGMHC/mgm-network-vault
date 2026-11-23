@@ -68,13 +68,25 @@ def apply_update() -> dict:
     try:
         _git(["fetch", "origin", "--tags"], timeout=30, check=True)
         _git(["checkout", "main"], timeout=15, check=True)
+        before = _git(["rev-parse", "HEAD"], check=True).stdout.strip()  # ORIG_HEAD is stale if pull was a no-op
         pull_res = _git(["pull", "--ff-only", "origin", "main"], timeout=30, check=True)
         if (config.APP_ROOT / "requirements.txt").exists():
-            subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "--quiet", "--no-warn-script-location"],
-                cwd=config.APP_ROOT, capture_output=True, text=True, timeout=120, creationflags=NO_WINDOW,
-                check=True,  # restarting without a new dependency would crash the app on import
-            )
+            try:
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "--quiet", "--no-warn-script-location"],
+                    cwd=config.APP_ROOT, capture_output=True, text=True, timeout=120, creationflags=NO_WINDOW,
+                    check=True,  # restarting without a new dependency would crash the app on import
+                )
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                # the next restart would load the new code without its dependencies: go back to the old code
+                reset = _git(["reset", "--keep", before], timeout=30)  # --keep: never discard local edits
+                err = (getattr(e, "stderr", None) or getattr(e, "stdout", None) or str(e))
+                err = err.decode(errors="replace") if isinstance(err, bytes) else err
+                rolled = "code rolled back to the previous version" if reset.returncode == 0 else \
+                    f"rolling the code back also failed: {(reset.stderr or '').strip()}"
+                log_event(f"Application update failed installing dependencies ({rolled}): {err.strip()}",
+                          "system", "ERROR")
+                return {"ok": False, "message": f"Update failed installing dependencies; {rolled}. {err.strip()}"}
         log_event(f"Application update applied successfully: {pull_res.stdout.strip()[:200]}", "system", "WARN")
 
         def restart_worker():

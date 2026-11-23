@@ -38,6 +38,8 @@
 
 <form class="card" method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% if not is_ga %}<p class="muted small" style="margin:0 0 12px">These settings apply to every site, so only a Group Administrator can change them.</p>{% endif %}
+  <fieldset {{ 'disabled' if not is_ga }} style="border:0;padding:0;margin:0;min-width:0">
   <h2>Backup retention</h2>
   <div class="form-grid">
     <div class="field"><label>Keep at most N backups per device</label><input type="number" name="retention_count" min="0" value="{{ s.retention_count }}"><div class="help">0 = unlimited. Pinned backups and the newest backup are never deleted.</div></div>
@@ -142,8 +144,9 @@
 
   {% if is_ga %}<p class="muted small" style="margin:18px 0 0">Email alerts (switch down, backup failed, config changed) are configured on the <a href="{{ url_for('web.alerts') }}">Alerts page</a>.</p>{% endif %}
   </fieldset>
+  </fieldset>
 
-  <button class="btn primary" style="margin-top:16px">Save settings</button>
+  {% if is_ga %}<button class="btn primary" style="margin-top:16px">Save settings</button>{% endif %}
 </form>
 
 <!-- Test SMTP Connection Card -->

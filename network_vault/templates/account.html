@@ -250,7 +250,7 @@
                     <!-- Option for Site Admins & Group Admins to Reset Passwords for Other Users -->
                     {% if me.is_admin and u.username != me.username and (me.is_group_admin or not u.is_group_admin) %}
                     <button type="button" class="btn sm action-btn reset-pw-btn" 
-                            onclick="openResetPasswordModal({{ u.id }}, '{{ u.username }}', '{{ u.role }}')"
+                            onclick='openResetPasswordModal({{ u.id }}, {{ u.username|tojson }}, {{ u.role|tojson }})'
                             title="Reset password for {{ u.username }}">
                       {{ icon('key') }} Reset Password
                     </button>
@@ -260,7 +260,7 @@
                     {% if me.is_admin and u.username != me.username %}
                       {% if me.is_group_admin or not u.is_group_admin %}
                       <button type="button" class="btn sm action-btn" 
-                              onclick="openEditUserModal({{ u.id }}, '{{ u.username }}', '{{ u.email or '' }}', '{{ u.role }}', [{% for s in u.assigned_sites %}{{ s.id }}{% if not loop.last %},{% endif %}{% endfor %}])"
+                              onclick='openEditUserModal({{ u.id }}, {{ u.username|tojson }}, {{ (u.email or "")|tojson }}, {{ u.role|tojson }}, [{% for s in u.assigned_sites %}{{ s.id }}{% if not loop.last %},{% endif %}{% endfor %}])'
                               title="Edit role and sites for {{ u.username }}">
                         {{ icon('gear') }} Edit
                       </button>

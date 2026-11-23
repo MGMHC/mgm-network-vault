@@ -5,6 +5,9 @@ from .web import bp, check_site, current_user, require_write, selected_site_id, 
 
 
 
+RACK_STATUSES = {'active', 'planned', 'reserved', 'deprecated'}
+
+
 @bp.route('/racks')
 def racks():
     """DCIM Visual Rack Elevations & Equipment Cabinets."""
@@ -28,8 +31,11 @@ def api_racks_list():
             pass
 
     racks = q.order_by(Rack.name).all()
-    groups = RackGroup.query.order_by(RackGroup.name).all()
+    groups = site_records(RackGroup.query, RackGroup, request.args).order_by(RackGroup.name).all()
     sites = Site.query.order_by(Site.name).all()
+    u = current_user()
+    if u and not u.is_group_admin:
+        sites = [x for x in sites if u.has_site_access(x.id)]
 
     total_racks = len(racks)
     total_units = sum(r.u_height for r in racks)
@@ -61,7 +67,7 @@ def api_rack_detail(rack_id):
     front_elevation = r.get_elevation('front')
     rear_elevation = r.get_elevation('rear')
 
-    unmounted = Device.query.filter(
+    unmounted = site_filter(Device.query, Device).filter(
         (Device.rack_id.is_(None)) | (Device.rack_position.is_(None))
     ).order_by(Device.name).all()
 
@@ -90,6 +96,9 @@ def api_save_rack():
     if not name:
         return jsonify({'error': 'Rack name is required'}), 400
 
+    status = data.get('status') or 'active'
+    if status not in RACK_STATUSES:
+        return jsonify({'error': 'Invalid status'}), 400
     u_height = int(data.get('u_height') or 42)
     group_id = data.get('group_id')
     group_id = int(group_id) if group_id else None
@@ -106,7 +115,7 @@ def api_save_rack():
 
     r.name = name
     r.facility_id = (data.get('facility_id') or '').strip()
-    r.status = data.get('status') or 'active'
+    r.status = status
     r.role = data.get('role') or 'network'
     r.u_height = u_height
     r.desc_units = bool(data.get('desc_units', True))

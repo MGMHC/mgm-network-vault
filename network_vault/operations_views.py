@@ -9,6 +9,24 @@ from . import health, locator, machistory, netutil, optics, vlan_audit
 from .models import Device, MacSighting, Site, db, get_bool, get_int, get_setting, log_event
 from .web import bp, check_device_access, current_user, report_devices, require_write, scannable_ids, scoped_devices, selected_site_id, site_filter
 
+# Each live scan holds one web thread (of 12) for its whole run; cap them so the UI stays usable.
+MAX_LIVE_SCANS = 4
+_scan_slots = threading.BoundedSemaphore(MAX_LIVE_SCANS)
+
+
+def _scan_response(make_stream):
+    """NDJSON stream response, or 429 when MAX_LIVE_SCANS are already running."""
+    if not _scan_slots.acquire(blocking=False):
+        return jsonify(error="Too many live scans are running. Try again when one finishes."), 429
+    try:
+        resp = Response(stream_with_context(make_stream()), mimetype="application/x-ndjson",
+                        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    except BaseException:
+        _scan_slots.release()
+        raise
+    resp.call_on_close(_scan_slots.release)  # runs even if the client leaves before the stream starts
+    return resp
+
 
 @bp.route("/operations/port-locator")
 def port_locator():
@@ -87,12 +105,8 @@ def api_port_locator_stream():
     full = bool(data.get("full"))
     log_event(f"Port locator search started for '{query_str}' ({len(dev_ids)} switches in scope"
               f"{', full scan' if full else ''})", "device", user=session.get("user"))
-    return Response(
-        stream_with_context(locator.stream_locate_host(app, dev_ids, query_str, run_id=run_id, full=full,
-                                                          user_site_ids=user_site_ids)),
-        mimetype="application/x-ndjson",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
-    )
+    return _scan_response(lambda: locator.stream_locate_host(app, dev_ids, query_str, run_id=run_id, full=full,
+                                                             user_site_ids=user_site_ids))
 
 
 @bp.route("/api/operations/port-locator/status/<run_id>")
@@ -123,11 +137,7 @@ def api_optics_stream():
     dev_ids = scannable_ids(scoped_devices(data))
     app = current_app._get_current_object()
     log_event(f"Optical diagnostics streaming scan started ({len(dev_ids)} switches)", "device", user=session.get("user"))
-    return Response(
-        stream_with_context(optics.stream_scan_optics(app, dev_ids)),
-        mimetype="application/x-ndjson",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
-    )
+    return _scan_response(lambda: optics.stream_scan_optics(app, dev_ids))
 
 
 @bp.route("/api/devices/<int:dev_id>/optics")
@@ -157,11 +167,7 @@ def api_health_stream():
     dev_ids = scannable_ids(scoped_devices(data))
     app = current_app._get_current_object()
     log_event(f"Hardware health streaming scan started ({len(dev_ids)} switches)", "device", user=session.get("user"))
-    return Response(
-        stream_with_context(health.stream_scan_health(app, dev_ids)),
-        mimetype="application/x-ndjson",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
-    )
+    return _scan_response(lambda: health.stream_scan_health(app, dev_ids))
 
 
 @bp.route("/api/devices/<int:dev_id>/health")
@@ -201,11 +207,7 @@ def api_vlan_audit_stream():
     dev_ids = scannable_ids(scoped_devices(data))
     app = current_app._get_current_object()
     log_event(f"Live port audit started ({len(dev_ids)} switches)", "device", user=session.get("user"))
-    return Response(
-        stream_with_context(vlan_audit.stream_live_port_audit(app, dev_ids)),
-        mimetype="application/x-ndjson",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    return _scan_response(lambda: vlan_audit.stream_live_port_audit(app, dev_ids))
 
 
 @bp.route("/operations/vlan-audit/export.csv")
