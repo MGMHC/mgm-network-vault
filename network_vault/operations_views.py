@@ -5,9 +5,9 @@ import threading
 from datetime import datetime
 from flask import Response, current_app, flash, jsonify, redirect, render_template, request, session, stream_with_context, url_for
 
-from . import health, locator, machistory, netutil, optics, topology, vlan_audit
+from . import health, locator, machistory, netutil, optics, topology, vlan_audit, xlsx
 from .models import Device, MacSighting, Site, db, get_bool, get_int, get_setting, log_event
-from .web import bp, check_device_access, current_user, report_devices, require_write, scannable_ids, scoped_devices, selected_site_id, site_filter
+from .web import BOM, bp, check_device_access, current_user, report_devices, require_write, scannable_ids, scoped_devices, selected_site_id, site_filter
 
 # Each live scan holds one web thread (of 12) for its whole run; cap them so the UI stays usable.
 MAX_LIVE_SCANS = 4
@@ -252,6 +252,30 @@ def topology_page():
 def api_topology_data():
     devs = report_devices(request.args).all()
     return jsonify({"ok": True, **topology.get_cached_topology(devs)})
+
+
+def _csv_safe(v):
+    """Neighbour names come from LLDP on the wire; stop Excel running them as formulas."""
+    return "'" + v if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r") else v
+
+
+@bp.route("/operations/topology/export.<fmt>")
+def topology_export(fmt):
+    """Uplink/neighbour table of the cached topology as CSV or Excel."""
+    if fmt not in ("csv", "xlsx"):
+        return jsonify(error="Unsupported format"), 404
+    rows = topology.uplink_rows(topology.get_cached_topology(report_devices(request.args).all()))
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if fmt == "xlsx":
+        return Response(xlsx.build_xlsx(topology.UPLINK_HEADERS, rows, "Topology Uplinks"),
+                        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers={"Content-Disposition": f"attachment; filename=topology_uplinks_{stamp}.xlsx"})
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(topology.UPLINK_HEADERS)
+    w.writerows([_csv_safe(v) for v in r] for r in rows)
+    return Response(BOM + out.getvalue(), content_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f"attachment; filename=topology_uplinks_{stamp}.csv"})
 
 
 @bp.route("/api/operations/topology/stream", methods=["POST"])

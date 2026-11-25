@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+## [1.25.0] - 2026-11-25
+
+### Added
+- **Topology uplink export (CSV and Excel)**: `Operations → Topology Map` has new **Export CSV** and **Export Excel** buttons. They download one row per discovered link: site, switch, IP, role, location, uplink port(s), LAG, neighbour, neighbour IP, role and port(s), protocol and link type (Single, LAG or External). The lower-tier switch is listed first, so each row reads as "this switch uplinks to that neighbour". The Excel file has a bold, frozen header row with filters. It is built without any new dependency.
+
+### Changed
+- **Topology Map drawn as real switches**: each switch is a faceplate with a vendor stripe (Juniper, Cisco, ...), two rows of ports, SFP cages and a status LED.
+- **Virtual Chassis split into members**: a core/distribution VC is drawn as one switch per member, joined by VC links. Each access switch hangs from the member its uplink port is on (e.g. `ge-2/0/23` goes to member 2).
+- **Access switches grouped into racks**: access switches stand in one rack per Location, racks ordered by uplink. Cables drop to a bus over each rack and run down their own lane, so they no longer cross.
+- **Port labels at both cable ends**: each cable shows a boxed port name beside the switch that owns the port. Rack-to-rack cables leave them out; the Node Inspector lists those ports.
+
 ## [1.24.0] - 2026-11-25
 
 ### Added

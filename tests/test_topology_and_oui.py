@@ -1,5 +1,7 @@
 """Tests for OUI endpoint fingerprinting (MAC/IP history & IPAM) and L2 Topology Map."""
+import io
 import json
+import zipfile
 
 from network_vault import machistory, netutil, switch_tables, topology
 from network_vault.models import Device, IPAddress, MacSighting, TopologyLink, db, now
@@ -125,6 +127,22 @@ def test_topology_discovery_and_deduplication(app, admin, switches, seed):
         cached = admin.get("/api/operations/topology/data").get_json()
         assert cached["ok"] is True
         assert cached["stats"]["links"] == 2
+        # The drawing needs each switch's vendor family and VC member list.
+        node = next(n for n in cached["nodes"] if n["name"] == dist_name)
+        assert node["vendor"] == "juniper"
+        assert isinstance(node["members"], list)
+
+        # Uplink export: access switch listed first, uplinking to dist; Excel file is a valid workbook.
+        csv_text = admin.get("/operations/topology/export.csv").get_data(as_text=True)
+        assert csv_text.lstrip("﻿").startswith("Site,Switch,Switch IP")
+        a_row = next(r for r in csv_text.splitlines() if r.split(",")[1] == a_name)
+        assert dist_name in a_row and "ge-0/0/47" in a_row and "ge-0/0/10" in a_row
+        resp = admin.get("/operations/topology/export.xlsx")
+        assert resp.status_code == 200
+        with zipfile.ZipFile(io.BytesIO(resp.data)) as z:
+            sheet = z.read("xl/worksheets/sheet1.xml").decode()
+        assert a_name in sheet and "Uplink Port(s)" in sheet
+        assert admin.get("/operations/topology/export.pdf").status_code == 404
     finally:
         with app.app_context():
             TopologyLink.query.delete()

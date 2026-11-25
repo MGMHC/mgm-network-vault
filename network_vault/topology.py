@@ -25,6 +25,10 @@ def _device_node(d):
         "group": d.group or "",
         "location": d.location or "",
         "is_vc": bool(d.is_vc),
+        "vendor": d.profile.family,
+        # Member ids ("0".."9" on a Junos VC, "Primary"/"Secondary" on a SonicWall HA pair) for the stacked drawing.
+        "members": [{"id": str(m.get("id", "")), "role": m.get("role", ""), "model": m.get("model", "")}
+                    for m in d.vc_members] if d.is_vc else [],
         "external": False,
     }
 
@@ -131,6 +135,32 @@ def get_cached_topology(devices):
         },
         "last_scan": last_scan.strftime("%Y-%m-%d %H:%M:%S") if last_scan else None,
     }
+
+
+_TIER = {"firewall": 0, "core": 1, "distribution": 2, "access": 3, "external": 4}
+
+UPLINK_HEADERS = ["Site", "Switch", "Switch IP", "Role", "Location", "Uplink Port(s)", "LAG",
+                  "Neighbour", "Neighbour IP", "Neighbour Role", "Neighbour Port(s)", "Protocol", "Link Type"]
+
+
+def uplink_rows(topo):
+    """One row per link from get_cached_topology(), the lower-tier switch first (its uplink to the neighbour)."""
+    nodes = {n["id"]: n for n in topo["nodes"]}
+    rows = []
+    for e in topo["edges"]:
+        a, b = nodes[e["source"]], nodes[e["target"]]
+        pa, pb = e["ports_a"], e["ports_b"]
+        # External neighbours stay on the right; otherwise the deeper tier (access) is the uplinking side.
+        if not b["external"] and _TIER.get(a["role"], 3) < _TIER.get(b["role"], 3):
+            a, b, pa, pb = b, a, pb, pa
+        rows.append([
+            a["site_code"], a["name"], a["host"], a["role"], a["location"], ", ".join(pa),
+            (e["src_parent"] or "") if e["is_lag"] else "",
+            b["name"], b["host"], b["role"], ", ".join(pb), (e["protocol"] or "").upper(),
+            "External" if e["external"] else ("LAG" if e["is_lag"] else "Single"),
+        ])
+    rows.sort(key=lambda r: (r[0], _TIER.get(r[3], 3), r[1], r[5]))
+    return rows
 
 
 def _probe_device_lldp(app, dev_id, all_dev_ids):

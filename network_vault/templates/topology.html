@@ -54,6 +54,11 @@
   .topo-edge.lag { stroke: var(--accent); stroke-opacity: 0.85; stroke-width: 2.5; }
   .topo-edge.ext { stroke-dasharray: 4 4; stroke-opacity: 0.45; }
   .topo-edge-label { font-size: 10px; fill: var(--muted); pointer-events: none; font-family: var(--mono, monospace); }
+  .topo-edge.vc { stroke: #8b5cf6; stroke-opacity: 0.9; stroke-dasharray: 2 3; }
+  .topo-rack { fill: none; stroke: var(--border, #334155); stroke-width: 1.2; }
+  .topo-rack-title { font-size: 10px; font-weight: 700; fill: var(--muted, #94a3b8); text-transform: uppercase; }
+  .topo-port-box { fill: var(--panel, #1e293b); stroke: var(--border, #334155); stroke-width: 1; }
+  .topo-port-text { font-size: 9px; fill: var(--text, #f8fafc); pointer-events: none; font-family: var(--mono, monospace); }
 </style>
 
 <div class="topbar">
@@ -66,6 +71,8 @@
   </div>
   <div class="actions">
     <button type="button" class="btn" onclick="exportTopologySvg()">{{ icon('download') }}Export SVG</button>
+    <a class="btn" href="{{ url_for('web.topology_export', fmt='csv') }}" title="Uplink and neighbour table">{{ icon('download') }}Export CSV</a>
+    <a class="btn" href="{{ url_for('web.topology_export', fmt='xlsx') }}" title="Uplink and neighbour table">{{ icon('download') }}Export Excel</a>
     <button type="button" class="btn primary" id="discoverBtn" onclick="startTopologyDiscovery()">{{ icon('refresh') }}Discover Topology (LLDP/CDP)</button>
   </div>
 </div>
@@ -136,6 +143,13 @@ const ROLE_COLOR = {
   external: '#6b7280',
 };
 const STATUS_COLOR = { up: '#22c55e', down: '#ef4444', 'ssh-down': '#f59e0b', unknown: '#9ca3af' };
+// Faceplate stripe + label per vendor family (node.vendor from topology.py).
+const VENDOR = {
+  juniper: { label: 'JUNIPER', color: '#0f766e', port: '#4b5563' },
+  cisco: { label: 'CISCO', color: '#1d6fd1', port: '#4b5563' },
+  sonicwall: { label: 'SONICWALL', color: '#ea6c0a', port: '#c2410c' },
+};
+const PLATE_W = 180, PLATE_H = 22;  // switch faceplate drawn for each node
 
 let graphData = { nodes: [], edges: [], stats: {} };
 let nodePos = {};
@@ -152,7 +166,7 @@ async function loadTopology() {
     const r = await fetch('/api/operations/topology/data');
     const data = await r.json();
     if (!data.ok) return;
-    graphData = data;
+    graphData = expandStacks(data);
     computeLayout(true);
     updateStats();
     renderGraph();
@@ -172,24 +186,148 @@ function updateStats() {
     : 'Not discovered yet — click Discover Topology';
 }
 
+// ---- Virtual Chassis split: a core/distribution VC is drawn as one switch per member ----
+const STACK_ROLES = new Set(['core', 'distribution']);
+// VC member from a port name: ge-2/0/23 -> "2" (Junos FPC), Gi1/0/14 -> "1" (Cisco stack).
+function fpcOf(port) {
+  const m = /^[a-z]{2,4}-(\d+)\/\d+\/\d+/i.exec(port || '') || /^[a-z]+(\d+)\/\d+\/\d+/i.exec(port || '');
+  return m ? m[1] : null;
+}
+// "Floor 4 Rack-1" -> "Floor 4", "Ground Rack-1" -> "Ground", "Floor 2 Mini-Rack" -> "Floor 2".
+const floorOf = loc => (loc || '').replace(/\s+\S*rack\b.*$/i, '').trim();
+const floorRank = f => (/^ground|^gf\b/i.test(f) ? 0 : (parseInt((f.match(/\d+/) || [])[0], 10) + 1) || 999);
+
+/** Returns the graph with every core/distribution VC replaced by its members. Each cable moves to
+ *  the member its port is on; each member is named after the floor most of its access switches are on. */
+function expandStacks(data) {
+  const nodes = data.nodes || [], edges = data.edges || [];
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const split = new Map();
+  nodes.forEach(n => {
+    const ids = (n.members || []).map(m => m.id).filter(id => /^\d+$/.test(id));
+    if (STACK_ROLES.has(n.role) && ids.length > 1) split.set(n.id, ids);
+  });
+  if (!split.size) return data;
+  const memberKey = (id, port) => {
+    const ids = split.get(id), m = fpcOf(port);
+    return `${id}#${ids.includes(m) ? m : ids[0]}`;
+  };
+  const outEdges = edges.map(e => ({
+    ...e,
+    source: split.has(e.source) ? memberKey(e.source, e.src_port) : e.source,
+    target: split.has(e.target) ? memberKey(e.target, (e.ports_b || [])[0] || e.dst_port) : e.target,
+  }));
+  const floors = new Map();  // member id -> Map(floor -> count), from the access switches cabled to it
+  outEdges.forEach(e => [[e.source, e.target], [e.target, e.source]].forEach(([me, peer]) => {
+    const p = byId.get(peer);
+    const f = me.includes('#') && p && p.role === 'access' ? floorOf(p.location) : '';
+    if (!f) return;
+    const c = floors.get(me) || new Map();
+    c.set(f, (c.get(f) || 0) + 1);
+    floors.set(me, c);
+  }));
+  const out = [];
+  nodes.forEach(n => {
+    if (!split.has(n.id)) { out.push(n); return; }
+    split.get(n.id).forEach(m => {
+      const c = floors.get(`${n.id}#${m}`);
+      const floor = c ? [...c].sort((a, b) => b[1] - a[1])[0][0] : '';
+      const info = n.members.find(x => x.id === m) || {};
+      const order = String(floor ? floorRank(floor) : 900 + Number(m)).padStart(4, '0');
+      out.push({ ...n, id: `${n.id}#${m}`, member: m, floor, member_role: info.role || '', sort: `${n.name}#${order}` });
+    });
+  });
+  // VC links between neighbouring members, in floor order.
+  split.forEach((ids, id) => {
+    const ms = out.filter(x => x.id.startsWith(`${id}#`)).sort((a, b) => a.sort.localeCompare(b.sort));
+    for (let i = 1; i < ms.length; i++) {
+      outEdges.push({ id: `vc:${ms[i - 1].id}-${ms[i].id}`, source: ms[i - 1].id, target: ms[i].id, vc: true,
+                      protocol: 'vc', src_port: '', dst_port: '', src_parent: '', ports_a: [], ports_b: [] });
+    }
+  });
+  return { ...data, nodes: out, edges: outEdges };
+}
+
+const RACK_PAD = 80, SW_PITCH = 64, LANE = 6;  // rack: left margin for port labels, switch spacing, cable lane gap
+// Access switches grouped by Location (one rack each), racks in first-seen order.
+function rackGroups(list) {
+  const racks = new Map();
+  list.forEach(n => {
+    const k = n.role === 'access' && n.location ? n.location : n.id;
+    if (!racks.has(k)) racks.set(k, []);
+    racks.get(k).push(n);
+  });
+  return [...racks.values()];
+}
+
+const sortKey = n => n.sort || n.name || '';
+const byKey = (a, b) => sortKey(a).localeCompare(sortKey(b), undefined, { numeric: true });
+
 function computeLayout(resetPositions) {
+  const nodes = graphData.nodes || [], edges = graphData.edges || [];
   const tiers = { 0: [], 1: [], 2: [], 3: [], 4: [] };
-  (graphData.nodes || []).forEach(n => {
-    const t = ROLE_TIER[n.role] ?? 3;
-    tiers[t].push(n);
+  nodes.forEach(n => tiers[ROLE_TIER[n.role] ?? 3].push(n));
+  Object.values(tiers).forEach(list => list.sort(byKey));
+  // Access row ordered by the uplink each switch hangs from (deepest tier wins), so each floor's
+  // switches sit together under their own distribution member.
+  const rankOf = new Map();
+  [0, 1, 2].forEach(t => tiers[t].forEach((n, i) => rankOf.set(n.id, t * 1000 + i)));
+  const up = new Map();
+  edges.forEach(e => [[e.source, e.target], [e.target, e.source]].forEach(([a, b]) => {
+    if (rankOf.has(b) && !rankOf.has(a)) up.set(a, Math.max(up.get(a) ?? -1, rankOf.get(b)));
+  }));
+  tiers[3].sort((a, b) => (up.get(a.id) ?? 1e9) - (up.get(b.id) ?? 1e9) || byKey(a, b));
+
+  const colW = 210, rowH = 180;
+  const tierOf = new Map();
+  Object.entries(tiers).forEach(([t, list]) => list.forEach(n => tierOf.set(n.id, Number(t))));
+  const want = {}, wantY = {};
+  // Access switches stand in one vertical column per rack (Location), racks left to right in uplink
+  // order, with room on each rack's left for its incoming cable lanes.
+  const rackY = 50 + 3 * rowH;
+  let x = 20, bottom = rackY;
+  rackGroups(tiers[3]).forEach(list => {
+    const ids = new Set(list.map(n => n.id));
+    const nUp = edges.filter(e => (ids.has(e.source) && (tierOf.get(e.target) ?? 3) < 3)
+                               || (ids.has(e.target) && (tierOf.get(e.source) ?? 3) < 3)).length;
+    x += 14 + nUp * LANE;
+    list.sort(byKey).forEach((n, i) => { want[n.id] = x + RACK_PAD; wantY[n.id] = rackY + i * SW_PITCH; });
+    bottom = Math.max(bottom, rackY + list.length * SW_PITCH);
+    x += RACK_PAD + PLATE_W + 30;
   });
-  Object.keys(tiers).forEach(t => {
-    tiers[t].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  tiers[4].forEach((n, i) => { want[n.id] = 20 + i * colW; wantY[n.id] = bottom + 120; });
+  // Upper tiers centre over what they connect to below; overlaps are pushed right in order.
+  [2, 1, 0].forEach(t => {
+    const list = tiers[t];
+    const centres = list.map(n => {
+      // Managed switches in the nearest tier below decide (e.g. core over its distribution members);
+      // the unmanaged row is ignored, its order says nothing about where a switch belongs.
+      const peers = edges.filter(e => e.source === n.id || e.target === n.id)
+        .map(e => (e.source === n.id ? e.target : e.source))
+        .filter(id => want[id] !== undefined)
+        .map(id => ({ id, t: tierOf.get(id) ?? 3 }))
+        .filter(p => p.t > t && p.t < 4);
+      if (!peers.length) return null;
+      const near = Math.min(...peers.map(p => p.t));
+      const below = peers.filter(p => p.t === near);
+      return below.reduce((s, p) => s + want[p.id], 0) / below.length;
+    });
+    // A switch with nothing below it sits beside the nearest one in its row that has (keeps VC members together).
+    const placed = centres.map((c, i) => {
+      if (c !== null) return c;
+      let best = null;
+      centres.forEach((o, j) => { if (o !== null && (best === null || Math.abs(j - i) < Math.abs(best - i))) best = j; });
+      return best === null ? 20 + i * colW : centres[best] + (i - best) * colW;
+    });
+    let prev = -Infinity;
+    list.forEach((n, i) => {
+      want[n.id] = Math.max(placed[i], prev + colW);
+      prev = want[n.id];
+    });
   });
-  const colW = 210, rowH = 125;
   Object.entries(tiers).forEach(([tierStr, list]) => {
-    const tier = Number(tierStr);
-    const totalW = Math.max(1, list.length) * colW;
-    const startX = Math.max(20, (900 - totalW) / 2);
-    list.forEach((n, idx) => {
-      if (resetPositions || !nodePos[n.id]) {
-        nodePos[n.id] = { x: startX + idx * colW, y: 50 + tier * rowH };
-      }
+    list.forEach(n => {
+      if (resetPositions || !nodePos[n.id]) nodePos[n.id] = { x: want[n.id], y: wantY[n.id] ?? 50 + Number(tierStr) * rowH };
     });
   });
 }
@@ -228,38 +366,166 @@ function renderGraph() {
   });
 
   const NS = 'http://www.w3.org/2000/svg';
-  const nodeW = 164, nodeH = 56;
+  const edgeBoxes = [];
+  function portBox(parent, cx, cy, text, endX) {
+    if (!text) return;
+    const w = Math.max(30, text.length * 5.6 + 10);
+    if (endX != null) cx = endX - w / 2;  // right edge pinned at endX
+    const g = document.createElementNS(NS, 'g');
+    const r = document.createElementNS(NS, 'rect');
+    r.setAttribute('x', cx - w / 2); r.setAttribute('y', cy - 7);
+    r.setAttribute('width', w); r.setAttribute('height', 14); r.setAttribute('rx', 2);
+    r.setAttribute('class', 'topo-port-box');
+    g.appendChild(r);
+    const t = document.createElementNS(NS, 'text');
+    t.setAttribute('x', cx); t.setAttribute('y', cy + 3.5);
+    t.setAttribute('text-anchor', 'middle');
+    t.setAttribute('class', 'topo-port-text');
+    t.textContent = text;
+    g.appendChild(t);
+    edgeBoxes.push(g);
+  }
+
+  const LABEL_BOTTOM = PLATE_H + 34;
+  const visibleEdges = (graphData.edges || []).filter(e => visibleNodes.has(e.source) && visibleNodes.has(e.target));
+  // Each switch's cables to switches below it leave at spread-out points along its width (left to right
+  // in the order of the switches they go to), so their port boxes do not pile up.
+  // The same for cables arriving from above.
+  const slotsDown = new Map(), slotsUp = new Map();
+  visibleEdges.forEach(e => {
+    const ps = nodePos[e.source] || { x: 0, y: 0 }, pt = nodePos[e.target] || { x: 0, y: 0 };
+    if (Math.abs(ps.y - pt.y) < LABEL_BOTTOM) return;
+    const inRack = n => n.role === 'access' && n.location;
+    if (inRack(visibleNodes.get(e.source)) && inRack(visibleNodes.get(e.target))) return;  // drawn along the racks
+    const [up, down] = ps.y < pt.y ? [e.source, e.target] : [e.target, e.source];
+    if (!slotsDown.has(up)) slotsDown.set(up, []);
+    slotsDown.get(up).push({ e, other: down });
+    if (!slotsUp.has(down)) slotsUp.set(down, []);
+    slotsUp.get(down).push({ e, other: up });
+  });
+  const slotOf = new Map(), inSlotOf = new Map();
+  const assign = (groups, out) => groups.forEach((list, owner) => {
+    const cx = (nodePos[owner]?.x || 0) + PLATE_W / 2;
+    // Same rack: the deeper switch's cable leaves on the side nearer the rack, so lanes never cross.
+    const depth = (a, b) => ((nodePos[a.other]?.x || 0) > cx ? -1 : 1) * ((nodePos[a.other]?.y || 0) - (nodePos[b.other]?.y || 0));
+    list.sort((a, b) => (nodePos[a.other]?.x || 0) - (nodePos[b.other]?.x || 0) || depth(a, b) || String(a.e.id).localeCompare(String(b.e.id)));
+    list.forEach((s, i) => out.set(s.e, { i, n: list.length }));
+  });
+  assign(slotsDown, slotOf);
+  assign(slotsUp, inSlotOf);
+
+  // Rack frames around each Location's access switches; cables from above drop to a bus over the rack,
+  // run down a lane on its left and enter each switch from the side (deepest switch: outermost lane).
+  const rackOf = new Map(), rackLanes = new Map();
+  rackGroups([...visibleNodes.values()].filter(n => n.role === 'access' && n.location)).forEach(list => {
+    const ps = list.map(n => nodePos[n.id] || { x: 0, y: 0 });
+    const r = {
+      name: list[0].location,
+      x: Math.min(...ps.map(p => p.x)) - RACK_PAD + 8,
+      y: Math.min(...ps.map(p => p.y)) - 24,
+      w: RACK_PAD - 8 + PLATE_W + 14,
+      h: Math.max(...ps.map(p => p.y)) - Math.min(...ps.map(p => p.y)) + PLATE_H + 34 + 34,
+      edges: [],
+    };
+    list.forEach(n => rackOf.set(n.id, r));
+  });
+  // Cables between rack switches run along the racks' right edges (and under all racks if they differ).
+  const peerPath = new Map();
+  const rackFloor = Math.max(0, ...[...rackOf.values()].map(r => r.y + r.h));
+  visibleEdges.forEach(e => {
+    const ra = rackOf.get(e.source), rb = rackOf.get(e.target);
+    if (!ra || !rb || e.vc) return;
+    const a = nodePos[e.source], b = nodePos[e.target], k = peerPath.size;
+    const la = a.x + PLATE_W + 6 + (k % 3) * 3, lb = b.x + PLATE_W + 6 + (k % 3) * 3;
+    const ya = a.y + PLATE_H / 2, yb = b.y + PLATE_H / 2;
+    const bus = rackFloor + 10 + (k % 8) * 4;  // under every rack, so it never cuts through one
+    peerPath.set(e, ra === rb
+      ? [[a.x + PLATE_W, ya], [la, ya], [la, yb], [b.x + PLATE_W, yb]]
+      : [[a.x + PLATE_W, ya], [la, ya], [la, bus], [lb, bus], [lb, yb], [b.x + PLATE_W, yb]]);
+  });
+  visibleEdges.forEach(e => {
+    if (e.vc || peerPath.has(e)) return;
+    [[e.target, e.source], [e.source, e.target]].some(([low, up]) => {
+      const r = rackOf.get(low);
+      if (!r || rackOf.get(up) === r || (nodePos[up]?.y ?? 0) >= r.y) return false;
+      r.edges.push({ e, low });
+      return true;
+    });
+  });
+  new Set(rackOf.values()).forEach(r => {
+    r.edges.sort((a, b) => (nodePos[b.low]?.y || 0) - (nodePos[a.low]?.y || 0));  // deepest first
+    const step = Math.min(5, 80 / Math.max(1, r.edges.length));
+    r.edges.forEach(({ e, low }, k) => rackLanes.set(e, {
+      low, lane: r.x - 8 - (r.edges.length - 1 - k) * LANE, bus: r.y - 10 - k * step,
+    }));
+    const frame = document.createElementNS(NS, 'g');
+    frame.innerHTML = `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="4" class="topo-rack"></rect>`
+      + `<text x="${r.x + r.w / 2}" y="${r.y + 14}" text-anchor="middle" class="topo-rack-title">${esc(r.name)}</text>`;
+    vp.appendChild(frame);
+  });
 
   // Draw edges first
-  (graphData.edges || []).forEach(e => {
-    if (!visibleNodes.has(e.source) || !visibleNodes.has(e.target)) return;
+  visibleEdges.forEach(e => {
     const p1 = nodePos[e.source] || { x: 0, y: 0 };
     const p2 = nodePos[e.target] || { x: 0, y: 0 };
-    const x1 = p1.x + nodeW / 2, y1 = p1.y + nodeH / 2;
-    const x2 = p2.x + nodeW / 2, y2 = p2.y + nodeH / 2;
+    const slot = slotOf.get(e);
+    // Cables leave the upper switch below its name label and enter the lower one at the faceplate top.
+    const anchor = (p, upper) => {
+      if (!slot) return { x: p.x + PLATE_W / 2, y: p.y + PLATE_H / 2 };
+      if (!upper) {
+        const s = inSlotOf.get(e);
+        return { x: p.x + PLATE_W * (s.i + 1) / (s.n + 1), y: p.y };
+      }
+      return { x: p.x + PLATE_W * (slot.i + 1) / (slot.n + 1), y: p.y + LABEL_BOTTOM };
+    };
+    const a1 = anchor(p1, p1.y <= p2.y), a2 = anchor(p2, p2.y < p1.y);
+    const x1 = a1.x, y1 = a1.y, x2 = a2.x, y2 = a2.y;
+    const rl = rackLanes.get(e);
 
-    const line = document.createElementNS(NS, 'line');
-    line.setAttribute('x1', x1); line.setAttribute('y1', y1);
-    line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+    let line;
+    const pp = peerPath.get(e);
+    if (pp) {
+      // shortcut: no port boxes on rack-to-rack cables (no room beside the plates); the inspector lists the ports.
+      line = document.createElementNS(NS, 'polyline');
+      line.setAttribute('points', pp.join(' '));
+    } else if (rl) {
+      const lowIsSrc = rl.low === e.source;
+      const top = lowIsSrc ? a2 : a1, pl = nodePos[rl.low], ty = pl.y + PLATE_H / 2;
+      line = document.createElementNS(NS, 'polyline');
+      line.setAttribute('points', [[top.x, top.y], [top.x, rl.bus], [rl.lane, rl.bus], [rl.lane, ty], [pl.x, ty]].join(' '));
+      if (showPorts) {
+        const upLbl = lowIsSrc ? (e.dst_port || '') : (e.src_parent ? `${e.src_parent} (${e.src_port})` : (e.src_port || ''));
+        const lowLbl = lowIsSrc ? (e.src_parent ? `${e.src_parent} (${e.src_port})` : (e.src_port || '')) : (e.dst_port || '');
+        portBox(vp, top.x, top.y + Math.min(26 + (slot ? (slot.i % 3) * 18 : 0), (rl.bus - top.y) * 0.6), upLbl);
+        portBox(vp, 0, ty, lowLbl, pl.x - 3);
+      }
+    } else {
+      line = document.createElementNS(NS, 'line');
+      line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+    }
     let cls = 'topo-edge';
     if (e.is_lag) cls += ' lag';
     if (e.external) cls += ' ext';
+    if (e.vc) cls += ' vc';
     line.setAttribute('class', cls);
-    line.setAttribute('stroke-width', e.is_lag ? '2.5' : '1.5');
+    line.setAttribute('stroke-width', e.vc ? '4' : e.is_lag ? '2.5' : '1.5');
     vp.appendChild(line);
 
-    if (showPorts && (e.src_port || e.dst_port)) {
-      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-      const lbl = document.createElementNS(NS, 'text');
-      lbl.setAttribute('x', mx); lbl.setAttribute('y', my - 4);
-      lbl.setAttribute('text-anchor', 'middle');
-      lbl.setAttribute('class', 'topo-edge-label');
-      const aLbl = e.src_parent || e.src_port || '';
-      const bLbl = e.dst_port || '';
-      lbl.textContent = bLbl ? `${aLbl} ↔ ${bLbl}` : aLbl;
-      vp.appendChild(lbl);
+    if (showPorts && !rl && !pp) {
+      // One boxed label at each end of the cable, each beside the switch that owns the port.
+      const aLbl = e.src_parent ? `${e.src_parent} (${e.src_port})` : (e.src_port || '');
+      const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+      // ~26px in from each end (staggered at a busy switch), never past 40% of a short cable
+      const upperIsSrc = p1.y <= p2.y;
+      const stagger = slot ? (slot.i % 3) * 18 : 0;
+      const f1 = Math.min(0.4, (26 + (upperIsSrc ? stagger : 0)) / len);
+      const f2 = Math.min(0.4, (26 + (upperIsSrc ? 0 : stagger)) / len);
+      portBox(vp, x1 + (x2 - x1) * f1, y1 + (y2 - y1) * f1, aLbl);
+      portBox(vp, x2 - (x2 - x1) * f2, y2 - (y2 - y1) * f2, e.dst_port || '');
     }
   });
+  edgeBoxes.forEach(b => vp.appendChild(b));  // boxes above every cable
 
   // Draw nodes
   visibleNodes.forEach(n => {
@@ -269,41 +535,26 @@ function renderGraph() {
     g.setAttribute('class', `topo-node${selectedId === n.id ? ' selected' : ''}`);
     g.dataset.id = n.id;
 
-    const rect = document.createElementNS(NS, 'rect');
-    rect.setAttribute('width', nodeW); rect.setAttribute('height', nodeH);
-    rect.setAttribute('rx', '10');
-    rect.setAttribute('class', 'node-box');
-    rect.setAttribute('fill', 'var(--panel, #1e293b)');
-    rect.setAttribute('stroke', selectedId === n.id ? 'var(--accent, #3b82f6)' : 'var(--border, #334155)');
-    g.appendChild(rect);
+    const add = (tag, attrs, text) => {
+      const el = document.createElementNS(NS, tag);
+      Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+      if (text != null) el.textContent = text;
+      g.appendChild(el);
+      return el;
+    };
+    if (selectedId === n.id) {
+      add('rect', { x: -4, y: -4, width: PLATE_W + 8, height: PLATE_H + 8, rx: 4, fill: 'none', stroke: 'var(--accent, #3b82f6)', 'stroke-width': 2.5 });
+    }
+    drawFaceplate(add, n);
 
-    const bar = document.createElementNS(NS, 'rect');
-    bar.setAttribute('width', '5'); bar.setAttribute('height', nodeH);
-    bar.setAttribute('rx', '3');
-    bar.setAttribute('fill', ROLE_COLOR[n.role] || '#6b7280');
-    g.appendChild(bar);
-
-    const dot = document.createElementNS(NS, 'circle');
-    dot.setAttribute('cx', nodeW - 14); dot.setAttribute('cy', 15);
-    dot.setAttribute('r', '4.5');
-    dot.setAttribute('fill', STATUS_COLOR[n.status] || STATUS_COLOR.unknown);
-    g.appendChild(dot);
-
-    const title = document.createElementNS(NS, 'text');
-    title.setAttribute('x', '14'); title.setAttribute('y', '21');
-    title.setAttribute('fill', 'var(--text, #f8fafc)');
-    title.setAttribute('font-size', '12');
-    title.setAttribute('font-weight', '600');
-    const nm = (n.name || '').length > 17 ? n.name.slice(0, 16) + '…' : (n.name || '');
-    title.textContent = nm;
-    g.appendChild(title);
-
-    const sub = document.createElementNS(NS, 'text');
-    sub.setAttribute('x', '14'); sub.setAttribute('y', '39');
-    sub.setAttribute('fill', 'var(--muted, #94a3b8)');
-    sub.setAttribute('font-size', '10.5');
-    sub.textContent = `${n.role.toUpperCase()}${n.host ? ' · ' + n.host : ''}`;
-    g.appendChild(sub);
+    const full = n.member != null ? `${n.name} (${n.floor || 'member ' + n.member})` : (n.name || '');
+    const nm = full.length > 28 ? full.slice(0, 27) + '…' : full;
+    add('text', { x: 0, y: PLATE_H + 14, fill: 'var(--text, #f8fafc)', 'font-size': 12, 'font-weight': 600 }, nm);
+    const vc = n.member != null
+      ? ` · member ${n.member}${n.member_role ? ' ' + n.member_role : ''}`
+      : (n.is_vc && (n.members || []).length > 1 ? ` · VC x${n.members.length}` : '');
+    add('text', { x: 0, y: PLATE_H + 28, fill: ROLE_COLOR[n.role] || 'var(--muted, #94a3b8)', 'font-size': 10.5 },
+      `${n.role.toUpperCase()}${vc}${n.host ? ' · ' + n.host : ''}`);
 
     g.addEventListener('mousedown', ev => {
       ev.stopPropagation();
@@ -324,12 +575,34 @@ function renderGraph() {
   applyViewport();
 }
 
+// Switch faceplate: chassis, vendor stripe + name, two rows of ports, SFP cages, status LED.
+function drawFaceplate(add, n) {
+  const v = VENDOR[n.vendor] || { label: n.external ? 'UNMANAGED' : '', color: ROLE_COLOR[n.role] || '#6b7280', port: '#4b5563' };
+  add('rect', { width: PLATE_W, height: PLATE_H, rx: 2, fill: '#1f2937', stroke: n.external ? '#6b7280' : 'none', 'stroke-dasharray': n.external ? '3 3' : 'none' });
+  add('rect', { width: 5, height: PLATE_H, fill: v.color });
+  const hasMember = n.member != null;
+  if (v.label) add('text', { x: 9, y: hasMember ? 10 : 13, 'font-size': 6, 'font-weight': 700, fill: '#ffffff', 'font-family': 'Arial, sans-serif' }, v.label);
+  if (hasMember) add('text', { x: 9, y: 18, 'font-size': 5.5, fill: '#cbd5e1', 'font-family': 'Arial, sans-serif' }, `Member ${n.member}`);
+  for (let r = 0; r < 2; r++) {
+    for (let c = 0; c < 12; c++) {
+      add('rect', { x: 56 + c * 7.5, y: 5 + r * 7, width: 5.5, height: 5, fill: v.port });
+    }
+  }
+  for (let r = 0; r < 2; r++) {
+    for (let c = 0; c < 2; c++) {
+      add('rect', { x: PLATE_W - 42 + c * 15, y: 5 + r * 7, width: 12, height: 5, fill: '#9ca3af' });
+    }
+  }
+  add('circle', { cx: PLATE_W - 6, cy: 4.5, r: 2.4, fill: STATUS_COLOR[n.status] || STATUS_COLOR.unknown });
+}
+
 function selectNode(id) {
   selectedId = id;
   renderGraph();
   const n = (graphData.nodes || []).find(x => x.id === id);
   if (!n) return;
-  document.getElementById('inspTitle').textContent = n.name;
+  document.getElementById('inspTitle').textContent = n.member != null
+    ? `${n.name} · member ${n.member}${n.floor ? ` (${n.floor})` : ''}` : n.name;
   document.getElementById('inspSub').textContent = `${n.role.toUpperCase()} · ${n.model || 'Unknown model'}`;
 
   const links = (graphData.edges || []).filter(e => e.source === id || e.target === id);
@@ -436,7 +709,7 @@ async function startTopologyDiscovery() {
           pct.textContent = p + '%';
           txt.textContent = `Probed ${msg.device} (${msg.done}/${msg.total})${msg.ok ? ` — ${msg.neighbors} neighbor(s)` : ` — ${msg.error}`}`;
         } else if (msg.type === 'done' && msg.graph) {
-          graphData = msg.graph;
+          graphData = expandStacks(msg.graph);
           computeLayout(false);
           updateStats();
           renderGraph();
