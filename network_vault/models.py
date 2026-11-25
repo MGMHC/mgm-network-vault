@@ -898,6 +898,29 @@ class RackReservation(db.Model):
         }
 
 
+class TopologyLink(db.Model):
+    """Discovered LLDP/CDP neighbour link from a Vault switch."""
+    __tablename__ = "topology_link"
+    __table_args__ = (
+        db.Index("ix_topology_link_src", "src_device_id"),
+        db.Index("ix_topology_link_dst", "dst_device_id"),
+    )
+    id = db.Column(db.Integer, primary_key=True)
+    site_id = db.Column(db.Integer, db.ForeignKey("site.id", ondelete="CASCADE"), nullable=True, index=True)
+    src_device_id = db.Column(db.Integer, db.ForeignKey("device.id", ondelete="CASCADE"), nullable=False)
+    src_port = db.Column(db.String(64), nullable=False, default="")
+    src_parent = db.Column(db.String(64), nullable=False, default="")
+    dst_device_id = db.Column(db.Integer, db.ForeignKey("device.id", ondelete="SET NULL"), nullable=True)
+    dst_name = db.Column(db.String(128), nullable=False, default="")
+    dst_port = db.Column(db.String(64), nullable=False, default="")
+    dst_mgmt_ip = db.Column(db.String(64), nullable=False, default="")
+    protocol = db.Column(db.String(16), nullable=False, default="lldp")
+    discovered_at = db.Column(db.DateTime, nullable=False, default=now)
+
+    src_device = db.relationship("Device", foreign_keys=[src_device_id])
+    dst_device = db.relationship("Device", foreign_keys=[dst_device_id])
+
+
 def log_event(message, category="system", level="INFO", device=None, details=None, user=None, commit=True):
     if user is None:
         user = session.get("user") if has_request_context() else "scheduler"

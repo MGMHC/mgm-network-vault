@@ -1,7 +1,8 @@
 """IPAM: VRFs, VLAN groups, VLANs, prefixes, IP addresses and FHRP groups (page and JSON API)."""
 import netaddr
 from flask import render_template, request, jsonify
-from .models import db, Device, Site, VRF, VLANGroup, VLAN, Prefix, IPAddress, FHRPGroup, FHRPGroupAssignment
+from . import netutil
+from .models import db, Device, Site, VRF, VLANGroup, VLAN, Prefix, IPAddress, FHRPGroup, FHRPGroupAssignment, MacSighting
 from .web import bp, check_site, current_user, require_write, selected_site_id, site_filter, site_from, site_records
 
 
@@ -71,6 +72,33 @@ def api_ipam_data():
     total_vrfs = len(vrfs)
     total_fhrps = len(fhrps)
 
+    # Enrich IPAM addresses with latest MAC/OUI endpoint fingerprint from MAC/IP History
+    bare_ips = {ip.address.split('/')[0] for ip in ips if ip.address}
+    sighting_by_ip = {}
+    if bare_ips:
+        sq = site_filter(MacSighting.query.join(Device, Device.id == MacSighting.device_id), Device)
+        for s in sq.filter(MacSighting.ip.in_(bare_ips)).order_by(MacSighting.last_seen.desc(), MacSighting.id.desc()).all():
+            if s.ip and s.ip not in sighting_by_ip:
+                sighting_by_ip[s.ip] = s
+
+    ip_dicts = []
+    for ip in ips:
+        d = ip.to_dict()
+        bare = (ip.address or '').split('/')[0]
+        s = sighting_by_ip.get(bare)
+        if s:
+            ep = netutil.classify_endpoint(s.mac)
+            d['mac'] = netutil.format_mac(s.mac)
+            d['vendor'] = ep['vendor']
+            d['device_type'] = ep['category']
+            d['device_type_label'] = ep['category_label']
+        else:
+            d['mac'] = ''
+            d['vendor'] = ''
+            d['device_type'] = ''
+            d['device_type_label'] = ''
+        ip_dicts.append(d)
+
     return jsonify({
         'ok': True,
         'kpis': {
@@ -85,7 +113,7 @@ def api_ipam_data():
         'vlans': [v.to_dict() for v in vlans],
         'prefixes': prefix_dicts,
         'hierarchy': hierarchy,
-        'ip_addresses': [ip.to_dict() for ip in ips],
+        'ip_addresses': ip_dicts,
         'fhrp_groups': [f.to_dict() for f in fhrps]
     })
 

@@ -362,3 +362,87 @@ def match_neighbor(nb, candidates, site_id=None):
             if d:
                 return d
     return None
+
+
+def _parse_cisco_lldp_detail(out):
+    """Parse Cisco 'show lldp neighbors detail' into [{local, parent, remote_port, system_name, mgmt_ip, protocol}]."""
+    rows = []
+    if not out:
+        return rows
+    blocks = re.split(r"(?=^Local Intf\s*:)", out, flags=re.M)
+    for blk in blocks:
+        m_loc = re.search(r"Local Intf\s*:\s*(\S+)", blk)
+        if not m_loc:
+            continue
+        m_name = re.search(r"System Name\s*:\s*(\S+)", blk)
+        m_rport = re.search(r"Port id\s*:\s*(\S+)", blk)
+        m_ip = re.search(r"Management Address(?:es)?:?[\s\S]{0,80}?" + _IPV4, blk)
+        rows.append({
+            "local_port": m_loc.group(1),
+            "parent": None,
+            "remote_port": m_rport.group(1) if m_rport else "",
+            "system_name": m_name.group(1) if m_name else "",
+            "mgmt_ip": m_ip.group(1) if m_ip else None,
+            "protocol": "lldp",
+        })
+    return rows
+
+
+def _parse_cisco_cdp_detail(out):
+    """Parse Cisco 'show cdp neighbors detail' into [{local_port, parent, remote_port, system_name, mgmt_ip, protocol}]."""
+    rows = []
+    if not out:
+        return rows
+    blocks = re.split(r"-{10,}", out)
+    for blk in blocks:
+        m_name = re.search(r"Device ID\s*:\s*(\S+)", blk)
+        m_loc = re.search(r"Interface\s*:\s*([^,\s]+)", blk)
+        if not (m_name and m_loc):
+            continue
+        m_rport = re.search(r"Port ID \(outgoing port\)\s*:\s*(\S+)", blk)
+        m_ip = re.search(r"IP(?:v4)? [Aa]ddress\s*:\s*" + _IPV4, blk)
+        rows.append({
+            "local_port": m_loc.group(1),
+            "parent": None,
+            "remote_port": m_rport.group(1) if m_rport else "",
+            "system_name": m_name.group(1),
+            "mgmt_ip": m_ip.group(1) if m_ip else None,
+            "protocol": "cdp",
+        })
+    return rows
+
+
+def query_all_lldp_neighbors(device, conn=None):
+    """Fetch all LLDP (or CDP fallback on Cisco) neighbors for a switch.
+
+    Returns list of dicts: [{local_port, parent, remote_port, system_name, mgmt_ip, protocol}].
+    """
+    def fetch(c):
+        if device.is_juniper:
+            rows = _parse_junos_lldp_table(ssh.run(c, "show lldp neighbors | no-more"))
+            return [{
+                "local_port": r.get("local") or "",
+                "parent": None if r.get("parent") in ("", "-") else r.get("parent"),
+                "remote_port": r.get("port") or "",
+                "system_name": r.get("name") or "",
+                "mgmt_ip": None,
+                "protocol": "lldp",
+            } for r in rows if r.get("local")]
+        out = ""
+        try:
+            out = ssh.run(c, "show lldp neighbors detail")
+        except Exception:  # noqa: BLE001
+            out = ""
+        parsed = _parse_cisco_lldp_detail(out) if out and not _cli_rejected(out) else []
+        if parsed:
+            return parsed
+        try:
+            out = ssh.run(c, "show cdp neighbors detail")
+        except Exception:  # noqa: BLE001
+            out = ""
+        return _parse_cisco_cdp_detail(out) if out and not _cli_rejected(out) else []
+
+    try:
+        return _with_conn(device, conn, fetch)
+    except Exception:  # noqa: BLE001
+        return []

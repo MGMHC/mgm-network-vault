@@ -5,8 +5,8 @@ import pytest
 
 MAIN_PAGES = ["/", "/devices", "/devices/new", "/backups", "/schedules", "/logs", "/credentials", "/settings",
               "/sites", "/ipam", "/racks", "/alerts", "/github", "/account", "/migrate",
-              "/operations/port-locator", "/operations/optics", "/operations/health",
-              "/operations/vlan-audit", "/operations/lifecycle"]
+              "/operations/port-locator", "/operations/mac-history", "/operations/topology",
+              "/operations/optics", "/operations/health", "/operations/vlan-audit", "/operations/lifecycle"]
 
 BACK_LINK = re.compile(r'<a class="back-link" href="([^"]+)">.*?</svg>([^<]*)</a>', re.S)
 

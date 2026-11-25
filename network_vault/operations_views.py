@@ -5,7 +5,7 @@ import threading
 from datetime import datetime
 from flask import Response, current_app, flash, jsonify, redirect, render_template, request, session, stream_with_context, url_for
 
-from . import health, locator, machistory, netutil, optics, vlan_audit
+from . import health, locator, machistory, netutil, optics, topology, vlan_audit
 from .models import Device, MacSighting, Site, db, get_bool, get_int, get_setting, log_event
 from .web import bp, check_device_access, current_user, report_devices, require_write, scannable_ids, scoped_devices, selected_site_id, site_filter
 
@@ -63,11 +63,12 @@ def _history_query():
 def mac_history():
     q = request.args.get("q", "").strip()
     rows = machistory.search(_history_query(), q)
+    endpoints = {r.id: netutil.classify_endpoint(r.mac) for r in rows}
     return render_template(
-        "mac_history.html", q=q, rows=rows, limit=machistory.SEARCH_LIMIT, running=machistory.is_running(),
-        enabled=get_bool("mac_history_enabled"), interval=get_int("mac_history_interval_hours"),
-        retention=get_int("mac_history_retention_days"), last_run=get_setting("mac_history_last_run"),
-        last_result=get_setting("mac_history_last_result"))
+        "mac_history.html", q=q, rows=rows, endpoints=endpoints, limit=machistory.SEARCH_LIMIT,
+        running=machistory.is_running(), enabled=get_bool("mac_history_enabled"),
+        interval=get_int("mac_history_interval_hours"), retention=get_int("mac_history_retention_days"),
+        last_run=get_setting("mac_history_last_run"), last_result=get_setting("mac_history_last_result"))
 
 
 @bp.route("/operations/mac-history/sweep", methods=["POST"])
@@ -236,3 +237,27 @@ def vlan_audit_export_csv():
         mimetype="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+@bp.route("/operations/topology", endpoint="topology")
+def topology_page():
+    u = current_user()
+    devs = site_filter(Device.query, Device).order_by(Device.name).all()
+    user_sites_list = Site.query.order_by(Site.code).all() if (u and u.is_group_admin) else (u.assigned_sites if u else [])
+    active_site_id = selected_site_id()
+    return render_template("topology.html", devices=devs, sites=user_sites_list, active_site_id=active_site_id)
+
+
+@bp.route("/api/operations/topology/data")
+def api_topology_data():
+    devs = report_devices(request.args).all()
+    return jsonify({"ok": True, **topology.get_cached_topology(devs)})
+
+
+@bp.route("/api/operations/topology/stream", methods=["POST"])
+def api_topology_stream():
+    data = request.get_json(silent=True) or {}
+    dev_ids = scannable_ids(scoped_devices(data))
+    app = current_app._get_current_object()
+    log_event(f"Topology LLDP discovery started ({len(dev_ids)} switches)", "device", user=session.get("user"))
+    return _scan_response(lambda: topology.stream_discover_topology(app, dev_ids))

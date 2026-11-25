@@ -130,6 +130,7 @@
           <tr>
             <th>IP Address</th>
             <th>DNS Name</th>
+            <th>Endpoint / Vendor</th>
             <th>Status</th>
             <th>Role</th>
             <th>Subnet</th>
@@ -140,7 +141,7 @@
           </tr>
         </thead>
         <tbody id="ipsTbody">
-          <tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted);">Loading IP addresses...</td></tr>
+          <tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted);">Loading IP addresses...</td></tr>
         </tbody>
       </table>
     </div>
@@ -403,14 +404,18 @@ function renderIPs(ips) {
   const tbody = document.getElementById('ipsTbody');
   tbody.innerHTML = '';
   if (!ips || ips.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted);">No IP addresses recorded.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--muted);">No IP addresses recorded.</td></tr>';
     return;
   }
   ips.forEach(ip => {
     const tr = document.createElement('tr');
+    const epHtml = ip.vendor
+      ? `<div style="font-size:12px;">${escapeHtml(ip.vendor)}</div><div class="mono muted" style="font-size:11px;">${escapeHtml(ip.mac || '')}${ip.device_type_label && ip.device_type !== 'unknown' ? ' &middot; ' + escapeHtml(ip.device_type_label) : ''}</div>`
+      : '<span class="muted">-</span>';
     tr.innerHTML = `
       <td><strong class="mono" style="font-size:13px; color:var(--text);">${escapeHtml(ip.address)}</strong></td>
       <td><span class="mono" style="font-size:12px;">${escapeHtml(ip.dns_name || '-')}</span></td>
+      <td>${epHtml}</td>
       <td><span class="badge-status badge-${escapeHtml(ip.status || 'active')}">${escapeHtml(ip.status || 'active')}</span></td>
       <td>${escapeHtml(ip.role || (ip.fhrp_group_name ? 'VIP (' + ip.fhrp_group_name + ')' : '-'))}</td>
       <td><span class="mono">${escapeHtml(ip.prefix_str || '-')}</span></td>

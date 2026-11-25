@@ -1,0 +1,468 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Topology Map{% endblock %}
+{% block content %}
+<style>
+  .topo-toolbar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+  }
+  .topo-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .topo-kpis { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--muted); }
+  .topo-kpis b { color: var(--text); font-size: 14px; }
+  .topo-stage-wrap {
+    display: grid; grid-template-columns: 1fr 310px; min-height: 580px; position: relative;
+  }
+  @media (max-width: 980px) { .topo-stage-wrap { grid-template-columns: 1fr; } }
+  .topo-canvas-box {
+    position: relative; overflow: hidden; min-height: 580px;
+    background: radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0);
+    background-size: 24px 24px;
+    cursor: grab; user-select: none;
+  }
+  .topo-canvas-box:active { cursor: grabbing; }
+  .topo-svg { width: 100%; height: 100%; min-height: 580px; display: block; }
+  .topo-controls {
+    position: absolute; bottom: 14px; left: 14px; display: flex; gap: 6px; z-index: 5;
+  }
+  .topo-legend {
+    position: absolute; top: 12px; left: 14px; display: flex; flex-wrap: wrap; gap: 10px;
+    padding: 6px 10px; border-radius: 8px; background: var(--panel); border: 1px solid var(--border);
+    font-size: 11px; color: var(--muted); pointer-events: none; z-index: 4;
+  }
+  .topo-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .topo-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .topo-inspector {
+    border-left: 1px solid var(--border); padding: 16px; background: var(--panel-2);
+    display: flex; flex-direction: column; gap: 12px; max-height: 640px; overflow-y: auto;
+  }
+  .topo-link-row {
+    padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel);
+    font-size: 12px; display: flex; flex-direction: column; gap: 3px;
+  }
+  .topo-progress {
+    display: none; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel-2);
+    font-size: 12px; align-items: center; gap: 12px;
+  }
+  .topo-progress.active { display: flex; }
+  .topo-prog-bar { flex: 1; height: 6px; border-radius: 99px; background: var(--border); overflow: hidden; }
+  .topo-prog-fill { height: 100%; width: 0%; background: var(--accent); transition: width 0.2s ease; }
+  .topo-node { cursor: pointer; }
+  .topo-node rect.node-box { stroke-width: 1.5; transition: stroke 0.15s, filter 0.15s; }
+  .topo-node.selected rect.node-box { stroke: var(--accent); stroke-width: 2.5; }
+  .topo-edge { stroke: var(--muted); stroke-opacity: 0.55; fill: none; }
+  .topo-edge.lag { stroke: var(--accent); stroke-opacity: 0.85; stroke-width: 2.5; }
+  .topo-edge.ext { stroke-dasharray: 4 4; stroke-opacity: 0.45; }
+  .topo-edge-label { font-size: 10px; fill: var(--muted); pointer-events: none; font-family: var(--mono, monospace); }
+</style>
+
+<div class="topbar">
+  <div>
+    <h1>
+      <span class="title-icon">{{ icon('git') }}</span>
+      Campus &amp; Site Topology Map
+    </h1>
+    <div class="sub">Interactive Layer 2/3 interconnect map built from switch LLDP/CDP neighbour tables and LAG trunks.</div>
+  </div>
+  <div class="actions">
+    <button type="button" class="btn" onclick="exportTopologySvg()">{{ icon('download') }}Export SVG</button>
+    <button type="button" class="btn primary" id="discoverBtn" onclick="startTopologyDiscovery()">{{ icon('refresh') }}Discover Topology (LLDP/CDP)</button>
+  </div>
+</div>
+
+<div class="card flush">
+  <div class="topo-toolbar">
+    <div class="topo-filters">
+      <input type="search" id="topoSearch" class="input" placeholder="Filter switch, IP, model, group..." oninput="renderGraph()" style="min-width:220px;">
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+        <input type="checkbox" id="showExternal" checked onchange="renderGraph()"> Show external / unmanaged neighbors
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+        <input type="checkbox" id="showPortLabels" checked onchange="renderGraph()"> Port labels
+      </label>
+    </div>
+    <div class="topo-kpis">
+      <span>Devices: <b id="statDevices">0</b></span>
+      <span>Links: <b id="statLinks">0</b></span>
+      <span>LAGs: <b id="statLags">0</b></span>
+      <span>External: <b id="statExternal">0</b></span>
+      <span id="statLastScan" class="muted">Not discovered yet</span>
+    </div>
+  </div>
+
+  <div class="topo-progress" id="topoProgress">
+    <span id="topoProgText">Starting discovery...</span>
+    <div class="topo-prog-bar"><div class="topo-prog-fill" id="topoProgFill"></div></div>
+    <span id="topoProgPct" class="mono">0%</span>
+  </div>
+
+  <div class="topo-stage-wrap">
+    <div class="topo-canvas-box" id="topoCanvasBox">
+      <div class="topo-legend">
+        <span><i class="topo-dot" style="background:var(--ok);"></i>Up</span>
+        <span><i class="topo-dot" style="background:var(--bad);"></i>Down</span>
+        <span><i class="topo-dot" style="background:var(--warn);"></i>Ping only</span>
+        <span><i class="topo-dot" style="background:var(--muted);"></i>Unknown / External</span>
+        <span><b style="color:var(--accent);">━━</b> LAG / Port-Channel</span>
+      </div>
+      <svg id="topoSvg" class="topo-svg" xmlns="http://www.w3.org/2000/svg">
+        <g id="topoViewport"></g>
+      </svg>
+      <div class="topo-controls">
+        <button type="button" class="btn btn-sm" onclick="zoomBy(1.2)" title="Zoom in">+</button>
+        <button type="button" class="btn btn-sm" onclick="zoomBy(0.83)" title="Zoom out">&minus;</button>
+        <button type="button" class="btn btn-sm" onclick="resetView()" title="Reset view">Reset View</button>
+      </div>
+    </div>
+
+    <aside class="topo-inspector" id="topoInspector">
+      <div>
+        <div class="muted small" style="text-transform:uppercase;letter-spacing:.05em;">Node Inspector</div>
+        <h3 style="margin:4px 0 0 0;" id="inspTitle">Select a device</h3>
+        <div class="muted small" id="inspSub">Click any node on the map to inspect its links, ports, and reachability.</div>
+      </div>
+      <div id="inspBody" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </aside>
+  </div>
+</div>
+
+<script>
+const ROLE_TIER = { firewall: 0, core: 1, distribution: 2, access: 3, external: 4 };
+const ROLE_COLOR = {
+  firewall: '#ef4444',
+  core: '#8b5cf6',
+  distribution: '#3b82f6',
+  access: '#10b981',
+  external: '#6b7280',
+};
+const STATUS_COLOR = { up: '#22c55e', down: '#ef4444', 'ssh-down': '#f59e0b', unknown: '#9ca3af' };
+
+let graphData = { nodes: [], edges: [], stats: {} };
+let nodePos = {};
+let selectedId = null;
+let view = { x: 40, y: 50, scale: 1 };
+let dragState = null;
+
+function esc(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function loadTopology() {
+  try {
+    const r = await fetch('/api/operations/topology/data');
+    const data = await r.json();
+    if (!data.ok) return;
+    graphData = data;
+    computeLayout(true);
+    updateStats();
+    renderGraph();
+  } catch (e) {
+    console.error('Failed to load topology:', e);
+  }
+}
+
+function updateStats() {
+  const s = graphData.stats || {};
+  document.getElementById('statDevices').textContent = s.devices ?? 0;
+  document.getElementById('statLinks').textContent = s.links ?? 0;
+  document.getElementById('statLags').textContent = s.lags ?? 0;
+  document.getElementById('statExternal').textContent = s.external ?? 0;
+  document.getElementById('statLastScan').textContent = graphData.last_scan
+    ? `Last LLDP scan: ${graphData.last_scan}`
+    : 'Not discovered yet — click Discover Topology';
+}
+
+function computeLayout(resetPositions) {
+  const tiers = { 0: [], 1: [], 2: [], 3: [], 4: [] };
+  (graphData.nodes || []).forEach(n => {
+    const t = ROLE_TIER[n.role] ?? 3;
+    tiers[t].push(n);
+  });
+  Object.keys(tiers).forEach(t => {
+    tiers[t].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  });
+  const colW = 210, rowH = 125;
+  Object.entries(tiers).forEach(([tierStr, list]) => {
+    const tier = Number(tierStr);
+    const totalW = Math.max(1, list.length) * colW;
+    const startX = Math.max(20, (900 - totalW) / 2);
+    list.forEach((n, idx) => {
+      if (resetPositions || !nodePos[n.id]) {
+        nodePos[n.id] = { x: startX + idx * colW, y: 50 + tier * rowH };
+      }
+    });
+  });
+}
+
+function applyViewport() {
+  const vp = document.getElementById('topoViewport');
+  vp.setAttribute('transform', `translate(${view.x}, ${view.y}) scale(${view.scale})`);
+}
+
+function zoomBy(factor) {
+  view.scale = Math.max(0.25, Math.min(2.8, view.scale * factor));
+  applyViewport();
+}
+
+function resetView() {
+  view = { x: 40, y: 50, scale: 1 };
+  computeLayout(true);
+  renderGraph();
+}
+
+function renderGraph() {
+  const vp = document.getElementById('topoViewport');
+  vp.innerHTML = '';
+  const showExt = document.getElementById('showExternal').checked;
+  const showPorts = document.getElementById('showPortLabels').checked;
+  const q = (document.getElementById('topoSearch').value || '').trim().toLowerCase();
+
+  const visibleNodes = new Map();
+  (graphData.nodes || []).forEach(n => {
+    if (n.external && !showExt) return;
+    if (q) {
+      const hay = `${n.name} ${n.hostname} ${n.host} ${n.model} ${n.group} ${n.role}`.toLowerCase();
+      if (!hay.includes(q)) return;
+    }
+    visibleNodes.set(n.id, n);
+  });
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const nodeW = 164, nodeH = 56;
+
+  // Draw edges first
+  (graphData.edges || []).forEach(e => {
+    if (!visibleNodes.has(e.source) || !visibleNodes.has(e.target)) return;
+    const p1 = nodePos[e.source] || { x: 0, y: 0 };
+    const p2 = nodePos[e.target] || { x: 0, y: 0 };
+    const x1 = p1.x + nodeW / 2, y1 = p1.y + nodeH / 2;
+    const x2 = p2.x + nodeW / 2, y2 = p2.y + nodeH / 2;
+
+    const line = document.createElementNS(NS, 'line');
+    line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+    let cls = 'topo-edge';
+    if (e.is_lag) cls += ' lag';
+    if (e.external) cls += ' ext';
+    line.setAttribute('class', cls);
+    line.setAttribute('stroke-width', e.is_lag ? '2.5' : '1.5');
+    vp.appendChild(line);
+
+    if (showPorts && (e.src_port || e.dst_port)) {
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      const lbl = document.createElementNS(NS, 'text');
+      lbl.setAttribute('x', mx); lbl.setAttribute('y', my - 4);
+      lbl.setAttribute('text-anchor', 'middle');
+      lbl.setAttribute('class', 'topo-edge-label');
+      const aLbl = e.src_parent || e.src_port || '';
+      const bLbl = e.dst_port || '';
+      lbl.textContent = bLbl ? `${aLbl} ↔ ${bLbl}` : aLbl;
+      vp.appendChild(lbl);
+    }
+  });
+
+  // Draw nodes
+  visibleNodes.forEach(n => {
+    const p = nodePos[n.id] || { x: 0, y: 0 };
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('transform', `translate(${p.x}, ${p.y})`);
+    g.setAttribute('class', `topo-node${selectedId === n.id ? ' selected' : ''}`);
+    g.dataset.id = n.id;
+
+    const rect = document.createElementNS(NS, 'rect');
+    rect.setAttribute('width', nodeW); rect.setAttribute('height', nodeH);
+    rect.setAttribute('rx', '10');
+    rect.setAttribute('class', 'node-box');
+    rect.setAttribute('fill', 'var(--panel, #1e293b)');
+    rect.setAttribute('stroke', selectedId === n.id ? 'var(--accent, #3b82f6)' : 'var(--border, #334155)');
+    g.appendChild(rect);
+
+    const bar = document.createElementNS(NS, 'rect');
+    bar.setAttribute('width', '5'); bar.setAttribute('height', nodeH);
+    bar.setAttribute('rx', '3');
+    bar.setAttribute('fill', ROLE_COLOR[n.role] || '#6b7280');
+    g.appendChild(bar);
+
+    const dot = document.createElementNS(NS, 'circle');
+    dot.setAttribute('cx', nodeW - 14); dot.setAttribute('cy', 15);
+    dot.setAttribute('r', '4.5');
+    dot.setAttribute('fill', STATUS_COLOR[n.status] || STATUS_COLOR.unknown);
+    g.appendChild(dot);
+
+    const title = document.createElementNS(NS, 'text');
+    title.setAttribute('x', '14'); title.setAttribute('y', '21');
+    title.setAttribute('fill', 'var(--text, #f8fafc)');
+    title.setAttribute('font-size', '12');
+    title.setAttribute('font-weight', '600');
+    const nm = (n.name || '').length > 17 ? n.name.slice(0, 16) + '…' : (n.name || '');
+    title.textContent = nm;
+    g.appendChild(title);
+
+    const sub = document.createElementNS(NS, 'text');
+    sub.setAttribute('x', '14'); sub.setAttribute('y', '39');
+    sub.setAttribute('fill', 'var(--muted, #94a3b8)');
+    sub.setAttribute('font-size', '10.5');
+    sub.textContent = `${n.role.toUpperCase()}${n.host ? ' · ' + n.host : ''}`;
+    g.appendChild(sub);
+
+    g.addEventListener('mousedown', ev => {
+      ev.stopPropagation();
+      dragState = {
+        type: 'node', id: n.id,
+        startX: ev.clientX, startY: ev.clientY,
+        origX: p.x, origY: p.y, moved: false
+      };
+    });
+    g.addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (dragState && dragState.moved) return;
+      selectNode(n.id);
+    });
+    vp.appendChild(g);
+  });
+
+  applyViewport();
+}
+
+function selectNode(id) {
+  selectedId = id;
+  renderGraph();
+  const n = (graphData.nodes || []).find(x => x.id === id);
+  if (!n) return;
+  document.getElementById('inspTitle').textContent = n.name;
+  document.getElementById('inspSub').textContent = `${n.role.toUpperCase()} · ${n.model || 'Unknown model'}`;
+
+  const links = (graphData.edges || []).filter(e => e.source === id || e.target === id);
+  const nodeById = new Map((graphData.nodes || []).map(x => [x.id, x]));
+
+  let html = `
+    <div class="topo-link-row">
+      <div><b>IP:</b> <span class="mono">${esc(n.host || '—')}</span></div>
+      <div><b>Status:</b> <span class="mono">${esc(n.status)}${n.ping_ms != null ? ` (${n.ping_ms} ms)` : ''}</span></div>
+      ${n.site_code ? `<div><b>Site:</b> ${esc(n.site_code)}</div>` : ''}
+      ${n.group ? `<div><b>Group:</b> ${esc(n.group)}</div>` : ''}
+      ${n.location ? `<div><b>Location:</b> ${esc(n.location)}</div>` : ''}
+    </div>
+  `;
+  if (n.device_id) {
+    html += `<a class="btn btn-sm" href="/devices/${n.device_id}">Open Device Detail</a>`;
+  }
+  html += `<div class="muted small" style="margin-top:6px;">Connected Neighbours (${links.length})</div>`;
+  if (!links.length) {
+    html += `<div class="muted small">No LLDP/CDP neighbours recorded for this node.</div>`;
+  } else {
+    links.forEach(e => {
+      const isSrc = e.source === id;
+      const peer = nodeById.get(isSrc ? e.target : e.source);
+      const localP = isSrc ? (e.src_parent ? `${e.src_parent} (${e.src_port})` : e.src_port) : e.dst_port;
+      const remoteP = isSrc ? e.dst_port : (e.src_parent ? `${e.src_parent} (${e.src_port})` : e.src_port);
+      html += `
+        <div class="topo-link-row">
+          <div><b>${esc(peer ? peer.name : 'Unknown')}</b> <span class="badge">${esc((e.protocol || 'lldp').toUpperCase())}</span></div>
+          <div class="mono muted">${esc(localP || '—')} &rarr; ${esc(remoteP || '—')}</div>
+        </div>
+      `;
+    });
+  }
+  document.getElementById('inspBody').innerHTML = html;
+}
+
+// Pan & Zoom handlers
+const box = document.getElementById('topoCanvasBox');
+box.addEventListener('mousedown', ev => {
+  dragState = { type: 'pan', startX: ev.clientX, startY: ev.clientY, origX: view.x, origY: view.y, moved: false };
+});
+window.addEventListener('mousemove', ev => {
+  if (!dragState) return;
+  const dx = ev.clientX - dragState.startX;
+  const dy = ev.clientY - dragState.startY;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragState.moved = true;
+  if (dragState.type === 'pan') {
+    view.x = dragState.origX + dx;
+    view.y = dragState.origY + dy;
+    applyViewport();
+  } else if (dragState.type === 'node') {
+    nodePos[dragState.id] = {
+      x: dragState.origX + dx / view.scale,
+      y: dragState.origY + dy / view.scale,
+    };
+    renderGraph();
+  }
+});
+window.addEventListener('mouseup', () => { setTimeout(() => { dragState = null; }, 0); });
+box.addEventListener('wheel', ev => {
+  ev.preventDefault();
+  zoomBy(ev.deltaY < 0 ? 1.1 : 0.9);
+}, { passive: false });
+
+async function startTopologyDiscovery() {
+  const btn = document.getElementById('discoverBtn');
+  const prog = document.getElementById('topoProgress');
+  const fill = document.getElementById('topoProgFill');
+  const txt = document.getElementById('topoProgText');
+  const pct = document.getElementById('topoProgPct');
+
+  btn.disabled = true;
+  prog.classList.add('active');
+  fill.style.width = '0%';
+  pct.textContent = '0%';
+  txt.textContent = 'Starting LLDP/CDP discovery...';
+
+  try {
+    const resp = await fetch('/api/operations/topology/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+      body: JSON.stringify({}),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    const reader = resp.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const msg = JSON.parse(line);
+        if (msg.type === 'progress') {
+          const p = msg.total ? Math.round((msg.done / msg.total) * 100) : 100;
+          fill.style.width = p + '%';
+          pct.textContent = p + '%';
+          txt.textContent = `Probed ${msg.device} (${msg.done}/${msg.total})${msg.ok ? ` — ${msg.neighbors} neighbor(s)` : ` — ${msg.error}`}`;
+        } else if (msg.type === 'done' && msg.graph) {
+          graphData = msg.graph;
+          computeLayout(false);
+          updateStats();
+          renderGraph();
+          toast(`Topology updated: ${msg.graph.stats.links} link(s) across ${msg.ok} switch(es)`, 'ok');
+        }
+      }
+    }
+  } catch (e) {
+    toast(`Topology discovery failed: ${e.message}`, 'bad');
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => prog.classList.remove('active'), 1200);
+  }
+}
+
+function exportTopologySvg() {
+  const svg = document.getElementById('topoSvg');
+  const serializer = new XMLSerializer();
+  const src = serializer.serializeToString(svg);
+  const blob = new Blob([src], { type: 'image/svg+xml;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'network_topology.svg';
+  a.click();
+}
+
+document.addEventListener('DOMContentLoaded', loadTopology);
+</script>
+{% endblock %}

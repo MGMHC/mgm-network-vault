@@ -1,5 +1,8 @@
 """MAC and IP address helpers, switch port name normalisation, and the OUI vendor catalog."""
+from functools import lru_cache
 import re
+
+import netaddr
 
 
 OUI_CATALOG = {
@@ -155,12 +158,85 @@ def is_ip(s):
         return False
 
 
+def is_locally_administered(clean_mac_str):
+    """True when the U/L bit (bit 1 of first octet) is set, typical of randomized/private MACs."""
+    if not clean_mac_str or len(clean_mac_str) < 2:
+        return False
+    try:
+        return bool(int(clean_mac_str[:2], 16) & 0x02)
+    except ValueError:
+        return False
+
+
+@lru_cache(maxsize=4096)
+def _ieee_oui_lookup(prefix):
+    """Look up a colon-separated 3-octet OUI prefix in netaddr's bundled IEEE OUI database."""
+    try:
+        eui = netaddr.EUI(f"{prefix}:00:00:00")
+        reg = eui.oui.registration()
+        return (reg.org or "").strip() if reg else ""
+    except Exception:  # noqa: BLE001 - unregistered OUI or malformed input
+        return ""
+
+
 def lookup_oui(clean_mac_str):
     """Return recognized hardware vendor / manufacturer name."""
     if not clean_mac_str or len(clean_mac_str) < 6:
         return "Unknown"
-    prefix = ":".join(clean_mac_str[i:i+2] for i in range(0, 6, 2))
-    return OUI_CATALOG.get(prefix, "Unregistered / Generic Device")
+    cm = clean_mac(clean_mac_str) if len(clean_mac_str) == 12 else clean_mac_str.lower()
+    if len(cm) < 6:
+        return "Unknown"
+    prefix = ":".join(cm[i:i+2] for i in range(0, 6, 2))
+    if prefix in OUI_CATALOG:
+        return OUI_CATALOG[prefix]
+    ieee_org = _ieee_oui_lookup(prefix)
+    if ieee_org:
+        return ieee_org
+    if is_locally_administered(cm):
+        return "Locally Administered / Randomized"
+    return "Unregistered / Generic Device"
+
+
+_CATEGORY_RULES = (
+    ("medical", "Medical", ("philips medical", "philips healthcare", "ge healthcare", "ge medical",
+                            "siemens health", "siemens medical", "mindray", "draeger", "baxter",
+                            "hill-rom", "masimo", "nihon kohden", "welch allyn", "fresenius",
+                            "medtronic", "stryker", "olympus medical", "bd ", "becton")),
+    ("vm", "Virtual Machine", ("vmware", "hyper-v", "qemu", "kvm", "xen", "proxmox", "virtualbox", "parallels")),
+    ("phone", "IP Phone", ("polycom", "yealink", "avaya", "grandstream", "snom", "mitel", "audiocodes")),
+    ("camera", "Camera / Security", ("axis ", "hikvision", "dahua", "hanwha", "bosch security", "pelco", "uniview")),
+    ("printer", "Printer / Scanner", ("zebra", "brother", "canon", "epson", "ricoh", "xerox", "lexmark", "kyocera")),
+    ("network", "Network Gear", ("juniper", "cisco", "aruba", "extreme networks", "fortinet", "palo alto",
+                                 "sonicwall", "ubiquiti", "ruckus", "meraki", "mikrotik", "netgear",
+                                 "brocade", "arista", "hpe ", "hewlett packard enterprise", "dell emc")),
+    ("workstation", "Endpoint / PC", ("apple", "intel", "dell", "lenovo", "hp inc", "hewlett packard",
+                                      "asus", "acer", "microsoft", "samsung", "realtek", "liteon", "azurewave")),
+)
+
+
+def classify_endpoint(clean_mac_str):
+    """Return OUI vendor and inferred endpoint category for a MAC address."""
+    cm = clean_mac(clean_mac_str) or (clean_mac_str or "").lower()
+    vendor = lookup_oui(cm)
+    v_low = vendor.lower()
+    randomized = is_locally_administered(cm) and vendor == "Locally Administered / Randomized"
+
+    category = "unknown"
+    label = "Unknown"
+    if randomized:
+        category, label = "randomized", "Randomized MAC"
+    else:
+        for cat, cat_label, keywords in _CATEGORY_RULES:
+            if any(k in v_low for k in keywords):
+                category, label = cat, cat_label
+                break
+
+    return {
+        "vendor": vendor,
+        "category": category,
+        "category_label": label,
+        "randomized": randomized,
+    }
 
 
 def base_port(p):

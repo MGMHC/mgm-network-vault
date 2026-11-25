@@ -12,7 +12,7 @@ from sqlalchemy import or_
 
 from . import ssh
 from .models import Device, MacSighting, db, get_bool, get_int, now, set_setting, log_event
-from .netutil import clean_mac, format_mac, is_ip
+from .netutil import classify_endpoint, clean_mac, format_mac, is_ip
 from .portclass import is_uplink_port
 from .switch_tables import query_arp, query_mac_table
 
@@ -265,6 +265,9 @@ def search(base_query, text, limit=SEARCH_LIMIT):
 
 
 def row_dict(s):
+    ep = classify_endpoint(s.mac)
     return {"mac": format_mac(s.mac), "ip": s.ip or "", "switch_id": s.device_id,
             "switch": s.device.name if s.device else "", "port": s.port, "vlan": s.vlan,
+            "vendor": ep["vendor"], "device_type": ep["category"],
+            "device_type_label": ep["category_label"], "randomized": ep["randomized"],
             "first_seen": s.first_seen.isoformat(sep=" "), "last_seen": s.last_seen.isoformat(sep=" ")}

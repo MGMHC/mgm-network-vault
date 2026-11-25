@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+## [1.24.0] - 2026-11-25
+
+### Added
+- **Interactive Campus & Site Topology Map** (`Operations → Topology Map`): auto-draws an interactive Layer 2/3 interconnect map from switch LLDP/CDP neighbour tables and LAG/`ae`/Port-Channel trunks. Includes hierarchical role layout (`firewall → core → distribution → access → external`), pan/zoom, draggable nodes, search filtering, external-neighbor & port-label toggles, a Node Inspector sidebar, and SVG export—100% offline with no external CDN dependencies.
+- **OUI Vendor Lookup & Endpoint Fingerprinting**: extends `netutil.lookup_oui` with an `lru_cache`-backed IEEE OUI database fallback (`netaddr.EUI`), locally-administered/randomized MAC detection, and endpoint category classification (`Medical`, `Virtual Machine`, `IP Phone`, `Camera / Security`, `Printer / Scanner`, `Network Gear`, `Endpoint / PC`, `Randomized MAC`).
+- **MAC/IP History & IPAM Enrichment**: MAC/IP History now displays **Vendor** and **Type** badges for every sighting, and IPAM Allocated IP Addresses now surface the matched endpoint's **Vendor**, **Type**, and **MAC** from the latest MAC/IP History sighting.
+
 ## [1.23.1] - 2026-11-24
 
 ### Changed
