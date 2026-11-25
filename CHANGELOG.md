@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+## [1.25.1] - 2026-11-25
+
+### Changed
+- **Every VC stack is expanded on the Topology Map**: access Virtual Chassis are now drawn as one switch per member (e.g. `1F-RACK2-ACC-VC1` shows members 0, 1 and 2), like core and distribution VCs already were. Each cable goes to the member its port is on, and the stack cable between members is a short bracket on the switches' right edge.
+- **Sub-racks stand next to their floor**: racks of the same floor are drawn together, and sub-racks and mini-racks come right after that floor's main racks (e.g. `Floor 7 SUB-RACK` after Floor 7 Racks 1-3).
+
+### Fixed
+- **Floor names read wrongly from some Locations**: `Floor 11 Sub Rack` was read as floor "Floor 11 Sub" and `Floor 4 CC Room` as "Floor 4 CC Room". Both now read as their floor ("Floor 11", "Floor 4").
+
 ## [1.25.0] - 2026-11-25
 
 ### Added

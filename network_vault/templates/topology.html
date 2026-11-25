@@ -186,15 +186,20 @@ function updateStats() {
     : 'Not discovered yet — click Discover Topology';
 }
 
-// ---- Virtual Chassis split: a core/distribution VC is drawn as one switch per member ----
+// ---- Virtual Chassis split: every VC/stack is drawn as one switch per member ----
+// Core/distribution members are named after the floor they serve; access members by member number.
 const STACK_ROLES = new Set(['core', 'distribution']);
 // VC member from a port name: ge-2/0/23 -> "2" (Junos FPC), Gi1/0/14 -> "1" (Cisco stack).
 function fpcOf(port) {
   const m = /^[a-z]{2,4}-(\d+)\/\d+\/\d+/i.exec(port || '') || /^[a-z]+(\d+)\/\d+\/\d+/i.exec(port || '');
   return m ? m[1] : null;
 }
-// "Floor 4 Rack-1" -> "Floor 4", "Ground Rack-1" -> "Ground", "Floor 2 Mini-Rack" -> "Floor 2".
-const floorOf = loc => (loc || '').replace(/\s+\S*rack\b.*$/i, '').trim();
+// "Floor 4 Rack-1" -> "Floor 4", "Ground Rack-1" -> "Ground", "Floor 11 Sub Rack" / "Floor 4 CC Room" -> "Floor 11" / "Floor 4".
+const floorOf = loc => {
+  const m = /^(ground|gf|basement|floor\s*\d+|level[\s-]*\d+)/i.exec((loc || '').trim());
+  return m ? m[1].replace(/\s+/g, ' ') : (loc || '').replace(/\s+\S*rack\b.*$/i, '').trim();
+};
+const isSubRack = loc => /\b(sub|mini)[\s-]*rack/i.test(loc || '');
 const floorRank = f => (/^ground|^gf\b/i.test(f) ? 0 : (parseInt((f.match(/\d+/) || [])[0], 10) + 1) || 999);
 
 /** Returns the graph with every core/distribution VC replaced by its members. Each cable moves to
@@ -205,7 +210,7 @@ function expandStacks(data) {
   const split = new Map();
   nodes.forEach(n => {
     const ids = (n.members || []).map(m => m.id).filter(id => /^\d+$/.test(id));
-    if (STACK_ROLES.has(n.role) && ids.length > 1) split.set(n.id, ids);
+    if (ids.length > 1) split.set(n.id, ids);
   });
   if (!split.size) return data;
   const memberKey = (id, port) => {
@@ -231,7 +236,7 @@ function expandStacks(data) {
     if (!split.has(n.id)) { out.push(n); return; }
     split.get(n.id).forEach(m => {
       const c = floors.get(`${n.id}#${m}`);
-      const floor = c ? [...c].sort((a, b) => b[1] - a[1])[0][0] : '';
+      const floor = c && STACK_ROLES.has(n.role) ? [...c].sort((a, b) => b[1] - a[1])[0][0] : '';
       const info = n.members.find(x => x.id === m) || {};
       const order = String(floor ? floorRank(floor) : 900 + Number(m)).padStart(4, '0');
       out.push({ ...n, id: `${n.id}#${m}`, member: m, floor, member_role: info.role || '', sort: `${n.name}#${order}` });
@@ -286,7 +291,14 @@ function computeLayout(resetPositions) {
   // order, with room on each rack's left for its incoming cable lanes.
   const rackY = 50 + 3 * rowH;
   let x = 20, bottom = rackY;
-  rackGroups(tiers[3]).forEach(list => {
+  // Racks of the same floor stand together (first-seen floor order), sub/mini racks after the floor's main racks.
+  const racks = rackGroups(tiers[3]);
+  const floorKey = list => (list[0].role === 'access' && list[0].location ? floorOf(list[0].location).toLowerCase() : list[0].id);
+  const floorSeen = new Map();
+  racks.forEach((list, i) => { if (!floorSeen.has(floorKey(list))) floorSeen.set(floorKey(list), i); });
+  racks.map((list, i) => ({ list, i, f: floorSeen.get(floorKey(list)), sub: isSubRack(list[0].location) ? 1 : 0 }))
+    .sort((a, b) => a.f - b.f || a.sub - b.sub || a.i - b.i)
+    .forEach(({ list }) => {
     const ids = new Set(list.map(n => n.id));
     const nUp = edges.filter(e => (ids.has(e.source) && (tierOf.get(e.target) ?? 3) < 3)
                                || (ids.has(e.target) && (tierOf.get(e.source) ?? 3) < 3)).length;
@@ -294,7 +306,7 @@ function computeLayout(resetPositions) {
     list.sort(byKey).forEach((n, i) => { want[n.id] = x + RACK_PAD; wantY[n.id] = rackY + i * SW_PITCH; });
     bottom = Math.max(bottom, rackY + list.length * SW_PITCH);
     x += RACK_PAD + PLATE_W + 30;
-  });
+    });
   tiers[4].forEach((n, i) => { want[n.id] = 20 + i * colW; wantY[n.id] = bottom + 120; });
   // Upper tiers centre over what they connect to below; overlaps are pushed right in order.
   [2, 1, 0].forEach(t => {
@@ -434,10 +446,14 @@ function renderGraph() {
   const rackFloor = Math.max(0, ...[...rackOf.values()].map(r => r.y + r.h));
   visibleEdges.forEach(e => {
     const ra = rackOf.get(e.source), rb = rackOf.get(e.target);
-    if (!ra || !rb || e.vc) return;
+    if (!ra || !rb) return;
     const a = nodePos[e.source], b = nodePos[e.target], k = peerPath.size;
-    const la = a.x + PLATE_W + 6 + (k % 3) * 3, lb = b.x + PLATE_W + 6 + (k % 3) * 3;
     const ya = a.y + PLATE_H / 2, yb = b.y + PLATE_H / 2;
+    if (e.vc) {  // stack cable: tight bracket on the plates' right edge, inside the peer-cable lanes
+      if (ra === rb) peerPath.set(e, [[a.x + PLATE_W, ya], [a.x + PLATE_W + 4, ya], [b.x + PLATE_W + 4, yb], [b.x + PLATE_W, yb]]);
+      return;
+    }
+    const la = a.x + PLATE_W + 10 + (k % 3) * 3, lb = b.x + PLATE_W + 10 + (k % 3) * 3;
     const bus = rackFloor + 10 + (k % 8) * 4;  // under every rack, so it never cuts through one
     peerPath.set(e, ra === rb
       ? [[a.x + PLATE_W, ya], [la, ya], [la, yb], [b.x + PLATE_W, yb]]
@@ -509,7 +525,7 @@ function renderGraph() {
     if (e.external) cls += ' ext';
     if (e.vc) cls += ' vc';
     line.setAttribute('class', cls);
-    line.setAttribute('stroke-width', e.vc ? '4' : e.is_lag ? '2.5' : '1.5');
+    line.setAttribute('stroke-width', e.vc ? (pp ? '2' : '4') : e.is_lag ? '2.5' : '1.5');
     vp.appendChild(line);
 
     if (showPorts && !rl && !pp) {
